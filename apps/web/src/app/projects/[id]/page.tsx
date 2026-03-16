@@ -13,12 +13,16 @@ export default function ProjectPage() {
 
   useEffect(() => {
     if (params.id) {
-      api.projects.get(params.id).then(setProject).finally(() => setLoading(false));
+      api.projects
+        .get(params.id)
+        .then(setProject)
+        .finally(() => setLoading(false));
     }
   }, [params.id]);
 
   if (loading) return <main className="p-8 text-gray-500">Зарежда се...</main>;
-  if (!project) return <main className="p-8 text-red-500">Проектът не е намерен.</main>;
+  if (!project)
+    return <main className="p-8 text-red-500">Проектът не е намерен.</main>;
 
   return (
     <main className="min-h-screen bg-gray-50">
@@ -26,7 +30,9 @@ export default function ProjectPage() {
       <div className="bg-white border-b px-8 py-4 flex justify-between items-center">
         <div>
           <h1 className="text-xl font-bold text-gray-800">{project.name}</h1>
-          {project.location && <p className="text-sm text-gray-500">{project.location}</p>}
+          {project.location && (
+            <p className="text-sm text-gray-500">{project.location}</p>
+          )}
         </div>
         <ExportButton projectId={project.id} projectName={project.name} />
       </div>
