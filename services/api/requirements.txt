@@ -1,0 +1,43 @@
+# Web framework
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
+python-multipart==0.0.17
+
+# Database
+sqlalchemy[asyncio]==2.0.36
+asyncpg==0.30.0
+alembic==1.14.0
+pgvector==0.3.6
+
+# Redis / queue
+redis==5.2.1
+rq==2.0.0
+
+# MinIO (S3-compatible)
+minio==7.2.12
+
+# LLM
+openai==1.57.4
+anthropic==0.40.0
+
+# Document processing
+python-docx==1.1.2
+docxtpl==0.19.0
+pypdf==5.1.0
+pytesseract==0.3.13
+Pillow==11.0.0
+python-magic==0.4.27
+
+# Data / validation
+pydantic==2.10.3
+pydantic-settings==2.6.1
+
+# Utilities
+httpx==0.28.1
+tenacity==9.0.0
+structlog==24.4.0
+
+# Dev / test
+pytest==8.3.4
+pytest-asyncio==0.24.0
+httpx==0.28.1

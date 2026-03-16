@@ -1,0 +1,35 @@
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node
+apps/web/node_modules/
+apps/web/.next/
+apps/web/out/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Alembic versions (keep tracked)
+# services/api/alembic/versions/
+
+# Logs
+*.log
+
+# MinIO data (local)
+minio_data/
+postgres_data/
