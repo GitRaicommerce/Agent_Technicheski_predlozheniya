@@ -6,6 +6,7 @@ python-multipart==0.0.17
 # Database
 sqlalchemy[asyncio]==2.0.36
 asyncpg==0.30.0
+psycopg2-binary==2.9.10
 alembic==1.14.0
 pgvector==0.3.6
 
@@ -27,6 +28,7 @@ pypdf==5.1.0
 pytesseract==0.3.13
 Pillow==11.0.0
 python-magic==0.4.27
+openpyxl==3.1.5
 
 # Data / validation
 pydantic==2.10.3

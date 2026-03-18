@@ -37,6 +37,15 @@ export interface OrchestratorResponse {
   questions_to_user: string[];
 }
 
+export interface UploadedFile {
+  id: string;
+  project_id: string;
+  module: string;
+  filename: string;
+  file_hash: string;
+  ingest_status: string;
+}
+
 // Projects
 export const api = {
   projects: {
@@ -49,6 +58,26 @@ export const api = {
       }),
     delete: (id: string) =>
       fetch(`${API_URL}/api/v1/projects/${id}`, { method: "DELETE" }),
+  },
+  files: {
+    upload: async (project_id: string, module: string, file: File): Promise<UploadedFile> => {
+      const form = new FormData();
+      form.append("module", module);
+      form.append("file", file);
+      const res = await fetch(`${API_URL}/api/v1/files/${project_id}/upload`, {
+        method: "POST",
+        body: form,
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: res.statusText }));
+        throw new Error(err.detail || `Upload error ${res.status}`);
+      }
+      return res.json();
+    },
+    list: (project_id: string, module?: string) => {
+      const qs = module ? `?module=${module}` : "";
+      return apiFetch<UploadedFile[]>(`/api/v1/files/${project_id}/files${qs}`);
+    },
   },
   agents: {
     chat: (project_id: string, message: string, history: ChatMessage[]) =>
