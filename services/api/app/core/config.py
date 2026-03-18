@@ -1,4 +1,5 @@
-from typing import List
+from typing import List, Any
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -33,8 +34,21 @@ class Settings(BaseSettings):
     app_env: str = "development"
     log_level: str = "INFO"
 
-    # CORS
+    # CORS — accepts comma-separated string or JSON list from env
     cors_origins: List[str] = ["http://localhost:3000"]
+
+    @field_validator("cors_origins", mode="before")
+    @classmethod
+    def parse_cors(cls, v: Any) -> Any:
+        if isinstance(v, str):
+            # Handle both comma-separated and JSON-list formats
+            v = v.strip()
+            if v.startswith("["):
+                import json
+
+                return json.loads(v)
+            return [origin.strip() for origin in v.split(",") if origin.strip()]
+        return v
 
 
 settings = Settings()

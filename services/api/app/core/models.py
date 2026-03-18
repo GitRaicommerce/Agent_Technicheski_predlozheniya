@@ -275,7 +275,9 @@ class LexSnapshot(Base):
     fetched_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
-    snapshot_id: Mapped[str] = mapped_column(UUID(as_uuid=False), default=_uuid)
+    snapshot_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), default=_uuid, unique=True
+    )
     content_hash: Mapped[str] = mapped_column(String(64))
     parser_version: Mapped[str] = mapped_column(String(32))
     storage_key_raw: Mapped[Optional[str]] = mapped_column(String(1024))
