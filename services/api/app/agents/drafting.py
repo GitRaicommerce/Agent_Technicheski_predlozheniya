@@ -82,10 +82,14 @@ async def run_drafting(
     requirements_text = "\n".join(f"- {r}" for r in section_requirements)
 
     user_message = "\n\n".join(
-        part for part in [
+        part
+        for part in [
             f"РАЗДЕЛ: {section_title}\nИЗИСКВАНИЯ:\n{requirements_text}",
-            f"ГРАФИКНИ ДАННИ:\n[UNTRUSTED DATA START]\n{schedule_summary}\n[UNTRUSTED DATA END]"
-            if schedule_summary else None,
+            (
+                f"ГРАФИКНИ ДАННИ:\n[UNTRUSTED DATA START]\n{schedule_summary}\n[UNTRUSTED DATA END]"
+                if schedule_summary
+                else None
+            ),
             f"ПРИМЕРНИ ТЕКСТОВЕ:\n{snippets_block}" if snippets_block else None,
             f"НОРМАТИВНА БАЗА:\n{lex_block}" if lex_block else None,
         ]
@@ -119,7 +123,7 @@ async def run_drafting(
             saved_ids[variant_key] = gen.id
 
     if saved_ids:
-        await db.commit()
+        await db.flush()  # flush to get IDs; get_db dependency commits at request end
 
     llm_result["_agent"] = "drafting"
     llm_result["_trace_id"] = trace_id

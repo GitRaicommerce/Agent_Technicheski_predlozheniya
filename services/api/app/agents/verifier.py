@@ -74,11 +74,11 @@ async def run_verifier(
     evidence_map = generation.evidence_map_json or {}
 
     snippet_ids = [
-        v for v in evidence_map.values()
-        if v and not str(v).startswith("lex:")
+        v for v in evidence_map.values() if v and not str(v).startswith("lex:")
     ]
     lex_ids = [
-        str(v).removeprefix("lex:") for v in evidence_map.values()
+        str(v).removeprefix("lex:")
+        for v in evidence_map.values()
         if v and str(v).startswith("lex:")
     ]
 
@@ -93,9 +93,7 @@ async def run_verifier(
             )
 
     if lex_ids:
-        res = await db.execute(
-            select(LexChunk).where(LexChunk.id.in_(lex_ids))
-        )
+        res = await db.execute(select(LexChunk).where(LexChunk.id.in_(lex_ids)))
         for c in res.scalars().all():
             evidence_texts.append(
                 f"[LEX id={c.id} act={c.act_name} art={c.article_ref}]\n"
@@ -129,7 +127,7 @@ async def run_verifier(
             **(generation.flags_json or {}),
             "verification": llm_result,
         }
-        await db.commit()
+        await db.flush()  # get_db dependency commits at request end
 
     llm_result["_agent"] = "verifier"
     llm_result["_trace_id"] = trace_id

@@ -11,6 +11,7 @@ from typing import Optional
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from pgvector.sqlalchemy import Vector
 
 from app.core.database import Base
 
@@ -101,7 +102,7 @@ class ExtractedChunk(Base):
     text: Mapped[str] = mapped_column(Text)
     page: Mapped[Optional[int]] = mapped_column(Integer)
     section_path: Mapped[Optional[str]] = mapped_column(String(1024))
-    # embedding stored via pgvector — added via migration
+    embedding: Mapped[Optional[list]] = mapped_column(Vector(1536), nullable=True)
     meta_json: Mapped[Optional[dict]] = mapped_column(JSONB)
 
     file: Mapped[ProjectFile] = relationship(back_populates="chunks")
@@ -124,6 +125,7 @@ class ExampleSnippet(Base):
     snippet_kind: Mapped[str] = mapped_column(
         String(32)
     )  # generic_boilerplate|context_specific
+    embedding: Mapped[Optional[list]] = mapped_column(Vector(1536), nullable=True)
     topics_json: Mapped[Optional[dict]] = mapped_column(JSONB)
     applicability_rules_json: Mapped[Optional[dict]] = mapped_column(JSONB)
     risk_flags_json: Mapped[Optional[dict]] = mapped_column(JSONB)
@@ -304,7 +306,7 @@ class LexChunk(Base):
     act_name: Mapped[str] = mapped_column(String(512))
     article_ref: Mapped[str] = mapped_column(String(256))
     text: Mapped[str] = mapped_column(Text)
-    # embedding via pgvector — added via migration
+    embedding: Mapped[Optional[list]] = mapped_column(Vector(1536), nullable=True)
 
     snapshot: Mapped[LexSnapshot] = relationship(back_populates="chunks")
 
@@ -325,6 +327,7 @@ class Generation(Base):
     used_sources_json: Mapped[Optional[dict]] = mapped_column(JSONB)
     flags_json: Mapped[Optional[dict]] = mapped_column(JSONB)
     evidence_status: Mapped[str] = mapped_column(String(16), default="ok")  # ok|stale
+    selected: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

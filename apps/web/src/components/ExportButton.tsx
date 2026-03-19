@@ -11,10 +11,12 @@ interface Props {
 export default function ExportButton({ projectId, projectName }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [staleWarning, setStaleWarning] = useState(false);
 
   const handleExport = async () => {
     setLoading(true);
     setError(null);
+    setStaleWarning(false);
     try {
       const blob = await api.export.docx(projectId);
       const url = URL.createObjectURL(blob);
@@ -24,7 +26,13 @@ export default function ExportButton({ projectId, projectName }: Props) {
       a.click();
       URL.revokeObjectURL(url);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Грешка при експорт");
+      const msg = err instanceof Error ? err.message : "Грешка при експорт";
+      // 409 идва с message за остарели секции — показваме предупреждение
+      if (msg.toLowerCase().includes("stale")) {
+        setStaleWarning(true);
+      } else {
+        setError(msg);
+      }
     } finally {
       setLoading(false);
     }
@@ -39,6 +47,13 @@ export default function ExportButton({ projectId, projectName }: Props) {
       >
         {loading ? "Генерира се..." : "Експорт .docx"}
       </button>
+
+      {staleWarning && (
+        <p className="text-amber-600 text-xs mt-1 max-w-xs">
+          ⚠ Някои секции имат остаряло доказателство — качете актуализирани
+          файлове или регенерирайте преди експорт.
+        </p>
+      )}
       {error && <p className="text-red-500 text-xs mt-1">{error}</p>}
     </div>
   );

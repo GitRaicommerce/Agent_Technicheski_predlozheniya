@@ -42,15 +42,17 @@ class LLMGateway:
     async def call(
         self,
         system_prompt: str,
-        user_message: str,
-        agent: str,
+        user_message: str = "",
+        agent: str = "",
         trace_id: str | None = None,
         model: str | None = None,
         provider: str | None = None,
+        messages: list | None = None,
     ) -> dict[str, Any]:
         """
         Извиква LLM и върна валиден JSON dict.
         При невалиден JSON прави еднократен repair call (без промяна на смисъла).
+        Ако е подаден `messages` (история), той се ползва вместо единичния user_message.
         """
         trace_id = trace_id or str(uuid.uuid4())
         provider = provider or settings.llm_default_provider
@@ -65,6 +67,7 @@ class LLMGateway:
             model=model,
             system_prompt=system_prompt,
             user_message=user_message,
+            messages=messages,
         )
 
         try:
@@ -83,15 +86,21 @@ class LLMGateway:
         provider: str,
         model: str,
         system_prompt: str,
-        user_message: str,
+        user_message: str = "",
+        messages: list | None = None,
     ) -> str:
+        # Build messages list: use provided history or single user_message
+        built_messages = (
+            messages if messages else [{"role": "user", "content": user_message}]
+        )
+
         if provider == "openai":
             client = self._get_openai()
             response = await client.chat.completions.create(
                 model=model,
                 messages=[
                     {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_message},
+                    *built_messages,
                 ],
                 max_tokens=settings.llm_max_tokens,
                 temperature=settings.llm_temperature,
@@ -104,7 +113,7 @@ class LLMGateway:
             response = await client.messages.create(
                 model=model,
                 system=system_prompt,
-                messages=[{"role": "user", "content": user_message}],
+                messages=built_messages,
                 max_tokens=settings.llm_max_tokens,
             )
             return response.content[0].text

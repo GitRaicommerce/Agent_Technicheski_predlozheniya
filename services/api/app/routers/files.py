@@ -4,11 +4,11 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.models import Project, ProjectFile
+from app.core.models import Generation, Project, ProjectFile
 from app.core.storage import storage
 
 router = APIRouter()
@@ -19,6 +19,9 @@ ALLOWED_MIMETYPES = {
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     "application/msword",
     "application/vnd.ms-project",
+    # Excel formats (needed for schedule uploads)
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "application/vnd.ms-excel",
 }
 
 
@@ -29,6 +32,7 @@ class FileResponse(BaseModel):
     filename: str
     file_hash: str
     ingest_status: str
+    ingest_error: Optional[str] = None
 
     model_config = {"from_attributes": True}
 
@@ -79,6 +83,18 @@ async def upload_file(
 
     enqueue_ingest(file_id)
 
+    # Mark existing generations as stale — evidence base has changed
+    # (schedule uploads don't directly affect existing text generations)
+    if module in ("tender_docs", "examples", "legislation"):
+        await db.execute(
+            update(Generation)
+            .where(
+                Generation.project_id == project_id,
+                Generation.evidence_status == "ok",
+            )
+            .values(evidence_status="stale")
+        )
+
     await db.refresh(project_file)
     return project_file
 
@@ -94,3 +110,16 @@ async def list_files(
         query = query.where(ProjectFile.module == module)
     result = await db.execute(query)
     return result.scalars().all()
+
+
+@router.get("/{project_id}/files/{file_id}/status", response_model=FileResponse)
+async def get_file_status(
+    project_id: str,
+    file_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Polls ingest status for a single file — used by frontend polling."""
+    file = await db.get(ProjectFile, file_id)
+    if not file or file.project_id != project_id:
+        raise HTTPException(status_code=404, detail="File not found")
+    return file

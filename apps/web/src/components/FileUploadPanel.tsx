@@ -1,9 +1,12 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { api } from "@/lib/api";
 
-const MODULE_LABELS: Record<string, { label: string; icon: string; accept: string; hint: string }> = {
+const MODULE_LABELS: Record<
+  string,
+  { label: string; icon: string; accept: string; hint: string }
+> = {
   examples: {
     label: "Примерни ТП",
     icon: "📄",
@@ -34,6 +37,7 @@ interface UploadedFile {
   id: string;
   filename: string;
   ingest_status: string;
+  ingest_error?: string;
 }
 
 interface Props {
@@ -41,13 +45,81 @@ interface Props {
   module: keyof typeof MODULE_LABELS;
 }
 
+const POLL_INTERVAL_MS = 3000;
+const TERMINAL_STATUSES = new Set(["done", "error"]);
+
 export default function FileUploadPanel({ projectId, module }: Props) {
   const [files, setFiles] = useState<UploadedFile[]>([]);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const meta = MODULE_LABELS[module];
+
+  // Зареди съществуващи файлове при mount
+  useEffect(() => {
+    api.files
+      .list(projectId, module)
+      .then((loaded) =>
+        setFiles(
+          loaded.map((f) => ({
+            id: f.id,
+            filename: f.filename,
+            ingest_status: f.ingest_status,
+            ingest_error: f.ingest_error,
+          })),
+        ),
+      )
+      .catch(() => {
+        /* игнорираме — потребителят може да ги качи наново */
+      });
+  }, [projectId, module]);
+
+  // Poll statuses of non-terminal files
+  const pollPending = useCallback(async () => {
+    setFiles((prev) => {
+      const pending = prev.filter(
+        (f) => !TERMINAL_STATUSES.has(f.ingest_status),
+      );
+      if (!pending.length) return prev;
+      Promise.all(
+        pending.map((f) =>
+          api.files
+            .getStatus(projectId, f.id)
+            .then((updated) => ({ id: f.id, updated }))
+            .catch(() => null),
+        ),
+      ).then((results) => {
+        setFiles((current) =>
+          current.map((f) => {
+            const r = results.find((x) => x?.id === f.id);
+            return r ? { ...f, ...r.updated } : f;
+          }),
+        );
+      });
+      return prev;
+    });
+  }, [projectId]);
+
+  // Start polling when there are pending files, stop when all are terminal
+  useEffect(() => {
+    const hasPending = files.some(
+      (f) => !TERMINAL_STATUSES.has(f.ingest_status),
+    );
+    if (hasPending && !pollRef.current) {
+      pollRef.current = setInterval(pollPending, POLL_INTERVAL_MS);
+    } else if (!hasPending && pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+    return () => {
+      if (pollRef.current) {
+        clearInterval(pollRef.current);
+        pollRef.current = null;
+      }
+    };
+  }, [files, pollPending]);
 
   const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault();
@@ -72,7 +144,7 @@ export default function FileUploadPanel({ projectId, module }: Props) {
         setFiles((prev) => [...prev, uploaded]);
       } catch (err: unknown) {
         setError(
-          `${file.name}: ${err instanceof Error ? err.message : "Грешка при качване"}`
+          `${file.name}: ${err instanceof Error ? err.message : "Грешка при качване"}`,
         );
       }
     }
@@ -89,8 +161,8 @@ export default function FileUploadPanel({ projectId, module }: Props) {
   const statusLabel = (status: string) => {
     if (status === "done") return "✓ готово";
     if (status === "error") return "✗ грешка";
-    if (status === "processing") return "⏳ обработва се";
-    return "⌛ изчаква";
+    if (status === "processing") return "⏳ обработва се...";
+    return "⌛ на опашка";
   };
 
   return (
@@ -122,22 +194,35 @@ export default function FileUploadPanel({ projectId, module }: Props) {
       />
 
       {error && (
-        <p className="text-xs text-red-500 mt-2 break-words">{error}</p>
+        <p className="text-xs text-red-500 mt-2 wrap-break-word">{error}</p>
       )}
 
       {files.length > 0 && (
         <ul className="mt-3 space-y-1">
           {files.map((f) => (
-            <li
-              key={f.id}
-              className="flex justify-between items-center text-xs text-gray-600"
-            >
-              <span className="truncate max-w-[160px]" title={f.filename}>
-                {f.filename}
-              </span>
-              <span className={statusColor(f.ingest_status)}>
-                {statusLabel(f.ingest_status)}
-              </span>
+            <li key={f.id} className="text-xs text-gray-600">
+              <div className="flex justify-between items-center">
+                <span className="truncate max-w-40" title={f.filename}>
+                  {f.filename}
+                </span>
+                <span
+                  className={`ml-2 shrink-0 ${statusColor(f.ingest_status)} ${
+                    !TERMINAL_STATUSES.has(f.ingest_status)
+                      ? "animate-pulse"
+                      : ""
+                  }`}
+                >
+                  {statusLabel(f.ingest_status)}
+                </span>
+              </div>
+              {f.ingest_status === "error" && f.ingest_error && (
+                <p
+                  className="text-red-400 mt-0.5 truncate"
+                  title={f.ingest_error}
+                >
+                  {f.ingest_error}
+                </p>
+              )}
             </li>
           ))}
         </ul>

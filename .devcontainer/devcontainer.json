@@ -37,7 +37,8 @@
       "moby": false
     }
   },
-  "postCreateCommand": "cp .env.example .env && pip install -r services/api/requirements.txt && cd apps/web && npm install",
+  "postCreateCommand": "cp -n .env.example .env && pip install -r services/api/requirements.txt && cd apps/web && npm install",
+  "postStartCommand": "docker compose -f docker-compose.dev.yml up -d && sleep 5 && bash migrate.sh",
   "customizations": {
     "vscode": {
       "extensions": [
@@ -59,9 +60,23 @@
         "editor.formatOnSave": true,
         "editor.defaultFormatter": "esbenp.prettier-vscode",
         "[python]": {
-          "editor.defaultFormatter": "ms-python.black-formatter"
+          "editor.defaultFormatter": "charliermarsh.ruff"
+        },
+        "[typescript]": {
+          "editor.defaultFormatter": "esbenp.prettier-vscode"
+        },
+        "[typescriptreact]": {
+          "editor.defaultFormatter": "esbenp.prettier-vscode"
         }
       }
+    }
+  },
+  "secrets": {
+    "OPENAI_API_KEY": {
+      "description": "OpenAI API key — от https://platform.openai.com/api-keys"
+    },
+    "ANTHROPIC_API_KEY": {
+      "description": "Anthropic API key — от https://console.anthropic.com/settings/keys"
     }
   }
 }

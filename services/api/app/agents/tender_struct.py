@@ -108,7 +108,7 @@ async def run_tender_struct(
             outline_json=llm_result["outline"],
         )
         db.add(outline)
-        await db.commit()
+        await db.flush()  # get outline.id; get_db dependency commits at request end
         await db.refresh(outline)
         llm_result["outline_id"] = outline.id
 

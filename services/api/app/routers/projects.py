@@ -3,7 +3,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.core.database import get_db
 from app.core.models import Project
@@ -19,6 +19,14 @@ class ProjectCreate(BaseModel):
     tender_date: Optional[datetime] = None
 
 
+class ProjectUpdate(BaseModel):
+    name: Optional[str] = None
+    location: Optional[str] = None
+    description: Optional[str] = None
+    contracting_authority: Optional[str] = None
+    tender_date: Optional[datetime] = None
+
+
 class ProjectResponse(BaseModel):
     id: str
     name: str
@@ -27,6 +35,7 @@ class ProjectResponse(BaseModel):
     contracting_authority: Optional[str]
     tender_date: Optional[datetime]
     created_at: datetime
+    updated_at: Optional[datetime] = None
 
     model_config = {"from_attributes": True}
 
@@ -51,6 +60,25 @@ async def get_project(project_id: str, db: AsyncSession = Depends(get_db)):
     project = await db.get(Project, project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
+    return project
+
+
+@router.put("/{project_id}", response_model=ProjectResponse)
+async def update_project(
+    project_id: str,
+    data: ProjectUpdate,
+    db: AsyncSession = Depends(get_db),
+):
+    project = await db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    for field, value in data.model_dump(exclude_unset=True).items():
+        setattr(project, field, value)
+    project.updated_at = datetime.now(timezone.utc)
+
+    await db.flush()
+    await db.refresh(project)
     return project
 
 

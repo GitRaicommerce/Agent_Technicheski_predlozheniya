@@ -54,13 +54,39 @@ async def run_examples(
     trace_id = trace_id or str(uuid.uuid4())
     log.info("agent_examples_start", project_id=project_id, trace_id=trace_id)
 
-    # Load example snippets from DB
-    result = await db.execute(
-        select(ExampleSnippet)
-        .where(ExampleSnippet.project_id == project_id)
-        .limit(50)
-    )
-    snippets = result.scalars().all()
+    # Try vector similarity search first; fall back to LIMIT if embeddings unavailable
+    snippets = []
+    try:
+        from app.core.embedding import embed_query
+
+        query_vec = await embed_query(query)
+        if query_vec:
+            result = await db.execute(
+                select(ExampleSnippet)
+                .where(
+                    ExampleSnippet.project_id == project_id,
+                    ExampleSnippet.embedding.is_not(None),
+                )
+                .order_by(ExampleSnippet.embedding.cosine_distance(query_vec))
+                .limit(max_snippets * 3)  # over-fetch for LLM re-ranking
+            )
+            snippets = result.scalars().all()
+            log.info(
+                "agent_examples_vector_search",
+                found=len(snippets),
+                trace_id=trace_id,
+            )
+    except Exception as e:
+        log.warning("agent_examples_vector_search_failed", error=str(e), trace_id=trace_id)
+
+    # Fallback: naive fetch when no embeddings exist yet
+    if not snippets:
+        result = await db.execute(
+            select(ExampleSnippet)
+            .where(ExampleSnippet.project_id == project_id)
+            .limit(50)
+        )
+        snippets = result.scalars().all()
 
     if not snippets:
         return {

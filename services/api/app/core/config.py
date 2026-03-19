@@ -29,6 +29,10 @@ class Settings(BaseSettings):
     llm_max_tokens: int = 4096
     llm_temperature: float = 0.2
 
+    # Embeddings
+    embedding_model: str = "text-embedding-3-small"
+    embedding_dims: int = 1536
+
     # App
     app_secret_key: str = "change-me-in-production"
     app_env: str = "development"

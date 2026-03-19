@@ -82,7 +82,11 @@ async def _write_sections(
                 Generation.project_id == project_id,
                 Generation.section_uid == section_uid,
             )
-            .order_by(Generation.created_at.desc())
+            .order_by(
+                Generation.selected.desc(),   # закрепен от потребителя
+                Generation.variant.asc(),     # вариант 1 преди 2
+                Generation.created_at.desc(),
+            )
             .limit(1)
         )
         generation = result.scalar_one_or_none()

@@ -1,4 +1,5 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+// Empty string = use relative URLs proxied through Next.js (works in Codespaces + local)
+const API_URL = "";
 
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, {
@@ -7,7 +8,12 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(err.detail || `API error ${res.status}`);
+    const detail = err.detail;
+    const message =
+      typeof detail === "string"
+        ? detail
+        : detail?.message ?? JSON.stringify(detail) ?? `API error ${res.status}`;
+    throw new Error(message);
   }
   return res.json();
 }
@@ -20,11 +26,17 @@ export interface Project {
   contracting_authority?: string;
   tender_date?: string;
   created_at: string;
+  updated_at?: string;
 }
 
 export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
+}
+
+export interface GenerationVariant {
+  text: string;
+  evidence_map?: Record<string, string>;
 }
 
 export interface OrchestratorResponse {
@@ -35,6 +47,14 @@ export interface OrchestratorResponse {
   ui_actions: { type: string; payload: Record<string, unknown> }[];
   agent_called?: string;
   questions_to_user: string[];
+  agent_result?: {
+    variant_1?: GenerationVariant;
+    variant_2?: GenerationVariant;
+    generation_ids?: Record<string, string>;
+    flags?: string[];
+    verification?: { verdict?: string; flags?: string[] };
+    [key: string]: unknown;
+  };
 }
 
 export interface UploadedFile {
@@ -44,6 +64,25 @@ export interface UploadedFile {
   filename: string;
   file_hash: string;
   ingest_status: string;
+  ingest_error?: string;
+}
+
+export interface TpOutlineSection {
+  uid?: string;
+  title: string;
+  required?: boolean;
+  requirements?: string[];
+  subsections?: TpOutlineSection[];
+}
+
+export interface TpOutline {
+  id: string;
+  outline_json: {
+    sections?: TpOutlineSection[];
+    outline?: TpOutlineSection[];
+  };
+  status_locked: boolean;
+  version: number;
 }
 
 // Projects
@@ -56,11 +95,20 @@ export const api = {
         method: "POST",
         body: JSON.stringify(data),
       }),
+    update: (id: string, data: Partial<Omit<Project, "id" | "created_at" | "updated_at">>) =>
+      apiFetch<Project>(`/api/v1/projects/${id}`, {
+        method: "PUT",
+        body: JSON.stringify(data),
+      }),
     delete: (id: string) =>
       fetch(`${API_URL}/api/v1/projects/${id}`, { method: "DELETE" }),
   },
   files: {
-    upload: async (project_id: string, module: string, file: File): Promise<UploadedFile> => {
+    upload: async (
+      project_id: string,
+      module: string,
+      file: File,
+    ): Promise<UploadedFile> => {
       const form = new FormData();
       form.append("module", module);
       form.append("file", file);
@@ -78,6 +126,10 @@ export const api = {
       const qs = module ? `?module=${module}` : "";
       return apiFetch<UploadedFile[]>(`/api/v1/files/${project_id}/files${qs}`);
     },
+    getStatus: (project_id: string, file_id: string) =>
+      apiFetch<UploadedFile>(
+        `/api/v1/files/${project_id}/files/${file_id}/status`,
+      ),
   },
   agents: {
     chat: (project_id: string, message: string, history: ChatMessage[]) =>
@@ -85,11 +137,41 @@ export const api = {
         method: "POST",
         body: JSON.stringify({ project_id, message, history }),
       }),
+    getOutline: async (project_id: string): Promise<TpOutline | null> => {
+      try {
+        return await apiFetch<TpOutline>(`/api/v1/agents/${project_id}/outline`);
+      } catch {
+        return null;
+      }
+    },
+    lockOutline: async (
+      project_id: string,
+      outline_id: string,
+    ): Promise<void> => {
+      const res = await fetch(
+        `${API_URL}/api/v1/agents/${project_id}/outline/lock?outline_id=${encodeURIComponent(outline_id)}`,
+        { method: "POST" },
+      );
+      if (!res.ok) throw new Error(`Одобрението не успя: ${res.status}`);
+    },
+    selectGeneration: (project_id: string, generation_id: string) =>
+      apiFetch<{ status: string }>(
+        `/api/v1/agents/${project_id}/generations/${generation_id}/select`,
+        { method: "POST" },
+      ),
   },
   export: {
     docx: async (project_id: string) => {
       const res = await fetch(`${API_URL}/api/v1/export/${project_id}/docx`);
-      if (!res.ok) throw new Error("Export failed");
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: res.statusText }));
+        const detail = err.detail;
+        const message =
+          typeof detail === "string"
+            ? detail
+            : detail?.message ?? `Export failed (${res.status})`;
+        throw new Error(message);
+      }
       return res.blob();
     },
   },

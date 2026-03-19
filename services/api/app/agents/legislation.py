@@ -56,12 +56,39 @@ async def run_legislation(
     trace_id = trace_id or str(uuid.uuid4())
     log.info("agent_legislation_start", project_id=project_id, trace_id=trace_id)
 
-    result = await db.execute(
-        select(LexChunk)
-        .where(LexChunk.project_id == project_id)
-        .limit(60)
-    )
-    chunks = result.scalars().all()
+    # Try vector similarity search first; fall back to LIMIT if unavailable
+    chunks = []
+    try:
+        from app.core.embedding import embed_query
+
+        query_vec = await embed_query(query)
+        if query_vec:
+            result = await db.execute(
+                select(LexChunk)
+                .where(
+                    LexChunk.project_id == project_id,
+                    LexChunk.embedding.is_not(None),
+                )
+                .order_by(LexChunk.embedding.cosine_distance(query_vec))
+                .limit(20)
+            )
+            chunks = result.scalars().all()
+            log.info(
+                "agent_legislation_vector_search",
+                found=len(chunks),
+                trace_id=trace_id,
+            )
+    except Exception as e:
+        log.warning(
+            "agent_legislation_vector_search_failed", error=str(e), trace_id=trace_id
+        )
+
+    # Fallback: naive fetch when no embeddings exist yet
+    if not chunks:
+        result = await db.execute(
+            select(LexChunk).where(LexChunk.project_id == project_id).limit(60)
+        )
+        chunks = result.scalars().all()
 
     if not chunks:
         return {
