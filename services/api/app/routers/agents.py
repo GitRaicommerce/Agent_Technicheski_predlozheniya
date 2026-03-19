@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Any
+import uuid
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
@@ -184,6 +185,7 @@ class GenerationResponse(BaseModel):
     variant: int
     text: str
     evidence_map_json: dict | None = None
+    used_sources_json: dict | None = None
     flags_json: dict | None = None
     evidence_status: str
     selected: bool
@@ -260,6 +262,7 @@ async def list_generations(project_id: str, db: AsyncSession = Depends(get_db)):
                         variant=v.variant,
                         text=v.text,
                         evidence_map_json=v.evidence_map_json,
+                        used_sources_json=v.used_sources_json,
                         flags_json=v.flags_json,
                         evidence_status=v.evidence_status,
                         selected=v.selected,
@@ -271,3 +274,81 @@ async def list_generations(project_id: str, db: AsyncSession = Depends(get_db)):
             )
         )
     return result
+
+
+# ---------------------------------------------------------------------------
+# POST /{project_id}/sections/{section_uid}/regenerate
+# ---------------------------------------------------------------------------
+
+
+class RegenerateResponse(BaseModel):
+    generation_ids: dict[str, str]
+    trace_id: str
+
+
+@router.post(
+    "/{project_id}/sections/{section_uid}/regenerate",
+    response_model=RegenerateResponse,
+)
+async def regenerate_section(
+    project_id: str,
+    section_uid: str,
+    db: AsyncSession = Depends(get_db),
+) -> RegenerateResponse:
+    """
+    Тригерира пълен drafting pipeline (examples→legislation→drafting→verifier)
+    за конкретен раздел и връща generation_ids на новите варианти.
+    """
+    project = await db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    # Load the latest outline to resolve section title + requirements
+    from sqlalchemy import select
+    from app.core.models import TpOutline
+
+    outline_res = await db.execute(
+        select(TpOutline)
+        .where(TpOutline.project_id == project_id)
+        .order_by(TpOutline.version.desc())
+        .limit(1)
+    )
+    outline = outline_res.scalar_one_or_none()
+
+    section_title = section_uid
+    section_requirements: list[str] = []
+
+    if outline:
+        def _find(secs: list) -> bool:
+            for s in secs:
+                uid = s.get("uid") or s.get("section_uid", "")
+                if uid == section_uid:
+                    nonlocal section_title, section_requirements
+                    section_title = s.get("title", section_uid)
+                    section_requirements = s.get("requirements", [])
+                    return True
+                if _find(s.get("subsections", s.get("children", []))):
+                    return True
+            return False
+
+        sections = outline.outline_json.get(
+            "sections", outline.outline_json.get("outline", [])
+        )
+        _find(sections)
+
+    from app.agents.orchestrator import _run_drafting_pipeline
+
+    trace_id = str(uuid.uuid4())
+    result = await _run_drafting_pipeline(
+        project_id=project_id,
+        params={
+            "section_uid": section_uid,
+            "section_title": section_title,
+            "section_requirements": section_requirements,
+        },
+        db=db,
+        trace_id=trace_id,
+    )
+
+    generation_ids: dict[str, str] = result.get("generation_ids") or {}
+    return RegenerateResponse(generation_ids=generation_ids, trace_id=trace_id)

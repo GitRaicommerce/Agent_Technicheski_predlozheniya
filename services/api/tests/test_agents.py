@@ -211,3 +211,49 @@ async def test_get_generations_grouped(client, mock_db):
     assert len(section["variants"]) == 2
     # selected comes first
     assert section["variants"][0]["selected"] is True
+
+
+# ---------------------------------------------------------------------------
+# POST /api/v1/agents/{project_id}/sections/{section_uid}/regenerate
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_regenerate_section_not_found(client, mock_db):
+    """404 когато проектът не съществува."""
+    mock_db.get = AsyncMock(return_value=None)
+
+    resp = await client.post(
+        f"/api/v1/agents/{uuid.uuid4()}/sections/{uuid.uuid4()}/regenerate"
+    )
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_regenerate_section_ok(client, mock_db):
+    """200 с generation_ids когато pipeline успее."""
+    pid = str(uuid.uuid4())
+    sec_uid = str(uuid.uuid4())
+    project = _make_project()
+    project.id = pid
+
+    # db.get returns project; db.execute returns no outline (scalar_one_or_none = None)
+    outline_result = MagicMock()
+    outline_result.scalar_one_or_none = MagicMock(return_value=None)
+    mock_db.get = AsyncMock(return_value=project)
+    mock_db.execute = AsyncMock(return_value=outline_result)
+
+    fake_ids = {"variant_1": str(uuid.uuid4()), "variant_2": str(uuid.uuid4())}
+
+    with patch(
+        "app.agents.orchestrator._run_drafting_pipeline",
+        new=AsyncMock(return_value={"generation_ids": fake_ids}),
+    ):
+        resp = await client.post(
+            f"/api/v1/agents/{pid}/sections/{sec_uid}/regenerate"
+        )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["generation_ids"] == fake_ids
+    assert "trace_id" in data

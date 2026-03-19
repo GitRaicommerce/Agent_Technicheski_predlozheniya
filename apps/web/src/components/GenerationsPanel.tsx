@@ -13,6 +13,7 @@ export default function GenerationsPanel({ projectId }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [selecting, setSelecting] = useState<string | null>(null);
+  const [regenerating, setRegenerating] = useState<string | null>(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -57,6 +58,19 @@ export default function GenerationsPanel({ projectId }: Props) {
       // keep going — selection is best-effort
     } finally {
       setSelecting(null);
+    }
+  };
+
+  const handleRegenerate = async (sectionUid: string) => {
+    setRegenerating(sectionUid);
+    try {
+      await api.agents.regenerateSection(projectId, sectionUid);
+      // reload to show the new variants
+      await api.agents.listGenerations(projectId).then(setSections);
+    } catch {
+      // ignore — user can retry
+    } finally {
+      setRegenerating(null);
     }
   };
 
@@ -131,9 +145,17 @@ export default function GenerationsPanel({ projectId }: Props) {
                   )}
                 </p>
               </div>
-              <span className="text-gray-400 text-xs ml-2 mt-0.5 shrink-0">
-                {isOpen ? "▾" : "▸"}
-              </span>
+              <div className="flex items-center gap-1 ml-2 mt-0.5 shrink-0">
+                <button
+                  onClick={(e) => { e.stopPropagation(); handleRegenerate(sec.section_uid); }}
+                  disabled={regenerating === sec.section_uid}
+                  className="px-1.5 py-0.5 text-xs rounded bg-amber-100 text-amber-700 hover:bg-amber-200 disabled:opacity-50 transition"
+                  title="Регенерирай раздела"
+                >
+                  {regenerating === sec.section_uid ? "…" : "↻"}
+                </button>
+                <span className="text-gray-400 text-xs">{isOpen ? "▾" : "▸"}</span>
+              </div>
             </button>
 
             {/* Variants */}
@@ -249,6 +271,43 @@ function VariantCard({
           ))}
         </div>
       )}
+
+      {/* Used sources */}
+      {variant.used_sources_json && expanded && (
+        <UsedSources sources={variant.used_sources_json} />
+      )}
+    </div>
+  );
+}
+
+function UsedSources({ sources }: { sources: Record<string, unknown> }) {
+  // sources can be { filename: snippet } or { chunk_id: { filename, text } }
+  const entries = Object.entries(sources);
+  if (!entries.length) return null;
+
+  return (
+    <div className="mt-2 border-t pt-2 space-y-1">
+      <p className="font-medium text-gray-500 text-xs">Използвани източници ({entries.length}):</p>
+      {entries.map(([key, val]) => {
+        const filename =
+          typeof val === "object" && val !== null && "filename" in val
+            ? String((val as Record<string, unknown>).filename)
+            : key;
+        const snippet =
+          typeof val === "string"
+            ? val
+            : typeof val === "object" && val !== null && "text" in val
+            ? String((val as Record<string, unknown>).text)
+            : null;
+        return (
+          <div key={key} className="text-gray-400">
+            <span className="font-medium text-gray-500 truncate">{filename}</span>
+            {snippet && (
+              <p className="mt-0.5 italic line-clamp-2">{snippet}</p>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }

@@ -102,6 +102,7 @@ export interface Generation {
   variant: string;
   text: string;
   evidence_map_json?: Record<string, string>;
+  used_sources_json?: Record<string, unknown>;
   flags_json?: Record<string, unknown>;
   evidence_status: string;
   selected: boolean;
@@ -220,6 +221,11 @@ export const api = {
     },
     listGenerations: (project_id: string) =>
       apiFetch<SectionGenerations[]>(`/api/v1/agents/${project_id}/generations`),
+    regenerateSection: (project_id: string, section_uid: string) =>
+      apiFetch<{ generation_ids: Record<string, string>; trace_id: string }>(
+        `/api/v1/agents/${project_id}/sections/${section_uid}/regenerate`,
+        { method: "POST" },
+      ),
   },
   export: {
     docx: async (project_id: string) => {
