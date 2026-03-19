@@ -140,3 +140,74 @@ async def test_get_schedule_found(client, mock_db):
     assert data["id"] == schedule.id
     assert data["status_locked"] is False
     assert "tasks" in data["schedule_json"]
+
+
+# ---------------------------------------------------------------------------
+# GET /api/v1/agents/{project_id}/generations
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_get_generations_empty(client, mock_db):
+    """Връща [] когато няма генерации за проекта."""
+    # outline lookup returns nothing
+    outline_result = MagicMock()
+    outline_result.scalar_one_or_none = MagicMock(return_value=None)
+    # generations scalars returns empty list
+    gen_result = MagicMock()
+    gen_result.scalars = MagicMock(return_value=MagicMock(all=MagicMock(return_value=[])))
+    mock_db.execute = AsyncMock(side_effect=[outline_result, gen_result])
+
+    resp = await client.get(f"/api/v1/agents/{uuid.uuid4()}/generations")
+
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
+@pytest.mark.asyncio
+async def test_get_generations_grouped(client, mock_db):
+    """Групира генерациите по section_uid и ги връща."""
+    from datetime import datetime, timezone
+    from app.core.models import Generation
+
+    pid = str(uuid.uuid4())
+    sec_uid = str(uuid.uuid4())
+    now = datetime.now(timezone.utc)
+
+    g1 = Generation(
+        id=str(uuid.uuid4()),
+        project_id=pid,
+        section_uid=sec_uid,
+        variant=1,
+        text="Текст вариант 1",
+        evidence_status="ok",
+        selected=True,
+        created_at=now,
+    )
+    g2 = Generation(
+        id=str(uuid.uuid4()),
+        project_id=pid,
+        section_uid=sec_uid,
+        variant=2,
+        text="Текст вариант 2",
+        evidence_status="ok",
+        selected=False,
+        created_at=now,
+    )
+
+    outline_result = MagicMock()
+    outline_result.scalar_one_or_none = MagicMock(return_value=None)
+    gen_result = MagicMock()
+    gen_result.scalars = MagicMock(return_value=MagicMock(all=MagicMock(return_value=[g1, g2])))
+    mock_db.execute = AsyncMock(side_effect=[outline_result, gen_result])
+
+    resp = await client.get(f"/api/v1/agents/{pid}/generations")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) == 1
+    section = data[0]
+    assert section["section_uid"] == sec_uid
+    assert len(section["variants"]) == 2
+    # selected comes first
+    assert section["variants"][0]["selected"] is True

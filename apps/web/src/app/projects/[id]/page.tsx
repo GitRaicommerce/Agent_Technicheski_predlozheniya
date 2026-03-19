@@ -9,6 +9,7 @@ import ExportButton from "@/components/ExportButton";
 import FileUploadPanel from "@/components/FileUploadPanel";
 import OutlinePanel from "@/components/OutlinePanel";
 import SchedulePanel from "@/components/SchedulePanel";
+import GenerationsPanel from "@/components/GenerationsPanel";
 
 type Module = "examples" | "tender_docs" | "schedule" | "legislation";
 
@@ -27,6 +28,7 @@ export default function ProjectPage() {
   const [activeModule, setActiveModule] = useState<Module | null>(null);
   const [showOutline, setShowOutline] = useState(false);
   const [showSchedule, setShowSchedule] = useState(false);
+  const [showGenerations, setShowGenerations] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
   const [editData, setEditData] = useState({ name: "", location: "", description: "", contracting_authority: "", tender_date: "" });
   const [saving, setSaving] = useState(false);
@@ -274,6 +276,24 @@ export default function ProjectPage() {
             {showSchedule && (
               <div className="px-3 pb-3">
                 <SchedulePanel projectId={project.id} />
+              </div>
+            )}
+          </div>
+
+          {/* Генерирани текстове */}
+          <div className="border-b">
+            <button
+              onClick={() => setShowGenerations((v) => !v)}
+              className="w-full px-3 py-2.5 text-left text-sm font-semibold text-gray-700 flex justify-between items-center hover:bg-gray-50 transition"
+            >
+              <span>📝 Генерации</span>
+              <span className="text-gray-400 text-xs">
+                {showGenerations ? "▾" : "▸"}
+              </span>
+            </button>
+            {showGenerations && (
+              <div className="px-3 pb-3">
+                <GenerationsPanel projectId={project.id} />
               </div>
             )}
           </div>

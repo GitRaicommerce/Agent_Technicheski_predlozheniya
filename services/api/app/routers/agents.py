@@ -172,3 +172,102 @@ async def get_schedule(project_id: str, db: AsyncSession = Depends(get_db)):
     if not schedule:
         raise HTTPException(status_code=404, detail="Schedule not found")
     return schedule
+
+
+# ---------------------------------------------------------------------------
+# GET /api/v1/agents/{project_id}/generations
+# ---------------------------------------------------------------------------
+
+class GenerationResponse(BaseModel):
+    id: str
+    section_uid: str
+    variant: int
+    text: str
+    evidence_map_json: dict | None = None
+    flags_json: dict | None = None
+    evidence_status: str
+    selected: bool
+    created_at: str
+    trace_id: str | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class SectionGenerations(BaseModel):
+    section_uid: str
+    section_title: str | None = None
+    variants: list[GenerationResponse]
+
+
+@router.get("/{project_id}/generations", response_model=list[SectionGenerations])
+async def list_generations(project_id: str, db: AsyncSession = Depends(get_db)):
+    """
+    Връща всички генерации за проекта, групирани по section_uid.
+    Сортирани: selected DESC, variant ASC, created_at DESC.
+    """
+    from app.core.models import Generation, TpOutline
+    from sqlalchemy import select
+
+    # Load section titles from the latest outline (best-effort)
+    outline_result = await db.execute(
+        select(TpOutline)
+        .where(TpOutline.project_id == project_id)
+        .order_by(TpOutline.version.desc())
+        .limit(1)
+    )
+    outline = outline_result.scalar_one_or_none()
+
+    section_title_map: dict[str, str] = {}
+    if outline:
+        sections = outline.outline_json.get("sections", outline.outline_json.get("outline", []))
+
+        def _collect(secs: list) -> None:
+            for s in secs:
+                uid = s.get("uid") or s.get("section_uid", "")
+                if uid:
+                    section_title_map[uid] = s.get("title", "")
+                _collect(s.get("subsections", s.get("children", [])))
+
+        _collect(sections)
+
+    gen_result = await db.execute(
+        select(Generation)
+        .where(Generation.project_id == project_id)
+        .order_by(
+            Generation.section_uid,
+            Generation.selected.desc(),
+            Generation.variant.asc(),
+            Generation.created_at.desc(),
+        )
+    )
+    generations = gen_result.scalars().all()
+
+    # Group by section_uid preserving order
+    grouped: dict[str, list[Generation]] = {}
+    for g in generations:
+        grouped.setdefault(g.section_uid, []).append(g)
+
+    result = []
+    for section_uid, variants in grouped.items():
+        result.append(
+            SectionGenerations(
+                section_uid=section_uid,
+                section_title=section_title_map.get(section_uid),
+                variants=[
+                    GenerationResponse(
+                        id=v.id,
+                        section_uid=v.section_uid,
+                        variant=v.variant,
+                        text=v.text,
+                        evidence_map_json=v.evidence_map_json,
+                        flags_json=v.flags_json,
+                        evidence_status=v.evidence_status,
+                        selected=v.selected,
+                        created_at=v.created_at.isoformat(),
+                        trace_id=v.trace_id,
+                    )
+                    for v in variants
+                ],
+            )
+        )
+    return result

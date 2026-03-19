@@ -96,6 +96,25 @@ export interface ScheduleInfo {
   version: number;
 }
 
+export interface Generation {
+  id: string;
+  section_uid: string;
+  variant: string;
+  text: string;
+  evidence_map_json?: Record<string, string>;
+  flags_json?: Record<string, unknown>;
+  evidence_status: string;
+  selected: boolean;
+  created_at: string;
+  trace_id?: string;
+}
+
+export interface SectionGenerations {
+  section_uid: string;
+  section_title?: string;
+  variants: Generation[];
+}
+
 // Projects
 export const api = {
   projects: {
@@ -191,6 +210,8 @@ export const api = {
       );
       if (!res.ok) throw new Error(`Одобрението не успя: ${res.status}`);
     },
+    listGenerations: (project_id: string) =>
+      apiFetch<SectionGenerations[]>(`/api/v1/agents/${project_id}/generations`),
   },
   export: {
     docx: async (project_id: string) => {
