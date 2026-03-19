@@ -2,7 +2,7 @@ import Link from "next/link";
 
 export default function Home() {
   return (
-    <main className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-8">
+    <main className="min-h-screen bg-linear-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-8">
       <div className="max-w-2xl w-full text-center space-y-6">
         <h1 className="text-4xl font-bold text-gray-800">TP AI</h1>
         <p className="text-lg text-gray-600">

@@ -47,7 +47,7 @@ export default function SchedulePanel({ projectId }: Props) {
     return (
       <p className="text-xs text-gray-400 py-2 leading-relaxed">
         Графикът не е зареден. Качете .mpp, .xlsx или .pdf файл в модул
-        „Линеен график".
+        &bdquo;Линеен график&ldquo;.
       </p>
     );
   }
