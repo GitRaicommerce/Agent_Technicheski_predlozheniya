@@ -57,6 +57,11 @@ export default function FileUploadPanel({ projectId, module }: Props) {
 
   const meta = MODULE_LABELS[module];
 
+  // Derive allowed extensions from meta.accept for client-side validation
+  const allowedExts = meta.accept.split(",").map((e) => e.trim().toLowerCase());
+  const isAllowedFile = (file: File) =>
+    allowedExts.some((ext) => file.name.toLowerCase().endsWith(ext));
+
   // Зареди съществуващи файлове при mount
   useEffect(() => {
     api.files
@@ -124,6 +129,11 @@ export default function FileUploadPanel({ projectId, module }: Props) {
   const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault();
     const droppedFiles = Array.from(e.dataTransfer.files);
+    const invalid = droppedFiles.filter((f) => !isAllowedFile(f));
+    if (invalid.length) {
+      setError(`Неподдържан формат: ${invalid.map((f) => f.name).join(", ")}. Допустими: ${meta.accept}`);
+      return;
+    }
     await uploadFiles(droppedFiles);
   };
 
@@ -149,6 +159,15 @@ export default function FileUploadPanel({ projectId, module }: Props) {
       }
     }
     setUploading(false);
+  };
+
+  const handleDeleteFile = async (fileId: string) => {
+    try {
+      await api.files.delete(projectId, fileId);
+      setFiles((prev) => prev.filter((f) => f.id !== fileId));
+    } catch {
+      setError("Грешка при изтриване на файла.");
+    }
   };
 
   const statusColor = (status: string) => {
@@ -201,19 +220,26 @@ export default function FileUploadPanel({ projectId, module }: Props) {
         <ul className="mt-3 space-y-1">
           {files.map((f) => (
             <li key={f.id} className="text-xs text-gray-600">
-              <div className="flex justify-between items-center">
-                <span className="truncate max-w-40" title={f.filename}>
+              <div className="flex justify-between items-center gap-1">
+                <span className="truncate max-w-36" title={f.filename}>
                   {f.filename}
                 </span>
-                <span
-                  className={`ml-2 shrink-0 ${statusColor(f.ingest_status)} ${
-                    !TERMINAL_STATUSES.has(f.ingest_status)
-                      ? "animate-pulse"
-                      : ""
-                  }`}
-                >
-                  {statusLabel(f.ingest_status)}
-                </span>
+                <div className="flex items-center gap-1 shrink-0">
+                  <span
+                    className={`${statusColor(f.ingest_status)} ${
+                      !TERMINAL_STATUSES.has(f.ingest_status) ? "animate-pulse" : ""
+                    }`}
+                  >
+                    {statusLabel(f.ingest_status)}
+                  </span>
+                  <button
+                    onClick={() => handleDeleteFile(f.id)}
+                    className="ml-1 text-gray-300 hover:text-red-400 transition"
+                    title="Изтрий файл"
+                  >
+                    ✕
+                  </button>
+                </div>
               </div>
               {f.ingest_status === "error" && f.ingest_error && (
                 <p

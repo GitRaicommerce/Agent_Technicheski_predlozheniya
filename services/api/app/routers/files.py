@@ -133,3 +133,19 @@ async def get_file_status(
     if not file or file.project_id != project_id:
         raise HTTPException(status_code=404, detail="File not found")
     return file
+
+
+@router.delete(
+    "/{project_id}/files/{file_id}", status_code=status.HTTP_204_NO_CONTENT
+)
+async def delete_file(
+    project_id: str,
+    file_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Deletes a file record and its MinIO object."""
+    file = await db.get(ProjectFile, file_id)
+    if not file or file.project_id != project_id:
+        raise HTTPException(status_code=404, detail="File not found")
+    await storage.delete_object(file.storage_key)
+    await db.delete(file)

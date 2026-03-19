@@ -6,7 +6,8 @@ from typing import Optional
 from datetime import datetime, timezone
 
 from app.core.database import get_db
-from app.core.models import Project
+from app.core.models import Project, ProjectFile
+from app.core.storage import storage
 
 router = APIRouter()
 
@@ -87,4 +88,12 @@ async def delete_project(project_id: str, db: AsyncSession = Depends(get_db)):
     project = await db.get(Project, project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
+
+    # Delete all files from MinIO before removing DB records
+    files_result = await db.execute(
+        select(ProjectFile).where(ProjectFile.project_id == project_id)
+    )
+    for pf in files_result.scalars().all():
+        await storage.delete_object(pf.storage_key)
+
     await db.delete(project)

@@ -80,6 +80,21 @@ def _extract_docx(content: bytes) -> list[dict[str, Any]]:
             }
         )
 
+    # Extract table content (tender docs often store requirements in tables)
+    for table in doc.tables:
+        section_path = current_section[-1] if current_section else None
+        for row in table.rows:
+            cell_texts = [cell.text.strip() for cell in row.cells if cell.text.strip()]
+            if cell_texts:
+                chunks.append(
+                    {
+                        "type": "table_row",
+                        "text": " | ".join(cell_texts),
+                        "page": None,
+                        "section_path": section_path,
+                    }
+                )
+
     return chunks
 
 

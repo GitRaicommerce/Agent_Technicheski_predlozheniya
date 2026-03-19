@@ -13,12 +13,15 @@ export default function OutlinePanel({ projectId }: Props) {
   const [locking, setLocking] = useState(false);
   const [lockError, setLockError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const load = () => {
+    setLoading(true);
     api.agents
       .getOutline(projectId)
       .then(setOutline)
       .finally(() => setLoading(false));
-  }, [projectId]);
+  };
+
+  useEffect(() => { load(); }, [projectId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleLock = async () => {
     if (!outline) return;
@@ -46,10 +49,18 @@ export default function OutlinePanel({ projectId }: Props) {
 
   if (!outline) {
     return (
-      <p className="text-xs text-gray-400 py-2 leading-relaxed">
-        Структурата не е генерирана. Качете тръжна документация и поискайте от
-        TP AI да я анализира.
-      </p>
+      <div className="space-y-2">
+        <p className="text-xs text-gray-400 leading-relaxed">
+          Структурата не е генерирана. Качете тръжна документация и поискайте от
+          TP AI да я анализира.
+        </p>
+        <button
+          onClick={load}
+          className="text-xs text-blue-500 hover:underline"
+        >
+          ↺ Опресни
+        </button>
+      </div>
     );
   }
 
@@ -58,6 +69,11 @@ export default function OutlinePanel({ projectId }: Props) {
 
   return (
     <div className="space-y-2">
+      <div className="flex justify-end">
+        <button onClick={load} className="text-xs text-gray-400 hover:text-blue-500 transition" title="Опресни">
+          ↺
+        </button>
+      </div>
       {outline.status_locked ? (
         <div className="flex items-center gap-1.5 text-xs text-green-700 font-medium py-1">
           <span>✓</span>

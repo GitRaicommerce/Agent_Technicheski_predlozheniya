@@ -141,6 +141,10 @@ export const api = {
       apiFetch<UploadedFile>(
         `/api/v1/files/${project_id}/files/${file_id}/status`,
       ),
+    delete: (project_id: string, file_id: string) =>
+      fetch(`${API_URL}/api/v1/files/${project_id}/files/${file_id}`, {
+        method: "DELETE",
+      }),
   },
   agents: {
     chat: (project_id: string, message: string, history: ChatMessage[]) =>

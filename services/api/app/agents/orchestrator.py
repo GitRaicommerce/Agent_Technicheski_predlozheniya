@@ -79,8 +79,10 @@ async def run_orchestrator(
     )
 
     # Build conversation messages (include history for multi-turn context)
+    # Truncate to last 20 messages to avoid hitting LLM context limits
+    MAX_HISTORY = 20
     messages: list[dict] = []
-    for msg in history:
+    for msg in history[-MAX_HISTORY:]:
         role = msg.get("role", "user")
         content = msg.get("content", "")
         if role in ("user", "assistant") and content:

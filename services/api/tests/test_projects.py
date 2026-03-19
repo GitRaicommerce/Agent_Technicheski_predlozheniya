@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -152,8 +152,13 @@ async def test_update_project_not_found(client, mock_db):
 async def test_delete_project(client, mock_db):
     project = _make_project()
     mock_db.get = AsyncMock(return_value=project)
+    # No files for this project
+    files_result = MagicMock()
+    files_result.scalars.return_value.all.return_value = []
+    mock_db.execute = AsyncMock(return_value=files_result)
 
-    resp = await client.delete(f"/api/v1/projects/{project.id}")
+    with patch("app.routers.projects.storage.delete_object", new=AsyncMock()):
+        resp = await client.delete(f"/api/v1/projects/{project.id}")
 
     assert resp.status_code == 204
     mock_db.delete.assert_called_once_with(project)

@@ -75,5 +75,15 @@ class StorageClient:
             content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         )
 
+    async def delete_object(self, key: str) -> None:
+        """Deletes a file from the files bucket. Silently ignores missing objects."""
+        client = self._get_client()
+        try:
+            await asyncio.to_thread(
+                client.remove_object, settings.minio_bucket_files, key
+            )
+        except Exception:
+            pass
+
 
 storage = StorageClient()

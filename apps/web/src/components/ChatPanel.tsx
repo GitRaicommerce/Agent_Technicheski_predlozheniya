@@ -69,7 +69,8 @@ export default function ChatPanel({ projectId }: Props) {
       const res: OrchestratorResponse = await api.agents.chat(
         projectId,
         message,
-        [...history, userMsg].map(({ role, content }) => ({ role, content })),
+        // Send only the last 20 messages to avoid LLM context limits
+        [...history, userMsg].slice(-20).map(({ role, content }) => ({ role, content })),
       );
 
       if (res.questions_to_user?.length) {

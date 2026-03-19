@@ -14,12 +14,15 @@ export default function SchedulePanel({ projectId }: Props) {
   const [lockError, setLockError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
 
-  useEffect(() => {
+  const load = () => {
+    setLoading(true);
     api.agents
       .getSchedule(projectId)
       .then(setSchedule)
       .finally(() => setLoading(false));
-  }, [projectId]);
+  };
+
+  useEffect(() => { load(); }, [projectId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleLock = async () => {
     if (!schedule) return;
@@ -45,10 +48,18 @@ export default function SchedulePanel({ projectId }: Props) {
 
   if (!schedule) {
     return (
-      <p className="text-xs text-gray-400 py-2 leading-relaxed">
-        Графикът не е зареден. Качете .mpp, .xlsx или .pdf файл в модул
-        &bdquo;Линеен график&ldquo;.
-      </p>
+      <div className="space-y-2">
+        <p className="text-xs text-gray-400 leading-relaxed">
+          Графикът не е зареден. Качете .mpp, .xlsx или .pdf файл в модул
+          &bdquo;Линеен график&ldquo;.
+        </p>
+        <button
+          onClick={load}
+          className="text-xs text-blue-500 hover:underline"
+        >
+          ↺ Опресни
+        </button>
+      </div>
     );
   }
 
@@ -58,6 +69,11 @@ export default function SchedulePanel({ projectId }: Props) {
 
   return (
     <div className="space-y-2">
+      <div className="flex justify-end">
+        <button onClick={load} className="text-xs text-gray-400 hover:text-blue-500 transition" title="Опресни">
+          ↺
+        </button>
+      </div>
       {/* Status badge */}
       {schedule.status_locked ? (
         <div className="flex items-center gap-1.5 text-xs text-green-700 font-medium py-1">
