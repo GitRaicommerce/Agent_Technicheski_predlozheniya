@@ -102,10 +102,18 @@ async def run_tender_struct(
             if not section.get("uid"):
                 section["uid"] = str(uuid.uuid4())
 
+        # Increment version number for this project
+        from sqlalchemy import func
+        ver_result = await db.execute(
+            select(func.max(TpOutline.version)).where(TpOutline.project_id == project_id)
+        )
+        next_version = (ver_result.scalar() or 0) + 1
+
         outline = TpOutline(
             id=str(uuid.uuid4()),
             project_id=project_id,
             outline_json=llm_result["outline"],
+            version=next_version,
         )
         db.add(outline)
         await db.flush()  # get outline.id; get_db dependency commits at request end

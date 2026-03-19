@@ -62,13 +62,38 @@ class LLMGateway:
             "llm_call", agent=agent, provider=provider, model=model, trace_id=trace_id
         )
 
-        raw_text = await self._call_provider(
-            provider=provider,
-            model=model,
-            system_prompt=system_prompt,
-            user_message=user_message,
-            messages=messages,
-        )
+        try:
+            raw_text = await self._call_provider(
+                provider=provider,
+                model=model,
+                system_prompt=system_prompt,
+                user_message=user_message,
+                messages=messages,
+            )
+        except Exception as primary_exc:
+            fallback_provider = settings.llm_fallback_provider
+            fallback_model = settings.llm_fallback_model
+            if (
+                fallback_provider
+                and fallback_model
+                and (fallback_provider != provider or fallback_model != model)
+            ):
+                log.warning(
+                    "llm_fallback",
+                    primary_provider=provider,
+                    fallback_provider=fallback_provider,
+                    error=str(primary_exc),
+                    trace_id=trace_id,
+                )
+                raw_text = await self._call_provider(
+                    provider=fallback_provider,
+                    model=fallback_model,
+                    system_prompt=system_prompt,
+                    user_message=user_message,
+                    messages=messages,
+                )
+            else:
+                raise
 
         try:
             return json.loads(raw_text)

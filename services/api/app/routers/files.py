@@ -57,7 +57,17 @@ async def upload_file(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
+    content_type = file.content_type or ""
+    if content_type not in ALLOWED_MIMETYPES:
+        raise HTTPException(
+            status_code=415,
+            detail=f"Unsupported file type '{content_type}'. Allowed: PDF, DOCX, DOC, MPP, XLSX, XLS.",
+        )
+
     content = await file.read()
+    MAX_FILE_SIZE = 50 * 1024 * 1024  # 50 MB
+    if len(content) > MAX_FILE_SIZE:
+        raise HTTPException(status_code=413, detail="File too large. Maximum size is 50 MB.")
     file_hash = hashlib.sha256(content).hexdigest()
     file_id = str(uuid.uuid4())
     storage_key = f"projects/{project_id}/{module}/{file_id}/{file.filename}"

@@ -7,11 +7,13 @@ import { api, Project } from "@/lib/api";
 export default function ProjectsPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     api.projects
       .list()
       .then(setProjects)
+      .catch(() => setError("Грешка при зареждане на проектите."))
       .finally(() => setLoading(false));
   }, []);
 
@@ -30,6 +32,8 @@ export default function ProjectsPage() {
 
         {loading ? (
           <p className="text-gray-500">Зарежда се...</p>
+        ) : error ? (
+          <p className="text-red-500">{error}</p>
         ) : projects.length === 0 ? (
           <div className="text-center py-16 text-gray-400">
             <p className="text-lg">Нямате проекти все още.</p>

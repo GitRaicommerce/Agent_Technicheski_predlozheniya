@@ -28,9 +28,11 @@ export default function ProjectPage() {
   const [showOutline, setShowOutline] = useState(false);
   const [showSchedule, setShowSchedule] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
-  const [editData, setEditData] = useState({ name: "", location: "", description: "" });
+  const [editData, setEditData] = useState({ name: "", location: "", description: "", contracting_authority: "", tender_date: "" });
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   useEffect(() => {
@@ -39,7 +41,7 @@ export default function ProjectPage() {
         .get(params.id)
         .then((p) => {
           setProject(p);
-          setEditData({ name: p.name, location: p.location ?? "", description: p.description ?? "" });
+          setEditData({ name: p.name, location: p.location ?? "", description: p.description ?? "", contracting_authority: p.contracting_authority ?? "", tender_date: p.tender_date ?? "" });
         })
         .finally(() => setLoading(false));
     }
@@ -48,14 +50,19 @@ export default function ProjectPage() {
   async function handleSaveEdit() {
     if (!project) return;
     setSaving(true);
+    setSaveError(null);
     try {
       const updated = await api.projects.update(project.id, {
         name: editData.name,
         location: editData.location || undefined,
         description: editData.description || undefined,
+        contracting_authority: editData.contracting_authority || undefined,
+        tender_date: editData.tender_date || undefined,
       });
       setProject(updated);
       setShowEdit(false);
+    } catch (e: unknown) {
+      setSaveError(e instanceof Error ? e.message : "Грешка при запазване.");
     } finally {
       setSaving(false);
     }
@@ -64,12 +71,14 @@ export default function ProjectPage() {
   async function handleDelete() {
     if (!project) return;
     setDeleting(true);
+    setDeleteError(null);
     try {
       await api.projects.delete(project.id);
       router.push("/projects");
-    } finally {
+    } catch (e: unknown) {
+      setDeleteError(e instanceof Error ? e.message : "Грешка при изтриване.");
       setDeleting(false);
-      setShowDeleteConfirm(false);
+      // keep showDeleteConfirm open so the user sees the error
     }
   }
 
@@ -101,25 +110,30 @@ export default function ProjectPage() {
 
         {/* Delete confirmation */}
         {showDeleteConfirm && (
-          <div className="mb-2 p-3 bg-red-50 border border-red-200 rounded-lg flex items-start justify-between gap-3">
-            <p className="text-sm text-red-700">
-              Изтриване на „{project.name}"? Действието е необратимо.
-            </p>
-            <div className="flex gap-2 shrink-0">
-              <button
-                onClick={handleDelete}
-                disabled={deleting}
-                className="px-3 py-1 bg-red-600 text-white text-xs rounded-lg hover:bg-red-700 disabled:opacity-50"
-              >
-                {deleting ? "Изтрива..." : "Да, изтрий"}
-              </button>
-              <button
-                onClick={() => setShowDeleteConfirm(false)}
-                className="px-3 py-1 border text-xs rounded-lg text-gray-600 hover:bg-gray-50"
-              >
-                Отказ
-              </button>
+          <div className="mb-2 p-3 bg-red-50 border border-red-200 rounded-lg flex flex-col gap-2">
+            <div className="flex items-start justify-between gap-3">
+              <p className="text-sm text-red-700">
+                Изтриване на „{project.name}"? Действието е необратимо.
+              </p>
+              <div className="flex gap-2 shrink-0">
+                <button
+                  onClick={handleDelete}
+                  disabled={deleting}
+                  className="px-3 py-1 bg-red-600 text-white text-xs rounded-lg hover:bg-red-700 disabled:opacity-50"
+                >
+                  {deleting ? "Изтрива..." : "Да, изтрий"}
+                </button>
+                <button
+                  onClick={() => { setShowDeleteConfirm(false); setDeleteError(null); }}
+                  className="px-3 py-1 border text-xs rounded-lg text-gray-600 hover:bg-gray-50"
+                >
+                  Отказ
+                </button>
+              </div>
             </div>
+            {deleteError && (
+              <p className="text-xs text-red-600">{deleteError}</p>
+            )}
           </div>
         )}
 
@@ -140,10 +154,28 @@ export default function ProjectPage() {
               />
               <input
                 className="w-full border rounded-lg px-3 py-1.5 text-sm text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-400"
-                value={editData.description}
-                onChange={(e) => setEditData((d) => ({ ...d, description: e.target.value }))}
-                placeholder="Описание"
+                value={editData.contracting_authority}
+                onChange={(e) => setEditData((d) => ({ ...d, contracting_authority: e.target.value }))}
+                placeholder="Възложител"
               />
+              <div className="flex gap-2">
+                <input
+                  className="flex-1 border rounded-lg px-3 py-1.5 text-sm text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  type="date"
+                  value={editData.tender_date}
+                  onChange={(e) => setEditData((d) => ({ ...d, tender_date: e.target.value }))}
+                  title="Дата на подаване"
+                />
+                <input
+                  className="flex-1 border rounded-lg px-3 py-1.5 text-sm text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  value={editData.description}
+                  onChange={(e) => setEditData((d) => ({ ...d, description: e.target.value }))}
+                  placeholder="Описание"
+                />
+              </div>
+              {saveError && (
+                <p className="text-xs text-red-500">{saveError}</p>
+              )}
             </div>
             <div className="flex gap-2 pt-0.5">
               <button
@@ -154,7 +186,7 @@ export default function ProjectPage() {
                 {saving ? "Запазва..." : "Запази"}
               </button>
               <button
-                onClick={() => setShowEdit(false)}
+                onClick={() => { setShowEdit(false); setSaveError(null); }}
                 className="px-3 py-1.5 border text-sm rounded-lg text-gray-600 hover:bg-gray-50"
               >
                 Отказ

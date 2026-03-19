@@ -22,6 +22,8 @@ async def generate_docx(project_id: str, db: AsyncSession) -> bytes:
     from docx.enum.text import WD_ALIGN_PARAGRAPH
 
     project = await db.get(Project, project_id)
+    if not project:
+        raise ValueError(f"Project {project_id} not found")
 
     # Взима последния заключен outline
     result = await db.execute(
@@ -111,7 +113,8 @@ async def _write_sections(
     from app.core.models import Generation
 
     for section in sections:
-        section_uid = section.get("section_uid", "")
+        # Support both key names: "section_uid" (old) and "uid" (tender_struct output)
+        section_uid = section.get("section_uid") or section.get("uid", "")
         title = section.get("title", "")
         numbering = section.get("display_numbering", "")
 
@@ -140,6 +143,7 @@ async def _write_sections(
         else:
             p = doc.add_paragraph("[Текстът за тази точка не е генериран.]")
 
-        children = section.get("children", [])
+        # Support both key names: "children" (old) and "subsections" (tender_struct output)
+        children = section.get("children") or section.get("subsections", [])
         if children:
             await _write_sections(doc, children, project_id, db, level=level + 1)
