@@ -85,6 +85,17 @@ export interface TpOutline {
   version: number;
 }
 
+export interface ScheduleInfo {
+  id: string;
+  schedule_json: {
+    tasks?: { uid: number; name: string; start?: string; finish?: string; duration_days?: number; wbs?: string }[];
+    resources?: { uid: number; name: string; type?: string }[];
+    error?: string;
+  };
+  status_locked: boolean;
+  version: number;
+}
+
 // Projects
 export const api = {
   projects: {
@@ -159,6 +170,23 @@ export const api = {
         `/api/v1/agents/${project_id}/generations/${generation_id}/select`,
         { method: "POST" },
       ),
+    getSchedule: async (project_id: string): Promise<ScheduleInfo | null> => {
+      try {
+        return await apiFetch<ScheduleInfo>(`/api/v1/agents/${project_id}/schedule`);
+      } catch {
+        return null;
+      }
+    },
+    lockSchedule: async (
+      project_id: string,
+      schedule_id: string,
+    ): Promise<void> => {
+      const res = await fetch(
+        `${API_URL}/api/v1/agents/${project_id}/schedule/lock?schedule_id=${encodeURIComponent(schedule_id)}`,
+        { method: "POST" },
+      );
+      if (!res.ok) throw new Error(`Одобрението не успя: ${res.status}`);
+    },
   },
   export: {
     docx: async (project_id: string) => {

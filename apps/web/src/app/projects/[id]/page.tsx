@@ -1,12 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
+import Link from "next/link";
 import { api, Project } from "@/lib/api";
 import ChatPanel from "@/components/ChatPanel";
 import ExportButton from "@/components/ExportButton";
 import FileUploadPanel from "@/components/FileUploadPanel";
 import OutlinePanel from "@/components/OutlinePanel";
+import SchedulePanel from "@/components/SchedulePanel";
 
 type Module = "examples" | "tender_docs" | "schedule" | "legislation";
 
@@ -19,13 +21,17 @@ const MODULES: { key: Module; label: string; icon: string }[] = [
 
 export default function ProjectPage() {
   const params = useParams<{ id: string }>();
+  const router = useRouter();
   const [project, setProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeModule, setActiveModule] = useState<Module | null>(null);
   const [showOutline, setShowOutline] = useState(false);
+  const [showSchedule, setShowSchedule] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
   const [editData, setEditData] = useState({ name: "", location: "", description: "" });
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   useEffect(() => {
     if (params.id) {
@@ -55,6 +61,18 @@ export default function ProjectPage() {
     }
   }
 
+  async function handleDelete() {
+    if (!project) return;
+    setDeleting(true);
+    try {
+      await api.projects.delete(project.id);
+      router.push("/projects");
+    } finally {
+      setDeleting(false);
+      setShowDeleteConfirm(false);
+    }
+  }
+
   if (loading) return <main className="p-8 text-gray-500">Зарежда се...</main>;
   if (!project)
     return <main className="p-8 text-red-500">Проектът не е намерен.</main>;
@@ -62,7 +80,49 @@ export default function ProjectPage() {
   return (
     <main className="min-h-screen bg-gray-50">
       {/* Header */}
-      <div className="bg-white border-b px-8 py-4">
+      <div className="bg-white border-b px-6 py-3">
+        {/* Top bar: back + delete */}
+        <div className="flex justify-between items-center mb-2">
+          <Link
+            href="/projects"
+            className="text-xs text-blue-600 hover:underline flex items-center gap-1"
+          >
+            ← Моите проекти
+          </Link>
+          {!showEdit && (
+            <button
+              onClick={() => setShowDeleteConfirm(true)}
+              className="text-xs text-red-400 hover:text-red-600 hover:bg-red-50 px-2 py-0.5 rounded transition"
+            >
+              🗑 Изтрий
+            </button>
+          )}
+        </div>
+
+        {/* Delete confirmation */}
+        {showDeleteConfirm && (
+          <div className="mb-2 p-3 bg-red-50 border border-red-200 rounded-lg flex items-start justify-between gap-3">
+            <p className="text-sm text-red-700">
+              Изтриване на „{project.name}"? Действието е необратимо.
+            </p>
+            <div className="flex gap-2 shrink-0">
+              <button
+                onClick={handleDelete}
+                disabled={deleting}
+                className="px-3 py-1 bg-red-600 text-white text-xs rounded-lg hover:bg-red-700 disabled:opacity-50"
+              >
+                {deleting ? "Изтрива..." : "Да, изтрий"}
+              </button>
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                className="px-3 py-1 border text-xs rounded-lg text-gray-600 hover:bg-gray-50"
+              >
+                Отказ
+              </button>
+            </div>
+          </div>
+        )}
+
         {showEdit ? (
           <div className="flex items-start gap-3">
             <div className="flex-1 space-y-2">
@@ -164,6 +224,24 @@ export default function ProjectPage() {
             {showOutline && (
               <div className="px-3 pb-3">
                 <OutlinePanel projectId={project.id} />
+              </div>
+            )}
+          </div>
+
+          {/* Линеен график */}
+          <div className="border-b">
+            <button
+              onClick={() => setShowSchedule((v) => !v)}
+              className="w-full px-3 py-2.5 text-left text-sm font-semibold text-gray-700 flex justify-between items-center hover:bg-gray-50 transition"
+            >
+              <span>📅 Линеен график</span>
+              <span className="text-gray-400 text-xs">
+                {showSchedule ? "▾" : "▸"}
+              </span>
+            </button>
+            {showSchedule && (
+              <div className="px-3 pb-3">
+                <SchedulePanel projectId={project.id} />
               </div>
             )}
           </div>

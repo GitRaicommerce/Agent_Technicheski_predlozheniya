@@ -144,6 +144,35 @@ async def select_generation(
         .values(selected=False)
     )
     gen.selected = True
+    return {"status": "selected", "generation_id": generation_id}
+
+
+class ScheduleNormalizedResponse(BaseModel):
+    id: str
+    schedule_json: dict
+    status_locked: bool
+    version: int
+
+    model_config = {"from_attributes": True}
+
+
+@router.get("/{project_id}/schedule", response_model=ScheduleNormalizedResponse)
+async def get_schedule(project_id: str, db: AsyncSession = Depends(get_db)):
+    """Връща последния нормализиран график за проекта."""
+    from app.core.models import ScheduleNormalized
+    from sqlalchemy import select
+
+    result = await db.execute(
+        select(ScheduleNormalized)
+        .where(ScheduleNormalized.project_id == project_id)
+        .order_by(ScheduleNormalized.version.desc())
+        .limit(1)
+    )
+    schedule = result.scalar_one_or_none()
+    if not schedule:
+        raise HTTPException(status_code=404, detail="Schedule not found")
+    return schedule
+    gen.selected = True
     return {
         "status": "ok",
         "generation_id": generation_id,
