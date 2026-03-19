@@ -172,9 +172,3 @@ async def get_schedule(project_id: str, db: AsyncSession = Depends(get_db)):
     if not schedule:
         raise HTTPException(status_code=404, detail="Schedule not found")
     return schedule
-    gen.selected = True
-    return {
-        "status": "ok",
-        "generation_id": generation_id,
-        "section_uid": gen.section_uid,
-    }

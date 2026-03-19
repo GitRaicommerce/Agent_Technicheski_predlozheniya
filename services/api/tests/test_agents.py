@@ -95,3 +95,48 @@ async def test_select_generation_not_found(client, mock_db):
     )
 
     assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# GET /api/v1/agents/{project_id}/schedule
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_get_schedule_not_found(client, mock_db):
+    """404 ако няма schedule за проекта."""
+    result_mock = MagicMock()
+    result_mock.scalar_one_or_none = MagicMock(return_value=None)
+    mock_db.execute = AsyncMock(return_value=result_mock)
+
+    resp = await client.get(f"/api/v1/agents/{uuid.uuid4()}/schedule")
+
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_get_schedule_found(client, mock_db):
+    """Връща schedule JSON при намерен запис."""
+    from app.core.models import ScheduleNormalized
+
+    pid = str(uuid.uuid4())
+    schedule = ScheduleNormalized(
+        id=str(uuid.uuid4()),
+        project_id=pid,
+        schedule_snapshot_id=str(uuid.uuid4()),
+        schedule_json={"tasks": [{"uid": 1, "name": "Проектиране", "duration_days": 10}]},
+        status_locked=False,
+        version=1,
+    )
+
+    result_mock = MagicMock()
+    result_mock.scalar_one_or_none = MagicMock(return_value=schedule)
+    mock_db.execute = AsyncMock(return_value=result_mock)
+
+    resp = await client.get(f"/api/v1/agents/{pid}/schedule")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["id"] == schedule.id
+    assert data["status_locked"] is False
+    assert "tasks" in data["schedule_json"]

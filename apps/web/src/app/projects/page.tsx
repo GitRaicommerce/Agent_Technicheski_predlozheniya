@@ -58,7 +58,12 @@ export default function ProjectsPage() {
                   </p>
                 )}
                 <p className="text-xs text-gray-400 mt-2">
-                  {new Date(p.created_at).toLocaleDateString("bg-BG")}
+                  Създаден: {new Date(p.created_at).toLocaleDateString("bg-BG")}
+                  {p.updated_at && p.updated_at !== p.created_at && (
+                    <span className="ml-3">
+                      Обновен: {new Date(p.updated_at).toLocaleDateString("bg-BG")}
+                    </span>
+                  )}
                 </p>
               </Link>
             ))}
