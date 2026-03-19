@@ -115,10 +115,18 @@ export interface SectionGenerations {
   variants: Generation[];
 }
 
+export interface ProjectStat {
+  files: number;
+  outline_locked: boolean;
+  sections_generated: number;
+  sections_selected: number;
+}
+
 // Projects
 export const api = {
   projects: {
     list: () => apiFetch<Project[]>("/api/v1/projects/"),
+    stats: () => apiFetch<Record<string, ProjectStat>>("/api/v1/projects/stats"),
     get: (id: string) => apiFetch<Project>(`/api/v1/projects/${id}`),
     create: (data: Partial<Project>) =>
       apiFetch<Project>("/api/v1/projects/", {

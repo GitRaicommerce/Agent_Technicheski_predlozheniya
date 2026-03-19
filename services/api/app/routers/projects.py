@@ -1,12 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import select, func, distinct
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
 from datetime import datetime, timezone
 
 from app.core.database import get_db
-from app.core.models import Project, ProjectFile
+from app.core.models import Project, ProjectFile, TpOutline, Generation
 from app.core.storage import storage
 
 router = APIRouter()
@@ -54,6 +54,61 @@ async def create_project(data: ProjectCreate, db: AsyncSession = Depends(get_db)
 async def list_projects(db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Project).order_by(Project.created_at.desc()))
     return result.scalars().all()
+
+
+class ProjectStat(BaseModel):
+    files: int
+    outline_locked: bool
+    sections_generated: int
+    sections_selected: int
+
+
+@router.get("/stats", response_model=dict[str, ProjectStat])
+async def project_stats(db: AsyncSession = Depends(get_db)):
+    """Aggregate stats for all projects in a single round-trip."""
+    files_result = await db.execute(
+        select(ProjectFile.project_id, func.count(ProjectFile.id).label("cnt"))
+        .group_by(ProjectFile.project_id)
+    )
+    files_map: dict[str, int] = {row.project_id: row.cnt for row in files_result}
+
+    outlines_result = await db.execute(
+        select(TpOutline.project_id)
+        .where(TpOutline.status_locked.is_(True))
+        .distinct()
+    )
+    outline_locked_set: set[str] = {row.project_id for row in outlines_result}
+
+    gen_result = await db.execute(
+        select(
+            Generation.project_id,
+            func.count(distinct(Generation.section_uid)).label("generated"),
+        ).group_by(Generation.project_id)
+    )
+    gen_map: dict[str, int] = {row.project_id: row.generated for row in gen_result}
+
+    sel_result = await db.execute(
+        select(
+            Generation.project_id,
+            func.count(distinct(Generation.section_uid)).label("selected"),
+        )
+        .where(Generation.selected.is_(True))
+        .group_by(Generation.project_id)
+    )
+    sel_map: dict[str, int] = {row.project_id: row.selected for row in sel_result}
+
+    projects_result = await db.execute(select(Project.id))
+    all_ids = [row.id for row in projects_result]
+
+    return {
+        pid: ProjectStat(
+            files=files_map.get(pid, 0),
+            outline_locked=pid in outline_locked_set,
+            sections_generated=gen_map.get(pid, 0),
+            sections_selected=sel_map.get(pid, 0),
+        )
+        for pid in all_ids
+    }
 
 
 @router.get("/{project_id}", response_model=ProjectResponse)

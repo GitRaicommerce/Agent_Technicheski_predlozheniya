@@ -41,3 +41,30 @@ jobs:
           EMBEDDING_MODEL: text-embedding-3-small
           EMBEDDING_DIMENSIONS: "1536"
         run: python -m pytest tests/ -v --tb=short
+
+  lint-frontend:
+    name: TypeScript + ESLint (Next.js)
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: apps/web
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: TypeScript type-check
+        run: npx tsc --noEmit
+
+      - name: ESLint
+        run: npm run lint
