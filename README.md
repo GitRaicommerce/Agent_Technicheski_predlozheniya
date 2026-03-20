@@ -51,17 +51,20 @@ AI асистент за съставяне на Технически предл
 ```bash
 # 1. Копирайте .env и попълнете API ключовете
 cp .env.example .env
+# Отворете .env и добавете OPENAI_API_KEY и/или ANTHROPIC_API_KEY
 
-# 2. Стартирайте инфраструктурата + backend + worker + frontend
+# 2. Build на Docker образите (задължително при първо стартиране!)
+docker compose -f docker-compose.dev.yml build
+
+# 3. Стартирайте всички услуги
 docker compose -f docker-compose.dev.yml up -d
 
-# 3. Приложете DB миграциите
+# 4. Приложете DB миграциите
 bash migrate.sh
-
-# Или стартирайте само backend services и frontend отделно:
-docker compose -f docker-compose.dev.yml up -d postgres redis minio api worker
-cd apps/web && npm install && npm run dev
 ```
+
+> **Забележка:** Стъпка 2 (`build`) е задължителна при всяко `git clone` на ново място.
+> Пропускането й води до `ModuleNotFoundError` и мълчаливо неработещ API.
 
 ---
 
