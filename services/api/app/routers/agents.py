@@ -73,6 +73,25 @@ async def lock_outline(
     return {"status": "locked", "outline_id": outline_id}
 
 
+@router.post("/{project_id}/outline/unlock")
+async def unlock_outline(
+    project_id: str, outline_id: str, db: AsyncSession = Depends(get_db)
+):
+    from app.core.models import TpOutline
+    from sqlalchemy import select
+
+    result = await db.execute(
+        select(TpOutline).where(
+            TpOutline.id == outline_id, TpOutline.project_id == project_id
+        )
+    )
+    outline = result.scalar_one_or_none()
+    if not outline:
+        raise HTTPException(status_code=404, detail="Outline not found")
+    outline.status_locked = False
+    return {"status": "unlocked", "outline_id": outline_id}
+
+
 @router.post("/{project_id}/schedule/lock")
 async def lock_schedule(
     project_id: str, schedule_id: str, db: AsyncSession = Depends(get_db)
@@ -94,6 +113,26 @@ async def lock_schedule(
 
     schedule.approved_at = datetime.now(timezone.utc)
     return {"status": "locked", "schedule_id": schedule_id}
+
+
+@router.post("/{project_id}/schedule/unlock")
+async def unlock_schedule(
+    project_id: str, schedule_id: str, db: AsyncSession = Depends(get_db)
+):
+    from app.core.models import ScheduleNormalized
+    from sqlalchemy import select
+
+    result = await db.execute(
+        select(ScheduleNormalized).where(
+            ScheduleNormalized.id == schedule_id,
+            ScheduleNormalized.project_id == project_id,
+        )
+    )
+    schedule = result.scalar_one_or_none()
+    if not schedule:
+        raise HTTPException(status_code=404, detail="Schedule not found")
+    schedule.status_locked = False
+    return {"status": "unlocked", "schedule_id": schedule_id}
 
 
 class TpOutlineResponse(BaseModel):

@@ -257,3 +257,106 @@ async def test_regenerate_section_ok(client, mock_db):
     data = resp.json()
     assert data["generation_ids"] == fake_ids
     assert "trace_id" in data
+
+
+# ---------------------------------------------------------------------------
+# POST /api/v1/agents/{project_id}/outline/unlock
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_unlock_outline_not_found(client, mock_db):
+    """404 ако outline-ът не съществува."""
+    result_mock = MagicMock()
+    result_mock.scalar_one_or_none = MagicMock(return_value=None)
+    mock_db.execute = AsyncMock(return_value=result_mock)
+
+    resp = await client.post(
+        f"/api/v1/agents/{uuid.uuid4()}/outline/unlock",
+        params={"outline_id": str(uuid.uuid4())},
+    )
+
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_unlock_outline_ok(client, mock_db):
+    """200 и status=unlocked за намерен outline."""
+    from app.core.models import TpOutline
+
+    pid = str(uuid.uuid4())
+    oid = str(uuid.uuid4())
+    outline = TpOutline(
+        id=oid,
+        project_id=pid,
+        outline_json={"sections": []},
+        status_locked=True,
+        version=2,
+    )
+
+    result_mock = MagicMock()
+    result_mock.scalar_one_or_none = MagicMock(return_value=outline)
+    mock_db.execute = AsyncMock(return_value=result_mock)
+
+    resp = await client.post(
+        f"/api/v1/agents/{pid}/outline/unlock",
+        params={"outline_id": oid},
+    )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "unlocked"
+    assert data["outline_id"] == oid
+    assert outline.status_locked is False
+
+
+# ---------------------------------------------------------------------------
+# POST /api/v1/agents/{project_id}/schedule/unlock
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_unlock_schedule_not_found(client, mock_db):
+    """404 ако schedule-ът не съществува."""
+    result_mock = MagicMock()
+    result_mock.scalar_one_or_none = MagicMock(return_value=None)
+    mock_db.execute = AsyncMock(return_value=result_mock)
+
+    resp = await client.post(
+        f"/api/v1/agents/{uuid.uuid4()}/schedule/unlock",
+        params={"schedule_id": str(uuid.uuid4())},
+    )
+
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_unlock_schedule_ok(client, mock_db):
+    """200 и status=unlocked за намерен schedule."""
+    from app.core.models import ScheduleNormalized
+
+    pid = str(uuid.uuid4())
+    sid = str(uuid.uuid4())
+    schedule = ScheduleNormalized(
+        id=sid,
+        project_id=pid,
+        schedule_snapshot_id=str(uuid.uuid4()),
+        schedule_json={"tasks": []},
+        status_locked=True,
+        version=3,
+    )
+
+    result_mock = MagicMock()
+    result_mock.scalar_one_or_none = MagicMock(return_value=schedule)
+    mock_db.execute = AsyncMock(return_value=result_mock)
+
+    resp = await client.post(
+        f"/api/v1/agents/{pid}/schedule/unlock",
+        params={"schedule_id": sid},
+    )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "unlocked"
+    assert data["schedule_id"] == sid
+    assert schedule.status_locked is False

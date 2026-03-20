@@ -38,6 +38,20 @@ export default function SchedulePanel({ projectId }: Props) {
     }
   };
 
+  const handleUnlock = async () => {
+    if (!schedule) return;
+    setLocking(true);
+    setLockError(null);
+    try {
+      await api.agents.unlockSchedule(projectId, schedule.id);
+      setSchedule((s) => (s ? { ...s, status_locked: false } : s));
+    } catch (err: unknown) {
+      setLockError(err instanceof Error ? err.message : "Грешка при отключване");
+    } finally {
+      setLocking(false);
+    }
+  };
+
   if (loading) {
     return (
       <p className="text-xs text-gray-400 py-2 animate-pulse">
@@ -76,9 +90,18 @@ export default function SchedulePanel({ projectId }: Props) {
       </div>
       {/* Status badge */}
       {schedule.status_locked ? (
-        <div className="flex items-center gap-1.5 text-xs text-green-700 font-medium py-1">
-          <span>✓</span>
-          <span>Одобрен (версия {schedule.version})</span>
+        <div className="flex items-center justify-between py-1">
+          <div className="flex items-center gap-1.5 text-xs text-green-700 font-medium">
+            <span>✓</span>
+            <span>Одобрен (версия {schedule.version})</span>
+          </div>
+          <button
+            onClick={handleUnlock}
+            disabled={locking}
+            className="text-xs text-amber-600 hover:underline disabled:opacity-50"
+          >
+            🔓 Отключи
+          </button>
         </div>
       ) : (
         <div>

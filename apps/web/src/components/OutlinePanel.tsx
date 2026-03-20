@@ -39,6 +39,22 @@ export default function OutlinePanel({ projectId }: Props) {
     }
   };
 
+  const handleUnlock = async () => {
+    if (!outline) return;
+    setLocking(true);
+    setLockError(null);
+    try {
+      await api.agents.unlockOutline(projectId, outline.id);
+      setOutline((o) => (o ? { ...o, status_locked: false } : o));
+    } catch (err: unknown) {
+      setLockError(
+        err instanceof Error ? err.message : "Грешка при отключване",
+      );
+    } finally {
+      setLocking(false);
+    }
+  };
+
   if (loading) {
     return (
       <p className="text-xs text-gray-400 py-2 animate-pulse">
@@ -75,9 +91,18 @@ export default function OutlinePanel({ projectId }: Props) {
         </button>
       </div>
       {outline.status_locked ? (
-        <div className="flex items-center gap-1.5 text-xs text-green-700 font-medium py-1">
-          <span>✓</span>
-          <span>Одобрена (версия {outline.version})</span>
+        <div className="flex items-center justify-between py-1">
+          <div className="flex items-center gap-1.5 text-xs text-green-700 font-medium">
+            <span>✓</span>
+            <span>Одобрена (версия {outline.version})</span>
+          </div>
+          <button
+            onClick={handleUnlock}
+            disabled={locking}
+            className="text-xs text-amber-600 hover:underline disabled:opacity-50"
+          >
+            🔓 Отключи
+          </button>
         </div>
       ) : (
         <div>

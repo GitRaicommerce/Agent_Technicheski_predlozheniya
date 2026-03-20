@@ -1,12 +1,25 @@
 // Empty string = use relative URLs proxied through Next.js (works in Codespaces + local)
 const API_URL = "";
 
+export class RateLimitError extends Error {
+  retryAfter: number;
+  constructor(retryAfter: number) {
+    super(`Твърде много заявки. Изчакайте ${retryAfter} секунди.`);
+    this.retryAfter = retryAfter;
+    this.name = "RateLimitError";
+  }
+}
+
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, {
     headers: { "Content-Type": "application/json", ...options?.headers },
     ...options,
   });
   if (!res.ok) {
+    if (res.status === 429) {
+      const retryAfter = parseInt(res.headers.get("Retry-After") ?? "60", 10);
+      throw new RateLimitError(retryAfter);
+    }
     const err = await res.json().catch(() => ({ detail: res.statusText }));
     const detail = err.detail;
     const message =
@@ -197,6 +210,16 @@ export const api = {
       );
       if (!res.ok) throw new Error(`Одобрението не успя: ${res.status}`);
     },
+    unlockOutline: async (
+      project_id: string,
+      outline_id: string,
+    ): Promise<void> => {
+      const res = await fetch(
+        `${API_URL}/api/v1/agents/${project_id}/outline/unlock?outline_id=${encodeURIComponent(outline_id)}`,
+        { method: "POST" },
+      );
+      if (!res.ok) throw new Error(`Отключването не успя: ${res.status}`);
+    },
     selectGeneration: (project_id: string, generation_id: string) =>
       apiFetch<{ status: string }>(
         `/api/v1/agents/${project_id}/generations/${generation_id}/select`,
@@ -218,6 +241,16 @@ export const api = {
         { method: "POST" },
       );
       if (!res.ok) throw new Error(`Одобрението не успя: ${res.status}`);
+    },
+    unlockSchedule: async (
+      project_id: string,
+      schedule_id: string,
+    ): Promise<void> => {
+      const res = await fetch(
+        `${API_URL}/api/v1/agents/${project_id}/schedule/unlock?schedule_id=${encodeURIComponent(schedule_id)}`,
+        { method: "POST" },
+      );
+      if (!res.ok) throw new Error(`Отключването не успя: ${res.status}`);
     },
     listGenerations: (project_id: string) =>
       apiFetch<SectionGenerations[]>(`/api/v1/agents/${project_id}/generations`),

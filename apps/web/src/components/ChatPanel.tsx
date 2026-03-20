@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { api, ChatMessage, OrchestratorResponse, GenerationVariant } from "@/lib/api";
+import { api, ChatMessage, OrchestratorResponse, GenerationVariant, RateLimitError } from "@/lib/api";
 
 interface Props {
   projectId: string;
@@ -27,7 +27,17 @@ export default function ChatPanel({ projectId }: Props) {
   const [pinnedGenerations, setPinnedGenerations] = useState<Set<string>>(
     new Set(),
   );
+  const [rateLimitCountdown, setRateLimitCountdown] = useState<number | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (rateLimitCountdown === null || rateLimitCountdown <= 0) {
+      if (rateLimitCountdown === 0) setRateLimitCountdown(null);
+      return;
+    }
+    const timer = setTimeout(() => setRateLimitCountdown((n) => (n !== null ? n - 1 : null)), 1000);
+    return () => clearTimeout(timer);
+  }, [rateLimitCountdown]);
 
   // Зареди историята от localStorage при mount
   useEffect(() => {
@@ -115,11 +125,15 @@ export default function ChatPanel({ projectId }: Props) {
       };
       setHistory((h) => [...h, assistantMsg]);
     } catch (err: unknown) {
-      const errorMsg: ExtendedMessage = {
-        role: "assistant",
-        content: `⚠ Грешка: ${err instanceof Error ? err.message : "Неизвестна грешка"}`,
-      };
-      setHistory((h) => [...h, errorMsg]);
+      if (err instanceof RateLimitError) {
+        setRateLimitCountdown(err.retryAfter);
+      } else {
+        const errorMsg: ExtendedMessage = {
+          role: "assistant",
+          content: `⚠ Грешка: ${err instanceof Error ? err.message : "Неизвестна грешка"}`,
+        };
+        setHistory((h) => [...h, errorMsg]);
+      }
     } finally {
       setLoading(false);
     }
@@ -322,6 +336,12 @@ export default function ChatPanel({ projectId }: Props) {
         </div>
       )}
 
+      {rateLimitCountdown !== null && (
+        <div className="mx-3 mb-1 px-3 py-2 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700 flex items-center gap-2">
+          <span>⏳</span>
+          <span>Твърде много заявки. Изчакайте <strong>{rateLimitCountdown}</strong> сек. преди следващото съобщение.</span>
+        </div>
+      )}
       <div className="p-3 border-t flex gap-2">
         <input
           className="flex-1 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -329,14 +349,14 @@ export default function ChatPanel({ projectId }: Props) {
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && send()}
           placeholder="Въведете съобщение..."
-          disabled={loading}
+          disabled={loading || rateLimitCountdown !== null}
         />
         <button
           onClick={() => send()}
-          disabled={loading || !input.trim()}
+          disabled={loading || !input.trim() || rateLimitCountdown !== null}
           className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          Изпрати
+          {rateLimitCountdown !== null ? `⏳ ${rateLimitCountdown}s` : "Изпрати"}
         </button>
       </div>
     </div>

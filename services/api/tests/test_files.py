@@ -94,3 +94,50 @@ async def test_file_status_not_found(client, mock_db):
     )
 
     assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# DELETE /api/v1/files/{project_id}/files/{file_id}
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_delete_file_not_found(client, mock_db):
+    """404 когато файлът не съществува."""
+    mock_db.get = AsyncMock(return_value=None)
+
+    resp = await client.delete(
+        f"/api/v1/files/{uuid.uuid4()}/files/{uuid.uuid4()}"
+    )
+
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_delete_file_marks_stale(client, mock_db):
+    """Изтриването на evidence файл маркира генерациите като stale."""
+    from unittest.mock import patch, AsyncMock as AM
+
+    file = _make_file(module="tender_docs")
+
+    execute_calls: list = []
+
+    async def fake_execute(stmt, *_a, **_kw):
+        execute_calls.append(stmt)
+        return MagicMock()
+
+    mock_db.get = AsyncMock(return_value=file)
+    mock_db.execute = AM(side_effect=fake_execute)
+    mock_db.delete = AM(return_value=None)
+    mock_db.commit = AM(return_value=None)
+
+    with patch(
+        "app.routers.files.storage.delete_object",
+        new=AM(return_value=None),
+    ):
+        resp = await client.delete(
+            f"/api/v1/files/{file.project_id}/files/{file.id}"
+        )
+
+    assert resp.status_code == 204
+    assert len(execute_calls) >= 1

@@ -147,5 +147,18 @@ async def delete_file(
     file = await db.get(ProjectFile, file_id)
     if not file or file.project_id != project_id:
         raise HTTPException(status_code=404, detail="File not found")
+
+    module = file.module
     await storage.delete_object(file.storage_key)
     await db.delete(file)
+
+    # Mark generations stale if the removed file was part of the evidence base
+    if module in ("tender_docs", "examples", "legislation"):
+        await db.execute(
+            update(Generation)
+            .where(
+                Generation.project_id == project_id,
+                Generation.evidence_status == "ok",
+            )
+            .values(evidence_status="stale")
+        )
