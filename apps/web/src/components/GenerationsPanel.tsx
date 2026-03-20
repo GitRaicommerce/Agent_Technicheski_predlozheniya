@@ -22,14 +22,12 @@ export default function GenerationsPanel({ projectId }: Props) {
       .listGenerations(projectId)
       .then(setSections)
       .catch((e: unknown) =>
-        setError(e instanceof Error ? e.message : "Грешка при зареждане."),
+        setError(e instanceof Error ? e.message : "Грешка при зареждане.")
       )
       .finally(() => setLoading(false));
   }, [projectId]);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  useEffect(() => { load(); }, [load]);
 
   const toggleSection = (uid: string) => {
     setExpanded((prev) => {
@@ -53,8 +51,8 @@ export default function GenerationsPanel({ projectId }: Props) {
                   ...v,
                   selected: v.id === generationId,
                 })),
-              },
-        ),
+              }
+        )
       );
     } catch {
       // keep going — selection is best-effort
@@ -88,10 +86,7 @@ export default function GenerationsPanel({ projectId }: Props) {
     return (
       <div className="space-y-1">
         <p className="text-xs text-red-400">{error}</p>
-        <button
-          onClick={load}
-          className="text-xs text-blue-500 hover:underline"
-        >
+        <button onClick={load} className="text-xs text-blue-500 hover:underline">
           ↺ Опитай отново
         </button>
       </div>
@@ -102,13 +97,9 @@ export default function GenerationsPanel({ projectId }: Props) {
     return (
       <div className="space-y-1">
         <p className="text-xs text-gray-400 leading-relaxed">
-          Няма генерирани текстове. Поискайте от TP AI да генерира раздел от
-          ТП-то.
+          Няма генерирани текстове. Поискайте от TP AI да генерира раздел от ТП-то.
         </p>
-        <button
-          onClick={load}
-          className="text-xs text-blue-500 hover:underline"
-        >
+        <button onClick={load} className="text-xs text-blue-500 hover:underline">
           ↺ Обнови
         </button>
       </div>
@@ -131,15 +122,10 @@ export default function GenerationsPanel({ projectId }: Props) {
       {sections.map((sec) => {
         const isOpen = expanded.has(sec.section_uid);
         const selectedVariant = sec.variants.find((v) => v.selected);
-        const hasStale = sec.variants.some(
-          (v) => v.evidence_status === "stale",
-        );
+        const hasStale = sec.variants.some((v) => v.evidence_status === "stale");
 
         return (
-          <div
-            key={sec.section_uid}
-            className="border rounded-lg overflow-hidden"
-          >
+          <div key={sec.section_uid} className="border rounded-lg overflow-hidden">
             {/* Section header */}
             <button
               onClick={() => toggleSection(sec.section_uid)}
@@ -150,12 +136,9 @@ export default function GenerationsPanel({ projectId }: Props) {
                   {sec.section_title || sec.section_uid.slice(0, 8) + "…"}
                 </p>
                 <p className="text-xs text-gray-400 mt-0.5">
-                  {sec.variants.length} вариант
-                  {sec.variants.length !== 1 ? "а" : ""}
+                  {sec.variants.length} вариант{sec.variants.length !== 1 ? "а" : ""}
                   {selectedVariant && (
-                    <span className="ml-2 text-green-600">
-                      ✓ избран: Вариант {selectedVariant.variant}
-                    </span>
+                    <span className="ml-2 text-green-600">✓ избран: Вариант {selectedVariant.variant}</span>
                   )}
                   {hasStale && (
                     <span className="ml-2 text-amber-500">⚠ остарял</span>
@@ -164,19 +147,14 @@ export default function GenerationsPanel({ projectId }: Props) {
               </div>
               <div className="flex items-center gap-1 ml-2 mt-0.5 shrink-0">
                 <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleRegenerate(sec.section_uid);
-                  }}
+                  onClick={(e) => { e.stopPropagation(); handleRegenerate(sec.section_uid); }}
                   disabled={regenerating === sec.section_uid}
                   className="px-1.5 py-0.5 text-xs rounded bg-amber-100 text-amber-700 hover:bg-amber-200 disabled:opacity-50 transition"
                   title="Регенерирай раздела"
                 >
                   {regenerating === sec.section_uid ? "…" : "↻"}
                 </button>
-                <span className="text-gray-400 text-xs">
-                  {isOpen ? "▾" : "▸"}
-                </span>
+                <span className="text-gray-400 text-xs">{isOpen ? "▾" : "▸"}</span>
               </div>
             </button>
 
@@ -213,33 +191,24 @@ function VariantCard({
   selecting: string | null;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const flags =
-    (variant.flags_json?.verification as { flags?: string[] } | undefined)
-      ?.flags ?? [];
-  const verdict = (
-    variant.flags_json?.verification as { verdict?: string } | undefined
-  )?.verdict;
+  const flags = (variant.flags_json?.verification as { flags?: string[] } | undefined)?.flags ?? [];
+  const verdict = (variant.flags_json?.verification as { verdict?: string } | undefined)?.verdict;
   const isStale = variant.evidence_status === "stale";
 
   const previewLen = 220;
-  const preview =
-    variant.text.length > previewLen
-      ? variant.text.slice(0, previewLen) + "…"
-      : variant.text;
+  const preview = variant.text.length > previewLen
+    ? variant.text.slice(0, previewLen) + "…"
+    : variant.text;
 
   return (
     <div
       className={`px-3 py-2 text-xs ${
-        variant.selected
-          ? "bg-green-50 border-l-2 border-green-400"
-          : "bg-white"
+        variant.selected ? "bg-green-50 border-l-2 border-green-400" : "bg-white"
       }`}
     >
       <div className="flex items-center justify-between mb-1.5">
         <div className="flex items-center gap-2">
-          <span className="font-medium text-gray-600">
-            Вариант {variant.variant}
-          </span>
+          <span className="font-medium text-gray-600">Вариант {variant.variant}</span>
           {variant.selected && (
             <span className="px-1.5 py-0.5 bg-green-100 text-green-700 rounded text-xs font-medium">
               ✓ Избран
@@ -318,9 +287,7 @@ function UsedSources({ sources }: { sources: Record<string, unknown> }) {
 
   return (
     <div className="mt-2 border-t pt-2 space-y-1">
-      <p className="font-medium text-gray-500 text-xs">
-        Използвани източници ({entries.length}):
-      </p>
+      <p className="font-medium text-gray-500 text-xs">Използвани източници ({entries.length}):</p>
       {entries.map(([key, val]) => {
         const filename =
           typeof val === "object" && val !== null && "filename" in val
@@ -330,14 +297,14 @@ function UsedSources({ sources }: { sources: Record<string, unknown> }) {
           typeof val === "string"
             ? val
             : typeof val === "object" && val !== null && "text" in val
-              ? String((val as Record<string, unknown>).text)
-              : null;
+            ? String((val as Record<string, unknown>).text)
+            : null;
         return (
           <div key={key} className="text-gray-400">
-            <span className="font-medium text-gray-500 truncate">
-              {filename}
-            </span>
-            {snippet && <p className="mt-0.5 italic line-clamp-2">{snippet}</p>}
+            <span className="font-medium text-gray-500 truncate">{filename}</span>
+            {snippet && (
+              <p className="mt-0.5 italic line-clamp-2">{snippet}</p>
+            )}
           </div>
         );
       })}

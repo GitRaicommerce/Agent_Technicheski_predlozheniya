@@ -37,9 +37,9 @@ jobs:
           MINIO_ENDPOINT: localhost:9000
           MINIO_ROOT_USER: minioadmin
           MINIO_ROOT_PASSWORD: minioadmin
-          APP_SECRET_KEY: test-secret-key
+          SECRET_KEY: test-secret-key
           EMBEDDING_MODEL: text-embedding-3-small
-          EMBEDDING_DIMS: "1536"
+          EMBEDDING_DIMENSIONS: "1536"
         run: python -m pytest tests/ -v --tb=short
 
   lint-frontend:

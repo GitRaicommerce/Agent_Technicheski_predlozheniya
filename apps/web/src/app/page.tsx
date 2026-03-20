@@ -6,8 +6,7 @@ export default function Home() {
       <div className="max-w-2xl w-full text-center space-y-6">
         <h1 className="text-4xl font-bold text-gray-800">TP AI</h1>
         <p className="text-lg text-gray-600">
-          AI асистент за съставяне на Технически предложения за обществени
-          поръчки
+          AI асистент за съставяне на Технически предложения за обществени поръчки
         </p>
         <div className="flex gap-4 justify-center">
           <Link

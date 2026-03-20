@@ -41,7 +41,7 @@ class ProjectResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
-@router.post("", response_model=ProjectResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/", response_model=ProjectResponse, status_code=status.HTTP_201_CREATED)
 async def create_project(data: ProjectCreate, db: AsyncSession = Depends(get_db)):
     project = Project(**data.model_dump())
     db.add(project)
@@ -50,7 +50,7 @@ async def create_project(data: ProjectCreate, db: AsyncSession = Depends(get_db)
     return project
 
 
-@router.get("", response_model=list[ProjectResponse])
+@router.get("/", response_model=list[ProjectResponse])
 async def list_projects(db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Project).order_by(Project.created_at.desc()))
     return result.scalars().all()
@@ -67,14 +67,15 @@ class ProjectStat(BaseModel):
 async def project_stats(db: AsyncSession = Depends(get_db)):
     """Aggregate stats for all projects in a single round-trip."""
     files_result = await db.execute(
-        select(
-            ProjectFile.project_id, func.count(ProjectFile.id).label("cnt")
-        ).group_by(ProjectFile.project_id)
+        select(ProjectFile.project_id, func.count(ProjectFile.id).label("cnt"))
+        .group_by(ProjectFile.project_id)
     )
     files_map: dict[str, int] = {row.project_id: row.cnt for row in files_result}
 
     outlines_result = await db.execute(
-        select(TpOutline.project_id).where(TpOutline.status_locked.is_(True)).distinct()
+        select(TpOutline.project_id)
+        .where(TpOutline.status_locked.is_(True))
+        .distinct()
     )
     outline_locked_set: set[str] = {row.project_id for row in outlines_result}
 

@@ -16,7 +16,6 @@ app = FastAPI(
     title="TP AI - Технически Предложения",
     version="0.1.0",
     description="AI асистент за съставяне на технически предложения за обществени поръчки",
-    redirect_slashes=False,
 )
 
 app.state.limiter = limiter
@@ -52,7 +51,6 @@ async def health():
     # Redis liveness
     try:
         import redis.asyncio as aioredis
-
         r = aioredis.from_url(settings.redis_url, socket_connect_timeout=2)
         await r.ping()
         await r.aclose()

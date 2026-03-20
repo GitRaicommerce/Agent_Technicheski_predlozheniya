@@ -218,7 +218,6 @@ async def get_schedule(project_id: str, db: AsyncSession = Depends(get_db)):
 # GET /api/v1/agents/{project_id}/generations
 # ---------------------------------------------------------------------------
 
-
 class GenerationResponse(BaseModel):
     id: str
     section_uid: str
@@ -261,9 +260,7 @@ async def list_generations(project_id: str, db: AsyncSession = Depends(get_db)):
 
     section_title_map: dict[str, str] = {}
     if outline:
-        sections = outline.outline_json.get(
-            "sections", outline.outline_json.get("outline", [])
-        )
+        sections = outline.outline_json.get("sections", outline.outline_json.get("outline", []))
 
         def _collect(secs: list) -> None:
             for s in secs:
@@ -361,7 +358,6 @@ async def regenerate_section(
     section_requirements: list[str] = []
 
     if outline:
-
         def _find(secs: list) -> bool:
             for s in secs:
                 uid = s.get("uid") or s.get("section_uid", "")

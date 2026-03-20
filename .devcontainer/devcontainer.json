@@ -1,7 +1,14 @@
 {
   "name": "TP AI Agent",
   "image": "mcr.microsoft.com/devcontainers/python:3.11",
-  "forwardPorts": [3000, 8000, 5432, 6379, 9000, 9001],
+  "forwardPorts": [
+    3000,
+    8000,
+    5432,
+    6379,
+    9000,
+    9001
+  ],
   "portsAttributes": {
     "3000": {
       "label": "Web UI (Next.js)"

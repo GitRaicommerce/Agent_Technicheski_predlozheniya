@@ -1,13 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import {
-  api,
-  ChatMessage,
-  OrchestratorResponse,
-  GenerationVariant,
-  RateLimitError,
-} from "@/lib/api";
+import { api, ChatMessage, OrchestratorResponse, GenerationVariant, RateLimitError } from "@/lib/api";
 
 interface Props {
   projectId: string;
@@ -29,15 +23,11 @@ export default function ChatPanel({ projectId }: Props) {
   const [suggestedQuestions, setSuggestedQuestions] = useState<string[]>([]);
   const [uiNotice, setUiNotice] = useState<string | null>(null);
   // Активен вариант по message index
-  const [activeVariant, setActiveVariant] = useState<
-    Record<number, "v1" | "v2">
-  >({});
+  const [activeVariant, setActiveVariant] = useState<Record<number, "v1" | "v2">>({});
   const [pinnedGenerations, setPinnedGenerations] = useState<Set<string>>(
     new Set(),
   );
-  const [rateLimitCountdown, setRateLimitCountdown] = useState<number | null>(
-    null,
-  );
+  const [rateLimitCountdown, setRateLimitCountdown] = useState<number | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -45,10 +35,7 @@ export default function ChatPanel({ projectId }: Props) {
       if (rateLimitCountdown === 0) setRateLimitCountdown(null);
       return;
     }
-    const timer = setTimeout(
-      () => setRateLimitCountdown((n) => (n !== null ? n - 1 : null)),
-      1000,
-    );
+    const timer = setTimeout(() => setRateLimitCountdown((n) => (n !== null ? n - 1 : null)), 1000);
     return () => clearTimeout(timer);
   }, [rateLimitCountdown]);
 
@@ -93,9 +80,7 @@ export default function ChatPanel({ projectId }: Props) {
         projectId,
         message,
         // Send only the last 20 messages to avoid LLM context limits
-        [...history, userMsg]
-          .slice(-20)
-          .map(({ role, content }) => ({ role, content })),
+        [...history, userMsg].slice(-20).map(({ role, content }) => ({ role, content })),
       );
 
       if (res.questions_to_user?.length) {
@@ -274,7 +259,9 @@ export default function ChatPanel({ projectId }: Props) {
                             void handlePin(msg.generationIds!.variant_1!)
                           }
                           className={`text-xs px-2 py-0.5 rounded border transition ${
-                            pinnedGenerations.has(msg.generationIds.variant_1)
+                            pinnedGenerations.has(
+                              msg.generationIds.variant_1,
+                            )
                               ? "bg-green-50 text-green-700 border-green-200"
                               : "bg-white text-gray-600 hover:bg-blue-50 hover:text-blue-700 border-gray-200"
                           }`}
@@ -290,7 +277,9 @@ export default function ChatPanel({ projectId }: Props) {
                             void handlePin(msg.generationIds!.variant_2!)
                           }
                           className={`text-xs px-2 py-0.5 rounded border transition ${
-                            pinnedGenerations.has(msg.generationIds.variant_2)
+                            pinnedGenerations.has(
+                              msg.generationIds.variant_2,
+                            )
                               ? "bg-green-50 text-green-700 border-green-200"
                               : "bg-white text-gray-600 hover:bg-blue-50 hover:text-blue-700 border-gray-200"
                           }`}
@@ -350,10 +339,7 @@ export default function ChatPanel({ projectId }: Props) {
       {rateLimitCountdown !== null && (
         <div className="mx-3 mb-1 px-3 py-2 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700 flex items-center gap-2">
           <span>⏳</span>
-          <span>
-            Твърде много заявки. Изчакайте <strong>{rateLimitCountdown}</strong>{" "}
-            сек. преди следващото съобщение.
-          </span>
+          <span>Твърде много заявки. Изчакайте <strong>{rateLimitCountdown}</strong> сек. преди следващото съобщение.</span>
         </div>
       )}
       <div className="p-3 border-t flex gap-2">
@@ -370,9 +356,7 @@ export default function ChatPanel({ projectId }: Props) {
           disabled={loading || !input.trim() || rateLimitCountdown !== null}
           className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {rateLimitCountdown !== null
-            ? `⏳ ${rateLimitCountdown}s`
-            : "Изпрати"}
+          {rateLimitCountdown !== null ? `⏳ ${rateLimitCountdown}s` : "Изпрати"}
         </button>
       </div>
     </div>

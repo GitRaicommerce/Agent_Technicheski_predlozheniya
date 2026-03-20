@@ -79,12 +79,8 @@ async def generate_docx(project_id: str, db: AsyncSession) -> bytes:
 
 def _write_schedule_section(doc, schedule_json: dict) -> None:
     """Форматира задачите от нормализирания график в .docx таблица."""
-    tasks = schedule_json.get(
-        "tasks", schedule_json.get("normalized", {}).get("tasks", [])
-    )
-    resources = schedule_json.get(
-        "resources", schedule_json.get("normalized", {}).get("resources", [])
-    )
+    tasks = schedule_json.get("tasks", schedule_json.get("normalized", {}).get("tasks", []))
+    resources = schedule_json.get("resources", schedule_json.get("normalized", {}).get("resources", []))
 
     if not tasks:
         doc.add_paragraph("[Графикът не съдържа задачи.]")
@@ -133,8 +129,8 @@ async def _write_sections(
                 Generation.section_uid == section_uid,
             )
             .order_by(
-                Generation.selected.desc(),  # закрепен от потребителя
-                Generation.variant.asc(),  # вариант 1 преди 2
+                Generation.selected.desc(),   # закрепен от потребителя
+                Generation.variant.asc(),     # вариант 1 преди 2
                 Generation.created_at.desc(),
             )
             .limit(1)

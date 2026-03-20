@@ -22,9 +22,7 @@ export default function SchedulePanel({ projectId }: Props) {
       .finally(() => setLoading(false));
   };
 
-  useEffect(() => {
-    load();
-  }, [projectId]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { load(); }, [projectId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleLock = async () => {
     if (!schedule) return;
@@ -48,9 +46,7 @@ export default function SchedulePanel({ projectId }: Props) {
       await api.agents.unlockSchedule(projectId, schedule.id);
       setSchedule((s) => (s ? { ...s, status_locked: false } : s));
     } catch (err: unknown) {
-      setLockError(
-        err instanceof Error ? err.message : "Грешка при отключване",
-      );
+      setLockError(err instanceof Error ? err.message : "Грешка при отключване");
     } finally {
       setLocking(false);
     }
@@ -88,11 +84,7 @@ export default function SchedulePanel({ projectId }: Props) {
   return (
     <div className="space-y-2">
       <div className="flex justify-end">
-        <button
-          onClick={load}
-          className="text-xs text-gray-400 hover:text-blue-500 transition"
-          title="Опресни"
-        >
+        <button onClick={load} className="text-xs text-gray-400 hover:text-blue-500 transition" title="Опресни">
           ↺
         </button>
       </div>
@@ -154,14 +146,10 @@ export default function SchedulePanel({ projectId }: Props) {
             <ul className="mt-1 space-y-0.5 max-h-48 overflow-y-auto">
               {tasks.map((t) => (
                 <li key={t.uid} className="text-xs text-gray-600 flex gap-1">
-                  <span className="text-gray-400 shrink-0">
-                    {t.wbs ?? t.uid}.
-                  </span>
+                  <span className="text-gray-400 shrink-0">{t.wbs ?? t.uid}.</span>
                   <span className="truncate">{t.name}</span>
                   {t.duration_days != null && (
-                    <span className="text-gray-400 shrink-0">
-                      {t.duration_days}д
-                    </span>
+                    <span className="text-gray-400 shrink-0">{t.duration_days}д</span>
                   )}
                 </li>
               ))}

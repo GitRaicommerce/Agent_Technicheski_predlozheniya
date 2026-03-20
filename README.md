@@ -21,9 +21,9 @@ AI асистент за съставяне на Технически предл
 
 В GitHub → **Settings → Codespaces → Secrets**, добавете:
 
-| Секрет              | Откъде                                      |
-| ------------------- | ------------------------------------------- |
-| `OPENAI_API_KEY`    | https://platform.openai.com/api-keys        |
+| Секрет | Откъде |
+|--------|--------|
+| `OPENAI_API_KEY` | https://platform.openai.com/api-keys |
 | `ANTHROPIC_API_KEY` | https://console.anthropic.com/settings/keys |
 
 ### 2. Стартиране на Codespace
@@ -31,17 +31,16 @@ AI асистент за съставяне на Технически предл
 Натиснете зеления бутон **"Code" → "Codespaces" → "Create codespace on main"**.
 
 При първо стартиране (~3–5 мин) средата автоматично:
-
 - Стартира всички Docker services (PostgreSQL 16 + pgvector, Redis, MinIO, API, Worker, Frontend)
 - Прилага Alembic миграциите
 - Инсталира npm зависимостите
 
 ### 3. Достъп
 
-| Услуга            | URL                                             |
-| ----------------- | ----------------------------------------------- |
-| **Frontend**      | http://localhost:3000                           |
-| **API Docs**      | http://localhost:8000/docs                      |
+| Услуга | URL |
+|--------|-----|
+| **Frontend** | http://localhost:3000 |
+| **API Docs** | http://localhost:8000/docs |
 | **MinIO Console** | http://localhost:9001 (minioadmin / minioadmin) |
 
 ---
@@ -51,20 +50,17 @@ AI асистент за съставяне на Технически предл
 ```bash
 # 1. Копирайте .env и попълнете API ключовете
 cp .env.example .env
-# Отворете .env и добавете OPENAI_API_KEY и/или ANTHROPIC_API_KEY
 
-# 2. Build на Docker образите (задължително при първо стартиране!)
-docker compose -f docker-compose.dev.yml build
-
-# 3. Стартирайте всички услуги
+# 2. Стартирайте инфраструктурата + backend + worker + frontend
 docker compose -f docker-compose.dev.yml up -d
 
-# 4. Приложете DB миграциите
+# 3. Приложете DB миграциите
 bash migrate.sh
-```
 
-> **Забележка:** Стъпка 2 (`build`) е задължителна при всяко `git clone` на ново място.
-> Пропускането й води до `ModuleNotFoundError` и мълчаливо неработещ API.
+# Или стартирайте само backend services и frontend отделно:
+docker compose -f docker-compose.dev.yml up -d postgres redis minio api worker
+cd apps/web && npm install && npm run dev
+```
 
 ---
 
@@ -103,28 +99,28 @@ docs/                   # Спецификация и документация
 
 ## Технологии
 
-| Компонент     | Технология                                     |
-| ------------- | ---------------------------------------------- |
-| Frontend      | Next.js 15, React 19, Tailwind CSS 4           |
-| Backend       | FastAPI, SQLAlchemy 2 (async), asyncpg         |
-| Database      | PostgreSQL 16 + pgvector (1536-dim embeddings) |
-| LLM           | OpenAI GPT-4o + Anthropic Claude (LLM Gateway) |
-| Queue         | Redis + RQ                                     |
-| Storage       | MinIO (S3-compatible)                          |
-| OCR           | Tesseract (bul + eng)                          |
-| DOCX          | python-docx                                    |
-| Schedule      | mpxj (Java/JRE) за .mpp файлове                |
-| Rate limiting | slowapi (200/min глобален, 20/min за /chat)    |
-| Dev           | GitHub Codespaces + GitHub Copilot             |
+| Компонент | Технология |
+|-----------|-----------|
+| Frontend | Next.js 15, React 19, Tailwind CSS 4 |
+| Backend | FastAPI, SQLAlchemy 2 (async), asyncpg |
+| Database | PostgreSQL 16 + pgvector (1536-dim embeddings) |
+| LLM | OpenAI GPT-4o + Anthropic Claude (LLM Gateway) |
+| Queue | Redis + RQ |
+| Storage | MinIO (S3-compatible) |
+| OCR | Tesseract (bul + eng) |
+| DOCX | python-docx |
+| Schedule | mpxj (Java/JRE) за .mpp файлове |
+| Rate limiting | slowapi (200/min глобален, 20/min за /chat) |
+| Dev | GitHub Codespaces + GitHub Copilot |
 
 ---
 
 ## Пътна карта
 
-| Фаза | Описание                                                | Статус    |
-| ---- | ------------------------------------------------------- | --------- |
-| 0    | Scaffold + схеми + DB + ingest pipeline + embeddings    | ✅ Готово |
-| 1    | Оркестратор + Структура + График + LLM history          | ✅ Готово |
-| 2    | Чернова + Верификатор + Evidence lifecycle + закрепване | ✅ Готово |
-| 3    | Pre-export gate + DOCX експорт + Outline UI             | ✅ Готово |
-| 4    | Тестове + CI/CD + мащабиране                            | 🔄 В ход  |
+| Фаза | Описание | Статус |
+|------|----------|--------|
+| 0 | Scaffold + схеми + DB + ingest pipeline + embeddings | ✅ Готово |
+| 1 | Оркестратор + Структура + График + LLM history | ✅ Готово |
+| 2 | Чернова + Верификатор + Evidence lifecycle + закрепване | ✅ Готово |
+| 3 | Pre-export gate + DOCX експорт + Outline UI | ✅ Готово |
+| 4 | Тестове + CI/CD + мащабиране | 🔄 В ход |

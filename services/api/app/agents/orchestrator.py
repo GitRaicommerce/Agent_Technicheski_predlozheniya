@@ -65,26 +65,6 @@ async def run_orchestrator(
 ) -> dict[str, Any]:
     trace_id = str(uuid.uuid4())
 
-    # Demo mode — no LLM keys configured
-    from app.core.config import settings
-
-    if not settings.openai_api_key.strip() and not settings.anthropic_api_key.strip():
-        return {
-            "schema_version": "v1.3",
-            "status": "needs_user_action",
-            "trace_id": trace_id,
-            "assistant_message": (
-                "⚠️ **Demo режим** — LLM ключове не са конфигурирани.\n\n"
-                "Добавете `OPENAI_API_KEY` и/или `ANTHROPIC_API_KEY` в `.env` файла, "
-                "след което рестартирайте API контейнера:\n"
-                "```\ndocker compose -f docker-compose.dev.yml restart api\n```\n\n"
-                "Всички останали функции (проекти, качване на файлове, export) работят нормално."
-            ),
-            "ui_actions": [],
-            "agent_called": None,
-            "questions_to_user": [],
-        }
-
     project_context = json.dumps(
         {
             "project_id": project.id,

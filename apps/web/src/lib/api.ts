@@ -25,9 +25,7 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
     const message =
       typeof detail === "string"
         ? detail
-        : (detail?.message ??
-          JSON.stringify(detail) ??
-          `API error ${res.status}`);
+        : detail?.message ?? JSON.stringify(detail) ?? `API error ${res.status}`;
     throw new Error(message);
   }
   return res.json();
@@ -103,14 +101,7 @@ export interface TpOutline {
 export interface ScheduleInfo {
   id: string;
   schedule_json: {
-    tasks?: {
-      uid: number;
-      name: string;
-      start?: string;
-      finish?: string;
-      duration_days?: number;
-      wbs?: string;
-    }[];
+    tasks?: { uid: number; name: string; start?: string; finish?: string; duration_days?: number; wbs?: string }[];
     resources?: { uid: number; name: string; type?: string }[];
     error?: string;
   };
@@ -148,19 +139,15 @@ export interface ProjectStat {
 // Projects
 export const api = {
   projects: {
-    list: () => apiFetch<Project[]>("/api/v1/projects"),
-    stats: () =>
-      apiFetch<Record<string, ProjectStat>>("/api/v1/projects/stats"),
+    list: () => apiFetch<Project[]>("/api/v1/projects/"),
+    stats: () => apiFetch<Record<string, ProjectStat>>("/api/v1/projects/stats"),
     get: (id: string) => apiFetch<Project>(`/api/v1/projects/${id}`),
     create: (data: Partial<Project>) =>
-      apiFetch<Project>("/api/v1/projects", {
+      apiFetch<Project>("/api/v1/projects/", {
         method: "POST",
         body: JSON.stringify(data),
       }),
-    update: (
-      id: string,
-      data: Partial<Omit<Project, "id" | "created_at" | "updated_at">>,
-    ) =>
+    update: (id: string, data: Partial<Omit<Project, "id" | "created_at" | "updated_at">>) =>
       apiFetch<Project>(`/api/v1/projects/${id}`, {
         method: "PUT",
         body: JSON.stringify(data),
@@ -208,9 +195,7 @@ export const api = {
       }),
     getOutline: async (project_id: string): Promise<TpOutline | null> => {
       try {
-        return await apiFetch<TpOutline>(
-          `/api/v1/agents/${project_id}/outline`,
-        );
+        return await apiFetch<TpOutline>(`/api/v1/agents/${project_id}/outline`);
       } catch {
         return null;
       }
@@ -242,9 +227,7 @@ export const api = {
       ),
     getSchedule: async (project_id: string): Promise<ScheduleInfo | null> => {
       try {
-        return await apiFetch<ScheduleInfo>(
-          `/api/v1/agents/${project_id}/schedule`,
-        );
+        return await apiFetch<ScheduleInfo>(`/api/v1/agents/${project_id}/schedule`);
       } catch {
         return null;
       }
@@ -270,9 +253,7 @@ export const api = {
       if (!res.ok) throw new Error(`Отключването не успя: ${res.status}`);
     },
     listGenerations: (project_id: string) =>
-      apiFetch<SectionGenerations[]>(
-        `/api/v1/agents/${project_id}/generations`,
-      ),
+      apiFetch<SectionGenerations[]>(`/api/v1/agents/${project_id}/generations`),
     regenerateSection: (project_id: string, section_uid: string) =>
       apiFetch<{ generation_ids: Record<string, string>; trace_id: string }>(
         `/api/v1/agents/${project_id}/sections/${section_uid}/regenerate`,
@@ -288,7 +269,7 @@ export const api = {
         const message =
           typeof detail === "string"
             ? detail
-            : (detail?.message ?? `Export failed (${res.status})`);
+            : detail?.message ?? `Export failed (${res.status})`;
         throw new Error(message);
       }
       return res.blob();
