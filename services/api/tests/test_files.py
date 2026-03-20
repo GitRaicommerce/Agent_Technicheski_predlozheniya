@@ -28,9 +28,17 @@ def _make_file(**kwargs) -> MagicMock:
         {
             k: getattr(f, k)
             for k in [
-                "id", "project_id", "filename", "module", "file_size",
-                "ingest_status", "ingest_error", "content_type",
-                "storage_key", "file_hash", "created_at",
+                "id",
+                "project_id",
+                "filename",
+                "module",
+                "file_size",
+                "ingest_status",
+                "ingest_error",
+                "content_type",
+                "storage_key",
+                "file_hash",
+                "created_at",
             ]
         }
     )
@@ -89,9 +97,7 @@ async def test_file_status_done(client, mock_db):
 async def test_file_status_not_found(client, mock_db):
     mock_db.get = AsyncMock(return_value=None)
 
-    resp = await client.get(
-        f"/api/v1/files/{uuid.uuid4()}/files/{uuid.uuid4()}/status"
-    )
+    resp = await client.get(f"/api/v1/files/{uuid.uuid4()}/files/{uuid.uuid4()}/status")
 
     assert resp.status_code == 404
 
@@ -106,9 +112,7 @@ async def test_delete_file_not_found(client, mock_db):
     """404 когато файлът не съществува."""
     mock_db.get = AsyncMock(return_value=None)
 
-    resp = await client.delete(
-        f"/api/v1/files/{uuid.uuid4()}/files/{uuid.uuid4()}"
-    )
+    resp = await client.delete(f"/api/v1/files/{uuid.uuid4()}/files/{uuid.uuid4()}")
 
     assert resp.status_code == 404
 
@@ -135,9 +139,7 @@ async def test_delete_file_marks_stale(client, mock_db):
         "app.routers.files.storage.delete_object",
         new=AM(return_value=None),
     ):
-        resp = await client.delete(
-            f"/api/v1/files/{file.project_id}/files/{file.id}"
-        )
+        resp = await client.delete(f"/api/v1/files/{file.project_id}/files/{file.id}")
 
     assert resp.status_code == 204
     assert len(execute_calls) >= 1

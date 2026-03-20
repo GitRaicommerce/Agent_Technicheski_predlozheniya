@@ -131,7 +131,9 @@ export default function FileUploadPanel({ projectId, module }: Props) {
     const droppedFiles = Array.from(e.dataTransfer.files);
     const invalid = droppedFiles.filter((f) => !isAllowedFile(f));
     if (invalid.length) {
-      setError(`Неподдържан формат: ${invalid.map((f) => f.name).join(", ")}. Допустими: ${meta.accept}`);
+      setError(
+        `Неподдържан формат: ${invalid.map((f) => f.name).join(", ")}. Допустими: ${meta.accept}`,
+      );
       return;
     }
     await uploadFiles(droppedFiles);
@@ -227,7 +229,9 @@ export default function FileUploadPanel({ projectId, module }: Props) {
                 <div className="flex items-center gap-1 shrink-0">
                   <span
                     className={`${statusColor(f.ingest_status)} ${
-                      !TERMINAL_STATUSES.has(f.ingest_status) ? "animate-pulse" : ""
+                      !TERMINAL_STATUSES.has(f.ingest_status)
+                        ? "animate-pulse"
+                        : ""
                     }`}
                   >
                     {statusLabel(f.ingest_status)}

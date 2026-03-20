@@ -67,15 +67,14 @@ class ProjectStat(BaseModel):
 async def project_stats(db: AsyncSession = Depends(get_db)):
     """Aggregate stats for all projects in a single round-trip."""
     files_result = await db.execute(
-        select(ProjectFile.project_id, func.count(ProjectFile.id).label("cnt"))
-        .group_by(ProjectFile.project_id)
+        select(
+            ProjectFile.project_id, func.count(ProjectFile.id).label("cnt")
+        ).group_by(ProjectFile.project_id)
     )
     files_map: dict[str, int] = {row.project_id: row.cnt for row in files_result}
 
     outlines_result = await db.execute(
-        select(TpOutline.project_id)
-        .where(TpOutline.status_locked.is_(True))
-        .distinct()
+        select(TpOutline.project_id).where(TpOutline.status_locked.is_(True)).distinct()
     )
     outline_locked_set: set[str] = {row.project_id for row in outlines_result}
 

@@ -21,7 +21,9 @@ export default function OutlinePanel({ projectId }: Props) {
       .finally(() => setLoading(false));
   };
 
-  useEffect(() => { load(); }, [projectId]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    load();
+  }, [projectId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleLock = async () => {
     if (!outline) return;
@@ -31,9 +33,7 @@ export default function OutlinePanel({ projectId }: Props) {
       await api.agents.lockOutline(projectId, outline.id);
       setOutline((o) => (o ? { ...o, status_locked: true } : o));
     } catch (err: unknown) {
-      setLockError(
-        err instanceof Error ? err.message : "Грешка при одобрение",
-      );
+      setLockError(err instanceof Error ? err.message : "Грешка при одобрение");
     } finally {
       setLocking(false);
     }
@@ -86,7 +86,11 @@ export default function OutlinePanel({ projectId }: Props) {
   return (
     <div className="space-y-2">
       <div className="flex justify-end">
-        <button onClick={load} className="text-xs text-gray-400 hover:text-blue-500 transition" title="Опресни">
+        <button
+          onClick={load}
+          className="text-xs text-gray-400 hover:text-blue-500 transition"
+          title="Опресни"
+        >
           ↺
         </button>
       </div>

@@ -67,7 +67,9 @@ async def upload_file(
     content = await file.read()
     MAX_FILE_SIZE = 50 * 1024 * 1024  # 50 MB
     if len(content) > MAX_FILE_SIZE:
-        raise HTTPException(status_code=413, detail="File too large. Maximum size is 50 MB.")
+        raise HTTPException(
+            status_code=413, detail="File too large. Maximum size is 50 MB."
+        )
     file_hash = hashlib.sha256(content).hexdigest()
     file_id = str(uuid.uuid4())
     storage_key = f"projects/{project_id}/{module}/{file_id}/{file.filename}"
@@ -135,9 +137,7 @@ async def get_file_status(
     return file
 
 
-@router.delete(
-    "/{project_id}/files/{file_id}", status_code=status.HTTP_204_NO_CONTENT
-)
+@router.delete("/{project_id}/files/{file_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_file(
     project_id: str,
     file_id: str,

@@ -253,6 +253,7 @@ async def _ingest_legislation(file, content: bytes, db):
     texts = [c.get("text", "").strip() for c in chunks if c.get("text", "").strip()]
     try:
         from app.core.embedding import embed_texts as _embed
+
         embeddings = await _embed(texts)
     except Exception as e:
         log.warning("ingest_legislation_embedding_failed", error=str(e))

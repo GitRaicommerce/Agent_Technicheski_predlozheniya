@@ -104,8 +104,11 @@ async def run_tender_struct(
 
         # Increment version number for this project
         from sqlalchemy import func
+
         ver_result = await db.execute(
-            select(func.max(TpOutline.version)).where(TpOutline.project_id == project_id)
+            select(func.max(TpOutline.version)).where(
+                TpOutline.project_id == project_id
+            )
         )
         next_version = (ver_result.scalar() or 0) + 1
 

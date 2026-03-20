@@ -118,7 +118,9 @@ async def test_update_project(client, mock_db):
     mock_db.get = AsyncMock(return_value=project)
 
     async def _refresh(obj):
-        obj.__dict__.update({"name": "Нов проект", "updated_at": datetime.now(timezone.utc)})
+        obj.__dict__.update(
+            {"name": "Нов проект", "updated_at": datetime.now(timezone.utc)}
+        )
 
     mock_db.refresh = AsyncMock(side_effect=_refresh)
 

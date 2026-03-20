@@ -30,7 +30,13 @@ export default function ProjectPage() {
   const [showSchedule, setShowSchedule] = useState(false);
   const [showGenerations, setShowGenerations] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
-  const [editData, setEditData] = useState({ name: "", location: "", description: "", contracting_authority: "", tender_date: "" });
+  const [editData, setEditData] = useState({
+    name: "",
+    location: "",
+    description: "",
+    contracting_authority: "",
+    tender_date: "",
+  });
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -43,7 +49,13 @@ export default function ProjectPage() {
         .get(params.id)
         .then((p) => {
           setProject(p);
-          setEditData({ name: p.name, location: p.location ?? "", description: p.description ?? "", contracting_authority: p.contracting_authority ?? "", tender_date: p.tender_date ?? "" });
+          setEditData({
+            name: p.name,
+            location: p.location ?? "",
+            description: p.description ?? "",
+            contracting_authority: p.contracting_authority ?? "",
+            tender_date: p.tender_date ?? "",
+          });
         })
         .finally(() => setLoading(false));
     }
@@ -126,7 +138,10 @@ export default function ProjectPage() {
                   {deleting ? "Изтрива..." : "Да, изтрий"}
                 </button>
                 <button
-                  onClick={() => { setShowDeleteConfirm(false); setDeleteError(null); }}
+                  onClick={() => {
+                    setShowDeleteConfirm(false);
+                    setDeleteError(null);
+                  }}
                   className="px-3 py-1 border text-xs rounded-lg text-gray-600 hover:bg-gray-50"
                 >
                   Отказ
@@ -145,19 +160,28 @@ export default function ProjectPage() {
               <input
                 className="w-full border rounded-lg px-3 py-1.5 text-sm font-semibold text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-400"
                 value={editData.name}
-                onChange={(e) => setEditData((d) => ({ ...d, name: e.target.value }))}
+                onChange={(e) =>
+                  setEditData((d) => ({ ...d, name: e.target.value }))
+                }
                 placeholder="Наименование на проекта"
               />
               <input
                 className="w-full border rounded-lg px-3 py-1.5 text-sm text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-400"
                 value={editData.location}
-                onChange={(e) => setEditData((d) => ({ ...d, location: e.target.value }))}
+                onChange={(e) =>
+                  setEditData((d) => ({ ...d, location: e.target.value }))
+                }
                 placeholder="Местоположение"
               />
               <input
                 className="w-full border rounded-lg px-3 py-1.5 text-sm text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-400"
                 value={editData.contracting_authority}
-                onChange={(e) => setEditData((d) => ({ ...d, contracting_authority: e.target.value }))}
+                onChange={(e) =>
+                  setEditData((d) => ({
+                    ...d,
+                    contracting_authority: e.target.value,
+                  }))
+                }
                 placeholder="Възложител"
               />
               <div className="flex gap-2">
@@ -165,19 +189,21 @@ export default function ProjectPage() {
                   className="flex-1 border rounded-lg px-3 py-1.5 text-sm text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-400"
                   type="date"
                   value={editData.tender_date}
-                  onChange={(e) => setEditData((d) => ({ ...d, tender_date: e.target.value }))}
+                  onChange={(e) =>
+                    setEditData((d) => ({ ...d, tender_date: e.target.value }))
+                  }
                   title="Дата на подаване"
                 />
                 <input
                   className="flex-1 border rounded-lg px-3 py-1.5 text-sm text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-400"
                   value={editData.description}
-                  onChange={(e) => setEditData((d) => ({ ...d, description: e.target.value }))}
+                  onChange={(e) =>
+                    setEditData((d) => ({ ...d, description: e.target.value }))
+                  }
                   placeholder="Описание"
                 />
               </div>
-              {saveError && (
-                <p className="text-xs text-red-500">{saveError}</p>
-              )}
+              {saveError && <p className="text-xs text-red-500">{saveError}</p>}
             </div>
             <div className="flex gap-2 pt-0.5">
               <button
@@ -188,7 +214,10 @@ export default function ProjectPage() {
                 {saving ? "Запазва..." : "Запази"}
               </button>
               <button
-                onClick={() => { setShowEdit(false); setSaveError(null); }}
+                onClick={() => {
+                  setShowEdit(false);
+                  setSaveError(null);
+                }}
                 className="px-3 py-1.5 border text-sm rounded-lg text-gray-600 hover:bg-gray-50"
               >
                 Отказ
@@ -199,7 +228,9 @@ export default function ProjectPage() {
           <div className="flex justify-between items-center">
             <div className="flex items-start gap-2">
               <div>
-                <h1 className="text-xl font-bold text-gray-800">{project.name}</h1>
+                <h1 className="text-xl font-bold text-gray-800">
+                  {project.name}
+                </h1>
                 {project.location && (
                   <p className="text-sm text-gray-500">{project.location}</p>
                 )}

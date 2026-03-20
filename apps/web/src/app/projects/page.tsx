@@ -100,10 +100,12 @@ export default function ProjectsPage() {
                   )}
 
                   <p className="text-xs text-gray-400 mt-2">
-                    Създаден: {new Date(p.created_at).toLocaleDateString("bg-BG")}
+                    Създаден:{" "}
+                    {new Date(p.created_at).toLocaleDateString("bg-BG")}
                     {p.updated_at && p.updated_at !== p.created_at && (
                       <span className="ml-3">
-                        Обновен: {new Date(p.updated_at).toLocaleDateString("bg-BG")}
+                        Обновен:{" "}
+                        {new Date(p.updated_at).toLocaleDateString("bg-BG")}
                       </span>
                     )}
                   </p>
@@ -130,11 +132,11 @@ function StatBadge({
   activeClass?: string;
   inactiveLabel?: string;
 }) {
-  const cls = active
-    ? activeClass
-    : "bg-gray-50 text-gray-400 border-gray-100";
+  const cls = active ? activeClass : "bg-gray-50 text-gray-400 border-gray-100";
   return (
-    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-xs font-medium ${cls}`}>
+    <span
+      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-xs font-medium ${cls}`}
+    >
       <span>{icon}</span>
       <span>{active ? label : (inactiveLabel ?? label)}</span>
     </span>

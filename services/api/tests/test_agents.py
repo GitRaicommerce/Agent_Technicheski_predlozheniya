@@ -124,7 +124,9 @@ async def test_get_schedule_found(client, mock_db):
         id=str(uuid.uuid4()),
         project_id=pid,
         schedule_snapshot_id=str(uuid.uuid4()),
-        schedule_json={"tasks": [{"uid": 1, "name": "Проектиране", "duration_days": 10}]},
+        schedule_json={
+            "tasks": [{"uid": 1, "name": "Проектиране", "duration_days": 10}]
+        },
         status_locked=False,
         version=1,
     )
@@ -155,7 +157,9 @@ async def test_get_generations_empty(client, mock_db):
     outline_result.scalar_one_or_none = MagicMock(return_value=None)
     # generations scalars returns empty list
     gen_result = MagicMock()
-    gen_result.scalars = MagicMock(return_value=MagicMock(all=MagicMock(return_value=[])))
+    gen_result.scalars = MagicMock(
+        return_value=MagicMock(all=MagicMock(return_value=[]))
+    )
     mock_db.execute = AsyncMock(side_effect=[outline_result, gen_result])
 
     resp = await client.get(f"/api/v1/agents/{uuid.uuid4()}/generations")
@@ -198,7 +202,9 @@ async def test_get_generations_grouped(client, mock_db):
     outline_result = MagicMock()
     outline_result.scalar_one_or_none = MagicMock(return_value=None)
     gen_result = MagicMock()
-    gen_result.scalars = MagicMock(return_value=MagicMock(all=MagicMock(return_value=[g1, g2])))
+    gen_result.scalars = MagicMock(
+        return_value=MagicMock(all=MagicMock(return_value=[g1, g2]))
+    )
     mock_db.execute = AsyncMock(side_effect=[outline_result, gen_result])
 
     resp = await client.get(f"/api/v1/agents/{pid}/generations")
@@ -249,9 +255,7 @@ async def test_regenerate_section_ok(client, mock_db):
         "app.agents.orchestrator._run_drafting_pipeline",
         new=AsyncMock(return_value={"generation_ids": fake_ids}),
     ):
-        resp = await client.post(
-            f"/api/v1/agents/{pid}/sections/{sec_uid}/regenerate"
-        )
+        resp = await client.post(f"/api/v1/agents/{pid}/sections/{sec_uid}/regenerate")
 
     assert resp.status_code == 200
     data = resp.json()
