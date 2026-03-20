@@ -63,6 +63,26 @@ async def test_chat_returns_orchestrator_result(client, mock_db):
     assert resp.json()["message"] == "Отговор от агента"
 
 
+@pytest.mark.asyncio
+async def test_chat_demo_mode_no_keys(client, mock_db):
+    """Demo режим — връща ясно съобщение ако LLM ключовете липсват."""
+    project = _make_project()
+    mock_db.get = AsyncMock(return_value=project)
+
+    with patch("app.core.config.settings") as mock_settings:
+        mock_settings.openai_api_key = ""
+        mock_settings.anthropic_api_key = ""
+        resp = await client.post(
+            "/api/v1/agents/chat",
+            json={"project_id": project.id, "message": "Здравей", "history": []},
+        )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "needs_user_action"
+    assert "Demo режим" in data["assistant_message"]
+
+
 # ---------------------------------------------------------------------------
 # GET /api/v1/agents/{project_id}/outline
 # ---------------------------------------------------------------------------
