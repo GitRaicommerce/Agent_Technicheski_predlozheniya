@@ -41,7 +41,7 @@ class ProjectResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
-@router.post("/", response_model=ProjectResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=ProjectResponse, status_code=status.HTTP_201_CREATED)
 async def create_project(data: ProjectCreate, db: AsyncSession = Depends(get_db)):
     project = Project(**data.model_dump())
     db.add(project)
@@ -50,7 +50,7 @@ async def create_project(data: ProjectCreate, db: AsyncSession = Depends(get_db)
     return project
 
 
-@router.get("/", response_model=list[ProjectResponse])
+@router.get("", response_model=list[ProjectResponse])
 async def list_projects(db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Project).order_by(Project.created_at.desc()))
     return result.scalars().all()

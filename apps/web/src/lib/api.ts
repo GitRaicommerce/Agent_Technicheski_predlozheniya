@@ -148,12 +148,12 @@ export interface ProjectStat {
 // Projects
 export const api = {
   projects: {
-    list: () => apiFetch<Project[]>("/api/v1/projects/"),
+    list: () => apiFetch<Project[]>("/api/v1/projects"),
     stats: () =>
       apiFetch<Record<string, ProjectStat>>("/api/v1/projects/stats"),
     get: (id: string) => apiFetch<Project>(`/api/v1/projects/${id}`),
     create: (data: Partial<Project>) =>
-      apiFetch<Project>("/api/v1/projects/", {
+      apiFetch<Project>("/api/v1/projects", {
         method: "POST",
         body: JSON.stringify(data),
       }),
