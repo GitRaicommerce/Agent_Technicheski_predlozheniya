@@ -342,13 +342,24 @@ export default function ChatPanel({ projectId }: Props) {
           <span>Твърде много заявки. Изчакайте <strong>{rateLimitCountdown}</strong> сек. преди следващото съобщение.</span>
         </div>
       )}
-      <div className="p-3 border-t flex gap-2">
-        <input
-          className="flex-1 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+      <div className="p-3 border-t flex gap-2 items-end">
+        <textarea
+          className="flex-1 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none min-h-[38px] max-h-40 overflow-y-auto"
+          rows={1}
           value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && send()}
-          placeholder="Въведете съобщение..."
+          onChange={(e) => {
+            setInput(e.target.value);
+            // Auto-grow
+            e.target.style.height = "auto";
+            e.target.style.height = `${Math.min(e.target.scrollHeight, 160)}px`;
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              send();
+            }
+          }}
+          placeholder="Въведете съобщение... (Enter за изпращане, Shift+Enter за нов ред)"
           disabled={loading || rateLimitCountdown !== null}
         />
         <button

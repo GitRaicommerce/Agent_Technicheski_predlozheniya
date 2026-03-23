@@ -82,7 +82,19 @@ export default function ProjectsPage() {
         )}
 
         {loading ? (
-          <p className="text-gray-500">Зарежда се...</p>
+          <div className="grid gap-4">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="p-5 bg-white rounded-xl shadow-sm border animate-pulse">
+                <div className="h-4 bg-gray-200 rounded w-2/3 mb-2" />
+                <div className="h-3 bg-gray-100 rounded w-1/3 mb-3" />
+                <div className="flex gap-2">
+                  <div className="h-5 bg-gray-100 rounded-full w-16" />
+                  <div className="h-5 bg-gray-100 rounded-full w-20" />
+                  <div className="h-5 bg-gray-100 rounded-full w-24" />
+                </div>
+              </div>
+            ))}
+          </div>
         ) : error ? (
           <p className="text-red-500">{error}</p>
         ) : projects.length === 0 ? (

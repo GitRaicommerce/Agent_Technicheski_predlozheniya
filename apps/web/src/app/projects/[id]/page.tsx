@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { api, Project } from "@/lib/api";
+import { useToast } from "@/components/ToastProvider";
 import ChatPanel from "@/components/ChatPanel";
 import ExportButton from "@/components/ExportButton";
 import FileUploadPanel from "@/components/FileUploadPanel";
@@ -23,6 +24,7 @@ const MODULES: { key: Module; label: string; icon: string }[] = [
 export default function ProjectPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
+  const { toast } = useToast();
   const [project, setProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeModule, setActiveModule] = useState<Module | null>(null);
@@ -49,6 +51,21 @@ export default function ProjectPage() {
     }
   }, [params.id]);
 
+  // Close edit/delete with Escape
+  const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    if (e.key === "Escape") {
+      setShowEdit(false);
+      setShowDeleteConfirm(false);
+      setSaveError(null);
+      setDeleteError(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [handleKeyDown]);
+
   async function handleSaveEdit() {
     if (!project) return;
     setSaving(true);
@@ -63,6 +80,7 @@ export default function ProjectPage() {
       });
       setProject(updated);
       setShowEdit(false);
+      toast("Проектът е запазен.", "success");
     } catch (e: unknown) {
       setSaveError(e instanceof Error ? e.message : "Грешка при запазване.");
     } finally {
@@ -76,11 +94,11 @@ export default function ProjectPage() {
     setDeleteError(null);
     try {
       await api.projects.delete(project.id);
+      toast("Проектът е изтрит.", "success");
       router.push("/projects");
     } catch (e: unknown) {
       setDeleteError(e instanceof Error ? e.message : "Грешка при изтриване.");
       setDeleting(false);
-      // keep showDeleteConfirm open so the user sees the error
     }
   }
 

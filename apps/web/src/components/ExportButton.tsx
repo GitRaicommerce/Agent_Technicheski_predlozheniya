@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { api } from "@/lib/api";
+import { useToast } from "@/components/ToastProvider";
 
 interface Props {
   projectId: string;
@@ -12,6 +13,7 @@ export default function ExportButton({ projectId, projectName }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [staleWarning, setStaleWarning] = useState(false);
+  const { toast } = useToast();
 
   const handleExport = async () => {
     setLoading(true);
@@ -25,6 +27,7 @@ export default function ExportButton({ projectId, projectName }: Props) {
       a.download = `TP_${projectName.slice(0, 50).replace(/\s+/g, "_")}.docx`;
       a.click();
       URL.revokeObjectURL(url);
+      toast("DOCX файлът е изтеглен.", "success");
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Грешка при експорт";
       // 409 идва с message за остарели секции — показваме предупреждение
