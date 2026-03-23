@@ -20,7 +20,7 @@ export default function OutlinePanel({ projectId }: Props) {
     api.agents
       .getOutline(projectId)
       .then(setOutline)
-      .catch(() => setLoadError("Грешка при зареждане на структурата."))
+      .catch((err: unknown) => setLoadError(err instanceof Error ? err.message : "Грешка при зареждане на структурата."))
       .finally(() => setLoading(false));
   };
 

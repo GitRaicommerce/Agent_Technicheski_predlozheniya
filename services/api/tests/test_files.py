@@ -113,6 +113,81 @@ async def test_delete_file_not_found(client, mock_db):
     assert resp.status_code == 404
 
 
+# ---------------------------------------------------------------------------
+# POST /api/v1/files/{project_id}/upload
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_upload_invalid_module(client, mock_db):
+    """400 при невалиден модул."""
+    project_id = str(uuid.uuid4())
+    resp = await client.post(
+        f"/api/v1/files/{project_id}/upload",
+        data={"module": "not_a_module"},
+        files={"file": ("test.pdf", b"content", "application/pdf")},
+    )
+    assert resp.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_upload_project_not_found(client, mock_db):
+    """404 когато проектът не съществува."""
+    mock_db.get = AsyncMock(return_value=None)
+    project_id = str(uuid.uuid4())
+    resp = await client.post(
+        f"/api/v1/files/{project_id}/upload",
+        data={"module": "tender_docs"},
+        files={"file": ("test.pdf", b"content", "application/pdf")},
+    )
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_upload_unsupported_mime(client, mock_db):
+    """415 при неподдържан MIME тип."""
+    from tests.conftest import _make_project
+
+    project = _make_project()
+    mock_db.get = AsyncMock(return_value=project)
+
+    resp = await client.post(
+        f"/api/v1/files/{project.id}/upload",
+        data={"module": "tender_docs"},
+        files={"file": ("note.txt", b"hello", "text/plain")},
+    )
+    assert resp.status_code == 415
+
+
+@pytest.mark.asyncio
+async def test_upload_ok(client, mock_db):
+    """201 при успешно качване — storage и ingest queue се извикват."""
+    from unittest.mock import patch, AsyncMock as AM
+    from tests.conftest import _make_project
+
+    project = _make_project()
+    mock_db.get = AM(return_value=project)
+    # refresh is a no-op in tests; the ProjectFile object already has all fields set
+    mock_db.refresh = AM(return_value=None)
+    mock_db.execute = AM(return_value=MagicMock())
+
+    with (
+        patch("app.routers.files.storage.put_object", new=AM(return_value=None)),
+        patch("app.ingestion.worker.enqueue_ingest", return_value=None),
+    ):
+        resp = await client.post(
+            f"/api/v1/files/{project.id}/upload",
+            data={"module": "tender_docs"},
+            files={"file": ("report.pdf", b"%PDF-1.4 content", "application/pdf")},
+        )
+
+    assert resp.status_code == 201
+    body = resp.json()
+    assert body["module"] == "tender_docs"
+    assert body["filename"] == "report.pdf"
+    assert body["ingest_status"] == "pending"
+
+
 @pytest.mark.asyncio
 async def test_delete_file_marks_stale(client, mock_db):
     """Изтриването на evidence файл маркира генерациите като stale."""

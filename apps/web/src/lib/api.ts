@@ -139,7 +139,7 @@ export interface ProjectStat {
 // Projects
 export const api = {
   projects: {
-    list: () => apiFetch<Project[]>("/api/v1/projects/"),
+    list: (limit = 20, offset = 0) => apiFetch<Project[]>(`/api/v1/projects/?limit=${limit}&offset=${offset}`),
     stats: () => apiFetch<Record<string, ProjectStat>>("/api/v1/projects/stats"),
     get: (id: string) => apiFetch<Project>(`/api/v1/projects/${id}`),
     create: (data: Partial<Project>) =>

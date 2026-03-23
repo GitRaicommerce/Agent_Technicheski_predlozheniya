@@ -78,7 +78,7 @@ export default function FileUploadPanel({ projectId, module }: Props) {
           })),
         ),
       )
-      .catch(() => setError("Грешка при зареждане на файловете."));
+      .catch((err: unknown) => setError(err instanceof Error ? err.message : "Грешка при зареждане на файловете."));
   }, [projectId, module]);
 
   // Poll statuses of non-terminal files

@@ -18,23 +18,44 @@ function relativeTime(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString("bg-BG");
 }
 
+const PAGE_SIZE = 20;
+
 export default function ProjectsPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [stats, setStats] = useState<Record<string, ProjectStat>>({});
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
+  const [offset, setOffset] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<SortKey>("newest");
 
   useEffect(() => {
-    Promise.all([api.projects.list(), api.projects.stats()])
+    Promise.all([api.projects.list(PAGE_SIZE, 0), api.projects.stats()])
       .then(([ps, st]) => {
         setProjects(ps);
         setStats(st);
+        setHasMore(ps.length === PAGE_SIZE);
+        setOffset(PAGE_SIZE);
       })
       .catch(() => setError("Грешка при зареждане на проектите."))
       .finally(() => setLoading(false));
   }, []);
+
+  async function loadMore() {
+    setLoadingMore(true);
+    try {
+      const more = await api.projects.list(PAGE_SIZE, offset);
+      setProjects((prev) => [...prev, ...more]);
+      setHasMore(more.length === PAGE_SIZE);
+      setOffset((prev) => prev + PAGE_SIZE);
+    } catch {
+      // silently ignore — user can retry
+    } finally {
+      setLoadingMore(false);
+    }
+  }
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -130,6 +151,11 @@ export default function ProjectsPage() {
                 {filtered.length} от {projects.length} проекта
               </p>
             )}
+            {search && projects.length >= PAGE_SIZE && (
+              <p className="text-xs text-amber-500 mb-1">
+                Търсенето е в рамките на {projects.length} заредени проекта.
+              </p>
+            )}
             {filtered.map((p) => {
               const st = stats[p.id];
               return (
@@ -191,6 +217,19 @@ export default function ProjectsPage() {
                 </Link>
               );
             })}
+          </div>
+        )}
+
+        {/* Load More */}
+        {!loading && !error && hasMore && !search && (
+          <div className="mt-6 text-center">
+            <button
+              onClick={loadMore}
+              disabled={loadingMore}
+              className="px-5 py-2 text-sm bg-white border border-gray-200 rounded-lg text-gray-600 hover:border-blue-400 hover:text-blue-600 disabled:opacity-50"
+            >
+              {loadingMore ? "Зареждане..." : "Зареди още"}
+            </button>
           </div>
         )}
       </div>

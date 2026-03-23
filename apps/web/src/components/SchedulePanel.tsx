@@ -21,7 +21,7 @@ export default function SchedulePanel({ projectId }: Props) {
     api.agents
       .getSchedule(projectId)
       .then(setSchedule)
-      .catch(() => setLoadError("Грешка при зареждане на графика."))
+      .catch((err: unknown) => setLoadError(err instanceof Error ? err.message : "Грешка при зареждане на графика."))
       .finally(() => setLoading(false));
   };
 
