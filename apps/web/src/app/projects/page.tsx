@@ -6,6 +6,18 @@ import { api, Project, ProjectStat } from "@/lib/api";
 
 type SortKey = "newest" | "oldest" | "az" | "za";
 
+function relativeTime(dateStr: string): string {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "току-що";
+  if (mins < 60) return `преди ${mins} мин.`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `преди ${hrs} ч.`;
+  const days = Math.floor(hrs / 24);
+  if (days < 30) return `преди ${days} д.`;
+  return new Date(dateStr).toLocaleDateString("bg-BG");
+}
+
 export default function ProjectsPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [stats, setStats] = useState<Record<string, ProjectStat>>({});
@@ -169,10 +181,10 @@ export default function ProjectsPage() {
                   )}
 
                   <p className="text-xs text-gray-400 mt-2">
-                    Създаден: {new Date(p.created_at).toLocaleDateString("bg-BG")}
+                    Създаден: {relativeTime(p.created_at)}
                     {p.updated_at && p.updated_at !== p.created_at && (
                       <span className="ml-3">
-                        Обновен: {new Date(p.updated_at).toLocaleDateString("bg-BG")}
+                        Обновен: {relativeTime(p.updated_at)}
                       </span>
                     )}
                   </p>

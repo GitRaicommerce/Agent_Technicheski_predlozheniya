@@ -21,6 +21,15 @@ const MODULES: { key: Module; label: string; icon: string }[] = [
   { key: "legislation", label: "Законодателство", icon: "⚖️" },
 ];
 
+const WORKFLOW_STEPS = [
+  "Качете тръжна документация и примерни ТП",
+  "Чатирайте с AI да предложи структура на ТП",
+  "Прегледайте и заключете структурата",
+  "Генерирайте текст за всяка секция",
+  "Изберете най-добрите варианти",
+  "Експортирайте готовия документ (DOCX)",
+];
+
 export default function ProjectPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
@@ -328,6 +337,23 @@ export default function ProjectPage() {
               Изберете модул за да качите файлове
             </div>
           )}
+
+          {/* Workflow guide */}
+          <div className="mt-auto border-t p-4">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
+              Работен процес
+            </p>
+            <ol className="space-y-2">
+              {WORKFLOW_STEPS.map((step, i) => (
+                <li key={i} className="flex items-start gap-2 text-xs text-gray-500">
+                  <span className="shrink-0 w-5 h-5 rounded-full border border-gray-200 bg-gray-50 flex items-center justify-center font-semibold text-gray-400 text-[10px]">
+                    {i + 1}
+                  </span>
+                  <span>{step}</span>
+                </li>
+              ))}
+            </ol>
+          </div>
         </aside>
 
         {/* Right: Chat */}

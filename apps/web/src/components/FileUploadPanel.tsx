@@ -53,6 +53,7 @@ export default function FileUploadPanel({ projectId, module }: Props) {
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<Record<string, number>>({});
   const [error, setError] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -212,8 +213,10 @@ export default function FileUploadPanel({ projectId, module }: Props) {
     try {
       await api.files.delete(projectId, fileId);
       setFiles((prev) => prev.filter((f) => f.id !== fileId));
+      setConfirmDeleteId(null);
     } catch {
       setError("Грешка при изтриване на файла.");
+      setConfirmDeleteId(null);
     }
   };
 
@@ -295,13 +298,32 @@ export default function FileUploadPanel({ projectId, module }: Props) {
                   >
                     {statusLabel(f.ingest_status)}
                   </span>
-                  <button
-                    onClick={() => handleDeleteFile(f.id)}
-                    className="ml-1 text-gray-300 hover:text-red-400 transition"
-                    title="Изтрий файл"
-                  >
-                    ✕
-                  </button>
+                  {confirmDeleteId === f.id ? (
+                    <span className="flex items-center gap-1 ml-1">
+                      <button
+                        onClick={() => handleDeleteFile(f.id)}
+                        className="text-red-500 hover:text-red-700 font-medium transition"
+                        title="Потвърди изтриване"
+                      >
+                        ✓
+                      </button>
+                      <button
+                        onClick={() => setConfirmDeleteId(null)}
+                        className="text-gray-400 hover:text-gray-600 transition"
+                        title="Отказ"
+                      >
+                        ✕
+                      </button>
+                    </span>
+                  ) : (
+                    <button
+                      onClick={() => setConfirmDeleteId(f.id)}
+                      className="ml-1 text-gray-300 hover:text-red-400 transition"
+                      title="Изтрий файл"
+                    >
+                      ✕
+                    </button>
+                  )}
                 </div>
               </div>
               {f.ingest_status === "error" && f.ingest_error && (
