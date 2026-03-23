@@ -360,3 +360,176 @@ async def test_unlock_schedule_ok(client, mock_db):
     assert data["status"] == "unlocked"
     assert data["schedule_id"] == sid
     assert schedule.status_locked is False
+
+
+# ---------------------------------------------------------------------------
+# POST /api/v1/agents/{project_id}/outline/lock
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_lock_outline_not_found(client, mock_db):
+    """404 ако outline-ът не съществува."""
+    result_mock = MagicMock()
+    result_mock.scalar_one_or_none = MagicMock(return_value=None)
+    mock_db.execute = AsyncMock(return_value=result_mock)
+
+    resp = await client.post(
+        f"/api/v1/agents/{uuid.uuid4()}/outline/lock",
+        params={"outline_id": str(uuid.uuid4())},
+    )
+
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_lock_outline_ok(client, mock_db):
+    """200 и status=locked за намерен outline."""
+    from app.core.models import TpOutline
+
+    pid = str(uuid.uuid4())
+    oid = str(uuid.uuid4())
+    outline = TpOutline(
+        id=oid,
+        project_id=pid,
+        outline_json={"sections": []},
+        status_locked=False,
+        version=1,
+    )
+
+    result_mock = MagicMock()
+    result_mock.scalar_one_or_none = MagicMock(return_value=outline)
+    mock_db.execute = AsyncMock(return_value=result_mock)
+
+    resp = await client.post(
+        f"/api/v1/agents/{pid}/outline/lock",
+        params={"outline_id": oid},
+    )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "locked"
+    assert data["outline_id"] == oid
+    assert outline.status_locked is True
+
+
+# ---------------------------------------------------------------------------
+# POST /api/v1/agents/{project_id}/schedule/lock
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_lock_schedule_not_found(client, mock_db):
+    """404 ако schedule-ът не съществува."""
+    result_mock = MagicMock()
+    result_mock.scalar_one_or_none = MagicMock(return_value=None)
+    mock_db.execute = AsyncMock(return_value=result_mock)
+
+    resp = await client.post(
+        f"/api/v1/agents/{uuid.uuid4()}/schedule/lock",
+        params={"schedule_id": str(uuid.uuid4())},
+    )
+
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_lock_schedule_ok(client, mock_db):
+    """200 и status=locked за намерен schedule."""
+    from app.core.models import ScheduleNormalized
+
+    pid = str(uuid.uuid4())
+    sid = str(uuid.uuid4())
+    schedule = ScheduleNormalized(
+        id=sid,
+        project_id=pid,
+        schedule_snapshot_id=str(uuid.uuid4()),
+        schedule_json={"tasks": []},
+        status_locked=False,
+        version=1,
+    )
+
+    result_mock = MagicMock()
+    result_mock.scalar_one_or_none = MagicMock(return_value=schedule)
+    mock_db.execute = AsyncMock(return_value=result_mock)
+
+    resp = await client.post(
+        f"/api/v1/agents/{pid}/schedule/lock",
+        params={"schedule_id": sid},
+    )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "locked"
+    assert data["schedule_id"] == sid
+    assert schedule.status_locked is True
+
+
+# ---------------------------------------------------------------------------
+# GET /api/v1/agents/{project_id}/outline — success path
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_get_outline_found(client, mock_db):
+    """200 с outline JSON при намерен запис."""
+    from app.core.models import TpOutline
+
+    pid = str(uuid.uuid4())
+    outline = TpOutline(
+        id=str(uuid.uuid4()),
+        project_id=pid,
+        outline_json={"sections": [{"uid": "s1", "title": "Въведение"}]},
+        status_locked=True,
+        version=2,
+    )
+
+    result_mock = MagicMock()
+    result_mock.scalar_one_or_none = MagicMock(return_value=outline)
+    mock_db.execute = AsyncMock(return_value=result_mock)
+
+    resp = await client.get(f"/api/v1/agents/{pid}/outline")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["id"] == outline.id
+    assert data["status_locked"] is True
+
+
+# ---------------------------------------------------------------------------
+# POST /api/v1/agents/{project_id}/generations/{id}/select — success path
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_select_generation_ok(client, mock_db):
+    """200 — маркира генерацията като избрана и деселектира останалите."""
+    from app.core.models import Generation
+    from datetime import datetime, timezone
+
+    pid = str(uuid.uuid4())
+    gid = str(uuid.uuid4())
+    gen = Generation(
+        id=gid,
+        project_id=pid,
+        section_uid="s1",
+        variant=1,
+        text="Текст",
+        evidence_status="ok",
+        selected=False,
+        created_at=datetime.now(timezone.utc),
+    )
+
+    # db.get returns the generation; db.execute for the bulk update
+    mock_db.get = AsyncMock(return_value=gen)
+    mock_db.execute = AsyncMock(return_value=MagicMock())
+
+    resp = await client.post(
+        f"/api/v1/agents/{pid}/generations/{gid}/select"
+    )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "selected"
+    assert data["generation_id"] == gid
+    assert gen.selected is True

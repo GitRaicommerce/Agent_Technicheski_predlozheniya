@@ -78,9 +78,7 @@ export default function FileUploadPanel({ projectId, module }: Props) {
           })),
         ),
       )
-      .catch(() => {
-        /* игнорираме — потребителят може да ги качи наново */
-      });
+      .catch(() => setError("Грешка при зареждане на файловете."));
   }, [projectId, module]);
 
   // Poll statuses of non-terminal files

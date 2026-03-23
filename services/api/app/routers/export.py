@@ -32,13 +32,18 @@ async def export_docx(project_id: str, db: AsyncSession = Depends(get_db)):
             },
         )
 
+    from urllib.parse import quote
     from app.export.docx_generator import generate_docx
 
     docx_bytes = await generate_docx(project_id=project_id, db=db)
 
-    filename = f"TP_{project.name[:50].replace(' ', '_')}.docx"
+    safe_name = project.name[:50].replace(" ", "_")
+    ascii_name = safe_name.encode("ascii", "replace").decode("ascii")
+    utf8_encoded = quote(safe_name, safe="")
+    filename = f"TP_{ascii_name}.docx"
+    filename_star = f"UTF-8''{utf8_encoded}.docx"
     return StreamingResponse(
         iter([docx_bytes]),
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={"Content-Disposition": f'attachment; filename="{filename}"; filename*={filename_star}'},
     )

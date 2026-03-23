@@ -171,3 +171,56 @@ async def test_delete_project_not_found(client, mock_db):
     resp = await client.delete(f"/api/v1/projects/{uuid.uuid4()}")
 
     assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# GET /api/v1/projects/stats
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_project_stats_empty(client, mock_db):
+    """Връща празен dict когато няма проекти."""
+    # 5 execute calls: files, outlines, gen, sel, all_ids
+    empty_result = MagicMock()
+    empty_result.__iter__ = MagicMock(return_value=iter([]))
+    mock_db.execute = AsyncMock(return_value=empty_result)
+
+    resp = await client.get("/api/v1/projects/stats")
+
+    assert resp.status_code == 200
+    assert resp.json() == {}
+
+
+@pytest.mark.asyncio
+async def test_project_stats_returns_counts(client, mock_db):
+    """Агрегира файлове, outline, генерации и избрани секции по проект."""
+    pid = str(uuid.uuid4())
+
+    # Row helpers
+    def _row(**kwargs):
+        r = MagicMock()
+        for k, v in kwargs.items():
+            setattr(r, k, v)
+        return r
+
+    files_result   = MagicMock(); files_result.__iter__ = lambda s: iter([_row(project_id=pid, cnt=3)])
+    outline_result = MagicMock(); outline_result.__iter__ = lambda s: iter([_row(project_id=pid)])
+    gen_result     = MagicMock(); gen_result.__iter__ = lambda s: iter([_row(project_id=pid, generated=5)])
+    sel_result     = MagicMock(); sel_result.__iter__ = lambda s: iter([_row(project_id=pid, selected=2)])
+    ids_result     = MagicMock(); ids_result.__iter__ = lambda s: iter([_row(id=pid)])
+
+    mock_db.execute = AsyncMock(side_effect=[
+        files_result, outline_result, gen_result, sel_result, ids_result
+    ])
+
+    resp = await client.get("/api/v1/projects/stats")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert pid in data
+    stat = data[pid]
+    assert stat["files"] == 3
+    assert stat["outline_locked"] is True
+    assert stat["sections_generated"] == 5
+    assert stat["sections_selected"] == 2

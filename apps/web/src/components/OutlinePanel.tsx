@@ -10,14 +10,17 @@ interface Props {
 export default function OutlinePanel({ projectId }: Props) {
   const [outline, setOutline] = useState<TpOutline | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [locking, setLocking] = useState(false);
   const [lockError, setLockError] = useState<string | null>(null);
 
   const load = () => {
     setLoading(true);
+    setLoadError(null);
     api.agents
       .getOutline(projectId)
       .then(setOutline)
+      .catch(() => setLoadError("Грешка при зареждане на структурата."))
       .finally(() => setLoading(false));
   };
 
@@ -60,6 +63,15 @@ export default function OutlinePanel({ projectId }: Props) {
       <p className="text-xs text-gray-400 py-2 animate-pulse">
         Зарежда структурата...
       </p>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="space-y-2">
+        <p className="text-xs text-red-500">{loadError}</p>
+        <button onClick={load} className="text-xs text-blue-500 hover:underline">↺ Опитай отново</button>
+      </div>
     );
   }
 
