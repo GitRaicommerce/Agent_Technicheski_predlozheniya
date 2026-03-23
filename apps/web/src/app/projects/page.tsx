@@ -59,7 +59,7 @@ export default function ProjectsPage() {
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    let list = q
+    const list = q
       ? projects.filter(
           (p) =>
             p.name.toLowerCase().includes(q) ||
@@ -142,7 +142,7 @@ export default function ProjectsPage() {
           </div>
         ) : filtered.length === 0 ? (
           <p className="text-gray-400 text-sm py-8 text-center">
-            Няма проекти, съответстващи на "{search}".
+            Няма проекти, съответстващи на &quot;{search}&quot;.
           </p>
         ) : (
           <div className="grid gap-4">

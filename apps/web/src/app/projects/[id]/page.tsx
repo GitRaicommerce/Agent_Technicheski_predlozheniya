@@ -142,7 +142,7 @@ export default function ProjectPage() {
           <div className="mb-2 p-3 bg-red-50 border border-red-200 rounded-lg flex flex-col gap-2">
             <div className="flex items-start justify-between gap-3">
               <p className="text-sm text-red-700">
-                Изтриване на „{project.name}"? Действието е необратимо.
+                Изтриване на &#x201E;{project.name}&#x201C;? Действието е необратимо.
               </p>
               <div className="flex gap-2 shrink-0">
                 <button

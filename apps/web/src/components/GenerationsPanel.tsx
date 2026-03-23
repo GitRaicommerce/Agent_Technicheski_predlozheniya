@@ -32,7 +32,7 @@ export default function GenerationsPanel({ projectId }: Props) {
   const toggleSection = (uid: string) => {
     setExpanded((prev) => {
       const next = new Set(prev);
-      next.has(uid) ? next.delete(uid) : next.add(uid);
+      if (next.has(uid)) { next.delete(uid); } else { next.add(uid); }
       return next;
     });
   };
