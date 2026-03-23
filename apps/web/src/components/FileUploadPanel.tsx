@@ -51,6 +51,7 @@ const TERMINAL_STATUSES = new Set(["done", "error"]);
 export default function FileUploadPanel({ projectId, module }: Props) {
   const [files, setFiles] = useState<UploadedFile[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<Record<string, number>>({});
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -149,17 +150,63 @@ export default function FileUploadPanel({ projectId, module }: Props) {
     setError(null);
 
     for (const file of fileList) {
+      const tempKey = `${file.name}-${Date.now()}`;
+      setUploadProgress((prev) => ({ ...prev, [tempKey]: 0 }));
       try {
-        const uploaded = await api.files.upload(projectId, module, file);
+        const uploaded = await xhrUpload(file, tempKey);
         setFiles((prev) => [...prev, uploaded]);
       } catch (err: unknown) {
         setError(
           `${file.name}: ${err instanceof Error ? err.message : "Грешка при качване"}`,
         );
+      } finally {
+        setUploadProgress((prev) => {
+          const next = { ...prev };
+          delete next[tempKey];
+          return next;
+        });
       }
     }
     setUploading(false);
   };
+
+  // XHR upload with progress tracking
+  const xhrUpload = (file: File, tempKey: string): Promise<UploadedFile> =>
+    new Promise((resolve, reject) => {
+      const form = new FormData();
+      form.append("module", module as string);
+      form.append("file", file);
+
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", `/api/v1/files/${projectId}/upload`);
+
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) {
+          const pct = Math.round((e.loaded / e.total) * 100);
+          setUploadProgress((prev) => ({ ...prev, [tempKey]: pct }));
+        }
+      };
+
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try {
+            resolve(JSON.parse(xhr.responseText));
+          } catch {
+            reject(new Error("Невалиден отговор от сървъра"));
+          }
+        } else {
+          try {
+            const err = JSON.parse(xhr.responseText);
+            reject(new Error(err.detail || `Upload error ${xhr.status}`));
+          } catch {
+            reject(new Error(`Upload error ${xhr.status}`));
+          }
+        }
+      };
+
+      xhr.onerror = () => reject(new Error("Мрежова грешка при качване"));
+      xhr.send(form);
+    });
 
   const handleDeleteFile = async (fileId: string) => {
     try {
@@ -211,6 +258,22 @@ export default function FileUploadPanel({ projectId, module }: Props) {
         className="hidden"
         onChange={handleChange}
       />
+
+      {/* Per-file upload progress bars */}
+      {Object.entries(uploadProgress).map(([key, pct]) => (
+        <div key={key} className="mt-2">
+          <div className="flex justify-between text-xs text-gray-500 mb-0.5">
+            <span className="truncate max-w-48">{key.replace(/-\d+$/, "")}</span>
+            <span>{pct}%</span>
+          </div>
+          <div className="w-full bg-gray-200 rounded-full h-1.5">
+            <div
+              className="bg-blue-500 h-1.5 rounded-full transition-all duration-150"
+              style={{ width: `${pct}%` }}
+            />
+          </div>
+        </div>
+      ))}
 
       {error && (
         <p className="text-xs text-red-500 mt-2 wrap-break-word">{error}</p>

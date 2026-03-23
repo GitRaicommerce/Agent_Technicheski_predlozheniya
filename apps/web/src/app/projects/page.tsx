@@ -1,14 +1,18 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
 import { api, Project, ProjectStat } from "@/lib/api";
+
+type SortKey = "newest" | "oldest" | "az" | "za";
 
 export default function ProjectsPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [stats, setStats] = useState<Record<string, ProjectStat>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [sort, setSort] = useState<SortKey>("newest");
 
   useEffect(() => {
     Promise.all([api.projects.list(), api.projects.stats()])
@@ -19,6 +23,27 @@ export default function ProjectsPage() {
       .catch(() => setError("Грешка при зареждане на проектите."))
       .finally(() => setLoading(false));
   }, []);
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    let list = q
+      ? projects.filter(
+          (p) =>
+            p.name.toLowerCase().includes(q) ||
+            (p.location ?? "").toLowerCase().includes(q) ||
+            (p.description ?? "").toLowerCase().includes(q),
+        )
+      : [...projects];
+
+    list.sort((a, b) => {
+      if (sort === "newest") return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      if (sort === "oldest") return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+      if (sort === "az") return a.name.localeCompare(b.name, "bg");
+      if (sort === "za") return b.name.localeCompare(a.name, "bg");
+      return 0;
+    });
+    return list;
+  }, [projects, search, sort]);
 
   return (
     <main className="min-h-screen bg-gray-50 p-8">
@@ -32,6 +57,29 @@ export default function ProjectsPage() {
             + Нов проект
           </Link>
         </div>
+
+        {/* Search + Sort toolbar */}
+        {!loading && !error && projects.length > 0 && (
+          <div className="flex gap-3 mb-4">
+            <input
+              type="search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Търси по название, местоположение..."
+              className="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-blue-400"
+            />
+            <select
+              value={sort}
+              onChange={(e) => setSort(e.target.value as SortKey)}
+              className="px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:border-blue-400"
+            >
+              <option value="newest">Най-нови</option>
+              <option value="oldest">Най-стари</option>
+              <option value="az">А → Я</option>
+              <option value="za">Я → А</option>
+            </select>
+          </div>
+        )}
 
         {loading ? (
           <p className="text-gray-500">Зарежда се...</p>
@@ -47,9 +95,18 @@ export default function ProjectsPage() {
               Създайте първия си проект
             </Link>
           </div>
+        ) : filtered.length === 0 ? (
+          <p className="text-gray-400 text-sm py-8 text-center">
+            Няма проекти, съответстващи на "{search}".
+          </p>
         ) : (
           <div className="grid gap-4">
-            {projects.map((p) => {
+            {search && (
+              <p className="text-xs text-gray-400">
+                {filtered.length} от {projects.length} проекта
+              </p>
+            )}
+            {filtered.map((p) => {
               const st = stats[p.id];
               return (
                 <Link
