@@ -16,6 +16,7 @@ app = FastAPI(
     title="TP AI - Технически Предложения",
     version="0.1.0",
     description="AI асистент за съставяне на технически предложения за обществени поръчки",
+    redirect_slashes=False,
 )
 
 app.state.limiter = limiter

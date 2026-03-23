@@ -35,7 +35,7 @@ async def test_create_project_returns_201(client, mock_db):
     mock_db.refresh = AsyncMock(side_effect=_refresh)
 
     resp = await client.post(
-        "/api/v1/projects/",
+        "/api/v1/projects",
         json={"name": "Нов проект", "location": "Пловдив"},
     )
 
@@ -48,7 +48,7 @@ async def test_create_project_returns_201(client, mock_db):
 @pytest.mark.asyncio
 async def test_create_project_missing_name(client):
     """Липсва задължителното поле name → 422."""
-    resp = await client.post("/api/v1/projects/", json={"location": "Варна"})
+    resp = await client.post("/api/v1/projects", json={"location": "Варна"})
     assert resp.status_code == 422
 
 
@@ -63,7 +63,7 @@ async def test_list_projects_empty(client, mock_db):
     result_mock.scalars.return_value.all.return_value = []
     mock_db.execute = AsyncMock(return_value=result_mock)
 
-    resp = await client.get("/api/v1/projects/")
+    resp = await client.get("/api/v1/projects")
 
     assert resp.status_code == 200
     assert resp.json() == []
@@ -76,7 +76,7 @@ async def test_list_projects_returns_all(client, mock_db):
     result_mock.scalars.return_value.all.return_value = projects
     mock_db.execute = AsyncMock(return_value=result_mock)
 
-    resp = await client.get("/api/v1/projects/")
+    resp = await client.get("/api/v1/projects")
 
     assert resp.status_code == 200
     assert len(resp.json()) == 3
