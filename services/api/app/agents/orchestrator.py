@@ -83,8 +83,8 @@ async def run_orchestrator(
     MAX_HISTORY = 20
     messages: list[dict] = []
     for msg in history[-MAX_HISTORY:]:
-        role = msg.get("role", "user")
-        content = msg.get("content", "")
+        role = msg.role if hasattr(msg, "role") else msg.get("role", "user")
+        content = msg.content if hasattr(msg, "content") else msg.get("content", "")
         if role in ("user", "assistant") and content:
             messages.append({"role": role, "content": content})
 
