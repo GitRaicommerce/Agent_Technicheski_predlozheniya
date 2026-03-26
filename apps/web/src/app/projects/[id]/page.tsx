@@ -301,7 +301,8 @@ export default function ProjectPage() {
               </span>
             </button>
             {showSchedule && (
-              <div className="px-3 pb-3">
+              <div className="px-3 pb-3 space-y-3">
+                <FileUploadPanel projectId={project.id} module="schedule" />
                 <SchedulePanel projectId={project.id} />
               </div>
             )}
