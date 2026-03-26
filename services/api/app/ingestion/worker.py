@@ -104,6 +104,7 @@ async def _ingest_examples(file, content: bytes, db):
             embedding=emb,
         )
         db.add(extracted)
+        await db.flush()  # ensure extracted.id is populated
 
         # Тагване: basic snippet detection (без LLM)
         snippet = ExampleSnippet(
