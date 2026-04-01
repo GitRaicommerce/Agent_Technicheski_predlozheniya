@@ -59,10 +59,29 @@ async def run_tender_struct(
     trace_id = trace_id or str(uuid.uuid4())
     log.info("agent_tender_struct_start", project_id=project_id, trace_id=trace_id)
 
-    # Load tender doc chunks for this project
+    # Load tender doc chunks for this project — only from tender_docs module
+    from app.core.models import ProjectFile
+    from sqlalchemy import select as sa_select
+
+    file_ids_result = await db.execute(
+        sa_select(ProjectFile.id)
+        .where(ProjectFile.project_id == project_id)
+        .where(ProjectFile.module == "tender_docs")
+    )
+    tender_file_ids = [row.id for row in file_ids_result]
+
+    if not tender_file_ids:
+        return {
+            "status": "error",
+            "message": "Няма качена тръжна документация (модул 'Документация'). Качете техническата спецификация първо.",
+            "_agent": "tender_struct",
+            "_trace_id": trace_id,
+        }
+
     result = await db.execute(
         select(ExtractedChunk)
         .where(ExtractedChunk.project_id == project_id)
+        .where(ExtractedChunk.file_id.in_(tender_file_ids))
         .order_by(ExtractedChunk.page)
         .limit(80)
     )
@@ -71,7 +90,7 @@ async def run_tender_struct(
     if not chunks:
         return {
             "status": "error",
-            "message": "Няма качени тръжни документи за този проект.",
+            "message": "Тръжната документация се обработва. Изчакайте малко и опитайте отново.",
             "_agent": "tender_struct",
             "_trace_id": trace_id,
         }
