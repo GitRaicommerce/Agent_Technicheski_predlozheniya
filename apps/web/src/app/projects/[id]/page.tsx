@@ -23,8 +23,8 @@ const MODULES: { key: Module; label: string; icon: string }[] = [
 
 const WORKFLOW_STEPS = [
   "Качете тръжна документация и примерни ТП",
-  "Чатирайте с AI да предложи структура на ТП",
-  "Прегледайте и заключете структурата",
+  "Чатирайте с AI да анализира документацията и предложи съдържание на ТП",
+  "Прегледайте разделите и одобрете съдържанието",
   "Генерирайте текст за всяка секция",
   "Изберете най-добрите варианти",
   "Експортирайте готовия документ (DOCX)",
@@ -271,13 +271,13 @@ export default function ProjectPage() {
             </div>
           </div>
 
-          {/* Структура на ТП */}
+          {/* Съдържание на ТП */}
           <div className="border-b">
             <button
               onClick={() => setShowOutline((v) => !v)}
               className="w-full px-3 py-2.5 text-left text-sm font-semibold text-gray-700 flex justify-between items-center hover:bg-gray-50 transition"
             >
-              <span>📐 Структура на ТП</span>
+              <span>📐 Съдържание на ТП</span>
               <span className="text-gray-400 text-xs">
                 {showOutline ? "▾" : "▸"}
               </span>

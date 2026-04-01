@@ -79,8 +79,8 @@ export default function OutlinePanel({ projectId }: Props) {
     return (
       <div className="space-y-2">
         <p className="text-xs text-gray-400 leading-relaxed">
-          Структурата не е генерирана. Качете тръжна документация и поискайте от
-          TP AI да я анализира.
+          Съдържанието на ТП не е генерирано. Качете тръжна документация и напишете в чата
+          &ldquo;Анализирай документацията и предложи съдържание на ТП&rdquo;.
         </p>
         <button
           onClick={load}
@@ -97,39 +97,15 @@ export default function OutlinePanel({ projectId }: Props) {
 
   return (
     <div className="space-y-2">
-      <div className="flex justify-end">
+      <div className="flex items-center justify-between">
+        <span className="text-xs text-gray-400">
+          {sections.length} раздел{sections.length !== 1 ? "а" : ""}
+          {outline.status_locked && <span className="ml-2 text-green-600 font-medium">✓ Одобрено</span>}
+        </span>
         <button onClick={load} className="text-xs text-gray-400 hover:text-blue-500 transition" title="Опресни">
           ↺
         </button>
       </div>
-      {outline.status_locked ? (
-        <div className="flex items-center justify-between py-1">
-          <div className="flex items-center gap-1.5 text-xs text-green-700 font-medium">
-            <span>✓</span>
-            <span>Одобрена (версия {outline.version})</span>
-          </div>
-          <button
-            onClick={handleUnlock}
-            disabled={locking}
-            className="text-xs text-amber-600 hover:underline disabled:opacity-50"
-          >
-            🔓 Отключи
-          </button>
-        </div>
-      ) : (
-        <div>
-          <button
-            onClick={handleLock}
-            disabled={locking}
-            className="w-full py-1.5 px-3 bg-green-600 text-white text-xs rounded-lg hover:bg-green-700 disabled:opacity-50 transition"
-          >
-            {locking ? "Одобрява се..." : "✓ Одобри структурата"}
-          </button>
-          {lockError && (
-            <p className="text-xs text-red-500 mt-1">{lockError}</p>
-          )}
-        </div>
-      )}
 
       {sections.length > 0 && (
         <ul className="space-y-0.5 max-h-64 overflow-y-auto pr-1">
@@ -137,6 +113,35 @@ export default function OutlinePanel({ projectId }: Props) {
             <SectionItem key={s.uid ?? i} section={s} depth={0} />
           ))}
         </ul>
+      )}
+
+      {outline.status_locked ? (
+        <div className="flex items-center justify-between pt-1 border-t">
+          <span className="text-xs text-green-700 font-medium">✓ Одобрено (v{outline.version})</span>
+          <button
+            onClick={handleUnlock}
+            disabled={locking}
+            className="text-xs text-amber-600 hover:underline disabled:opacity-50"
+          >
+            🔓 Редактирай
+          </button>
+        </div>
+      ) : (
+        <div className="pt-1 border-t">
+          <p className="text-xs text-gray-400 mb-1.5">
+            Прегледайте разделите и одобрете за да започне генерирането.
+          </p>
+          <button
+            onClick={handleLock}
+            disabled={locking}
+            className="w-full py-1.5 px-3 bg-green-600 text-white text-xs rounded-lg hover:bg-green-700 disabled:opacity-50 transition"
+          >
+            {locking ? "Одобрява се..." : "✓ Одобри и генерирай"}
+          </button>
+          {lockError && (
+            <p className="text-xs text-red-500 mt-1">{lockError}</p>
+          )}
+        </div>
       )}
     </div>
   );
