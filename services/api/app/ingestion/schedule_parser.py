@@ -114,12 +114,32 @@ def _mpp_not_available_error() -> dict[str, Any]:
     }
 
 
+def _pick(row_dict: dict, *keys: str) -> Any:
+    """Върни първата намерена стойност по наредените ключове (без None/празни)."""
+    for k in keys:
+        v = row_dict.get(k)
+        if v is not None and str(v).strip() not in ("", "None"):
+            return v
+    return None
+
+
+def _to_str_date(val: Any) -> str | None:
+    """Нормализира дата/стринг към ISO string или None."""
+    if val is None:
+        return None
+    import datetime
+    if isinstance(val, (datetime.date, datetime.datetime)):
+        return val.isoformat()
+    s = str(val).strip()
+    return s if s and s.lower() != "none" else None
+
+
 def _parse_excel(content: bytes) -> dict[str, Any]:
     """Парсване на Excel export от MS Project."""
     try:
         import openpyxl
 
-        wb = openpyxl.load_workbook(io.BytesIO(content), read_only=True)
+        wb = openpyxl.load_workbook(io.BytesIO(content), read_only=True, data_only=True)
         ws = wb.active
         rows = list(ws.iter_rows(values_only=True))
         if not rows:
@@ -134,21 +154,47 @@ def _parse_excel(content: bytes) -> dict[str, Any]:
         tasks = []
         for i, row in enumerate(rows[1:], start=1):
             row_dict = {headers[j]: row[j] for j in range(min(len(headers), len(row)))}
+
+            # Skip fully-empty rows
+            if all(v is None or str(v).strip() == "" for v in row_dict.values()):
+                continue
+
+            name_val = _pick(
+                row_dict,
+                "name", "task name", "task_name",
+                "задача", "наименование", "дейност", "activity",
+            )
+            start_val = _pick(
+                row_dict,
+                "start", "start date", "start_date",
+                "начало", "начална дата", "begin",
+            )
+            finish_val = _pick(
+                row_dict,
+                "finish", "end", "end date", "end_date",
+                "finish date", "finish_date",
+                "край", "крайна дата",
+            )
+            dur_val = _pick(
+                row_dict,
+                "duration", "duration (days)", "duration_days",
+                "продължителност", "days",
+            )
+            wbs_val = _pick(row_dict, "wbs", "task id", "id", "no", "№")
+
+            try:
+                dur_float = float(dur_val) if dur_val is not None else None
+            except (ValueError, TypeError):
+                dur_float = None
+
             tasks.append(
                 {
                     "uid": i,
-                    "name": str(
-                        row_dict.get(
-                            "name",
-                            row_dict.get("task name", row_dict.get("задача", "")),
-                        )
-                    ),
-                    "start": str(row_dict.get("start", row_dict.get("начало", "")))
-                    or None,
-                    "finish": str(row_dict.get("finish", row_dict.get("край", "")))
-                    or None,
-                    "duration_days": None,
-                    "wbs": str(row_dict.get("wbs", "")) or None,
+                    "name": str(name_val) if name_val is not None else f"Задача {i}",
+                    "start": _to_str_date(start_val),
+                    "finish": _to_str_date(finish_val),
+                    "duration_days": dur_float,
+                    "wbs": str(wbs_val) if wbs_val is not None else None,
                 }
             )
 
