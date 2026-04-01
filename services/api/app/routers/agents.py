@@ -3,7 +3,7 @@ Agents router — оркестратор endpoint.
 Всички LLM агенти се извикват тук чрез оркестратора.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Any
@@ -120,6 +120,16 @@ async def unlock_outline(
         raise HTTPException(status_code=404, detail="Outline not found")
     outline.status_locked = False
     return {"status": "unlocked", "outline_id": outline_id}
+
+
+@router.delete("/{project_id}/outline", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_outlines(project_id: str, db: AsyncSession = Depends(get_db)):
+    """Изтрива всички outline версии за проекта — за ново генериране."""
+    from app.core.models import TpOutline
+    from sqlalchemy import select, delete
+
+    await db.execute(delete(TpOutline).where(TpOutline.project_id == project_id))
+    log.info("outlines_deleted", project_id=project_id)
 
 
 @router.post("/{project_id}/schedule/lock")

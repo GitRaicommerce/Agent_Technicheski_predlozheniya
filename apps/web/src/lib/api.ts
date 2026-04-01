@@ -220,6 +220,13 @@ export const api = {
       );
       if (!res.ok) throw new Error(`Отключването не успя: ${res.status}`);
     },
+    deleteOutline: async (project_id: string): Promise<void> => {
+      const res = await fetch(
+        `${API_URL}/api/v1/agents/${project_id}/outline`,
+        { method: "DELETE" },
+      );
+      if (!res.ok) throw new Error(`Изтриването не успя: ${res.status}`);
+    },
     selectGeneration: (project_id: string, generation_id: string) =>
       apiFetch<{ status: string }>(
         `/api/v1/agents/${project_id}/generations/${generation_id}/select`,

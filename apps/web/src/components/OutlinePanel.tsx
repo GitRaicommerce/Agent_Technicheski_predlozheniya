@@ -13,6 +13,8 @@ export default function OutlinePanel({ projectId }: Props) {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [locking, setLocking] = useState(false);
   const [lockError, setLockError] = useState<string | null>(null);
+  const [confirmRegen, setConfirmRegen] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
 
   const load = () => {
     setLoading(true);
@@ -58,6 +60,19 @@ export default function OutlinePanel({ projectId }: Props) {
     }
   };
 
+  const handleRegen = async () => {
+    setRegenerating(true);
+    setConfirmRegen(false);
+    try {
+      await api.agents.deleteOutline(projectId);
+      setOutline(null);
+    } catch {
+      // silently ignore
+    } finally {
+      setRegenerating(false);
+    }
+  };
+
   if (loading) {
     return (
       <p className="text-xs text-gray-400 py-2 animate-pulse">
@@ -78,16 +93,22 @@ export default function OutlinePanel({ projectId }: Props) {
   if (!outline) {
     return (
       <div className="space-y-2">
-        <p className="text-xs text-gray-400 leading-relaxed">
-          Съдържанието на ТП не е генерирано. Качете тръжна документация и напишете в чата
-          &ldquo;Анализирай документацията и предложи съдържание на ТП&rdquo;.
-        </p>
-        <button
-          onClick={load}
-          className="text-xs text-blue-500 hover:underline"
-        >
-          ↺ Опресни
-        </button>
+        {regenerating ? (
+          <p className="text-xs text-blue-500 animate-pulse">Изтрива се старото съдържание...</p>
+        ) : (
+          <>
+            <p className="text-xs text-gray-400 leading-relaxed">
+              Съдържанието на ТП не е генерирано. Качете тръжна документация и напишете в чата
+              &ldquo;Анализирай документацията и предложи съдържание на ТП&rdquo;.
+            </p>
+            <button
+              onClick={load}
+              className="text-xs text-blue-500 hover:underline"
+            >
+              ↺ Опресни
+            </button>
+          </>
+        )}
       </div>
     );
   }
@@ -102,9 +123,26 @@ export default function OutlinePanel({ projectId }: Props) {
           {sections.length} раздел{sections.length !== 1 ? "а" : ""}
           {outline.status_locked && <span className="ml-2 text-green-600 font-medium">✓ Одобрено</span>}
         </span>
-        <button onClick={load} className="text-xs text-gray-400 hover:text-blue-500 transition" title="Опресни">
-          ↺
-        </button>
+        <div className="flex items-center gap-2">
+          {confirmRegen ? (
+            <span className="flex items-center gap-1">
+              <span className="text-xs text-red-600">Изтрий?</span>
+              <button onClick={handleRegen} disabled={regenerating} className="text-xs text-white bg-red-500 hover:bg-red-600 px-1.5 py-0.5 rounded disabled:opacity-50">Да</button>
+              <button onClick={() => setConfirmRegen(false)} className="text-xs text-gray-500 hover:text-gray-700">Не</button>
+            </span>
+          ) : (
+            <button
+              onClick={() => setConfirmRegen(true)}
+              title="Изтрий и генерирай наново"
+              className="text-xs text-gray-400 hover:text-red-500 transition"
+            >
+              🗑
+            </button>
+          )}
+          <button onClick={load} className="text-xs text-gray-400 hover:text-blue-500 transition" title="Опресни">
+            ↺
+          </button>
+        </div>
       </div>
 
       {sections.length > 0 && (
