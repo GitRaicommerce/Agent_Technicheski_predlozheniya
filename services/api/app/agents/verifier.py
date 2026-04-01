@@ -73,13 +73,23 @@ async def run_verifier(
     evidence_texts: list[str] = []
     evidence_map = generation.evidence_map_json or {}
 
+    import uuid as _uuid
+
+    def _is_valid_uuid(val: str) -> bool:
+        try:
+            _uuid.UUID(val)
+            return True
+        except (ValueError, AttributeError):
+            return False
+
     snippet_ids = [
-        v for v in evidence_map.values() if v and not str(v).startswith("lex:")
+        v for v in evidence_map.values()
+        if v and not str(v).startswith("lex:") and _is_valid_uuid(str(v))
     ]
     lex_ids = [
         str(v).removeprefix("lex:")
         for v in evidence_map.values()
-        if v and str(v).startswith("lex:")
+        if v and str(v).startswith("lex:") and _is_valid_uuid(str(v).removeprefix("lex:"))
     ]
 
     if snippet_ids:
