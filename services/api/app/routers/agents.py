@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Any
 import uuid
+import structlog
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
@@ -16,6 +17,7 @@ from app.core.models import Project
 
 router = APIRouter()
 limiter = Limiter(key_func=get_remote_address)
+log = structlog.get_logger()
 
 
 class ChatMessage(BaseModel):
@@ -41,13 +43,41 @@ async def orchestrator_chat(
         raise HTTPException(status_code=404, detail="Project not found")
 
     from app.agents.orchestrator import run_orchestrator
+    from app.core.llm_gateway import LLMNotConfiguredError
 
-    result = await run_orchestrator(
-        project=project,
-        message=req.message,
-        history=req.history,
-        db=db,
-    )
+    try:
+        result = await run_orchestrator(
+            project=project,
+            message=req.message,
+            history=req.history,
+            db=db,
+        )
+    except LLMNotConfiguredError as exc:
+        result = {
+            "schema_version": "v1.3",
+            "status": "needs_user_action",
+            "trace_id": "",
+            "assistant_message": (
+                "⚙️ **LLM не е конфигуриран.** "
+                "Добавете `OPENAI_API_KEY` (или `ANTHROPIC_API_KEY`) в `.env` файла "
+                "и рестартирайте контейнерите с `docker compose up -d --build`."
+            ),
+            "ui_actions": [],
+            "questions_to_user": [],
+            "agent_called": None,
+        }
+        log.warning("llm_not_configured", error=str(exc))
+    except Exception as exc:
+        result = {
+            "schema_version": "v1.3",
+            "status": "error",
+            "trace_id": "",
+            "assistant_message": f"⚠ Грешка при генерирането: {exc}",
+            "ui_actions": [],
+            "questions_to_user": [],
+            "agent_called": None,
+        }
+        log.error("orchestrator_unexpected_error", error=str(exc))
     return result
 
 

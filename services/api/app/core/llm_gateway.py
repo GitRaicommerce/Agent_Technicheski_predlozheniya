@@ -10,11 +10,16 @@ import uuid
 from typing import Any
 
 import structlog
-from tenacity import retry, stop_after_attempt, wait_exponential
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_not_exception_type
 
 from app.core.config import settings
 
 log = structlog.get_logger()
+
+
+class LLMNotConfiguredError(Exception):
+    """Raised when no LLM API key is configured."""
+    pass
 
 
 class LLMGateway:
@@ -37,7 +42,9 @@ class LLMGateway:
         return self._anthropic_client
 
     @retry(
-        stop=stop_after_attempt(2), wait=wait_exponential(multiplier=1, min=2, max=10)
+        stop=stop_after_attempt(2),
+        wait=wait_exponential(multiplier=1, min=2, max=10),
+        retry=retry_if_not_exception_type(LLMNotConfiguredError),
     )
     async def call(
         self,
@@ -57,6 +64,26 @@ class LLMGateway:
         trace_id = trace_id or str(uuid.uuid4())
         provider = provider or settings.llm_default_provider
         model = model or settings.llm_default_model
+
+        # Early check — both keys missing means no LLM is available
+        openai_ok = bool(settings.openai_api_key and settings.openai_api_key.strip())
+        anthropic_ok = bool(settings.anthropic_api_key and settings.anthropic_api_key.strip())
+
+        if not openai_ok and not anthropic_ok:
+            raise LLMNotConfiguredError(
+                "LLM API ключовете не са конфигурирани. "
+                "Моля добавете OPENAI_API_KEY или ANTHROPIC_API_KEY в .env файла."
+            )
+
+        # If the chosen provider has no key, switch to the other
+        if provider == "openai" and not openai_ok and anthropic_ok:
+            log.warning("llm_openai_key_missing_switching_to_anthropic")
+            provider = settings.llm_fallback_provider
+            model = settings.llm_fallback_model
+        elif provider == "anthropic" and not anthropic_ok and openai_ok:
+            log.warning("llm_anthropic_key_missing_switching_to_openai")
+            provider = settings.llm_default_provider
+            model = settings.llm_default_model
 
         log.info(
             "llm_call", agent=agent, provider=provider, model=model, trace_id=trace_id
