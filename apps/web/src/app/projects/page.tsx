@@ -30,6 +30,8 @@ export default function ProjectsPage() {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<SortKey>("newest");
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     Promise.all([api.projects.list(PAGE_SIZE, 0), api.projects.stats()])
@@ -54,6 +56,18 @@ export default function ProjectsPage() {
       // silently ignore — user can retry
     } finally {
       setLoadingMore(false);
+    }
+  }
+
+  async function handleDelete(id: string) {
+    setDeleting(true);
+    try {
+      await api.projects.delete(id);
+      setProjects((prev) => prev.filter((p) => p.id !== id));
+      setStats((prev) => { const s = { ...prev }; delete s[id]; return s; });
+    } finally {
+      setDeleting(false);
+      setConfirmDeleteId(null);
     }
   }
 
@@ -159,12 +173,12 @@ export default function ProjectsPage() {
             {filtered.map((p) => {
               const st = stats[p.id];
               return (
-                <Link
-                  key={p.id}
-                  href={`/projects/${p.id}`}
-                  className="block p-5 bg-white rounded-xl shadow-sm border hover:border-blue-400 transition"
-                >
-                  <h2 className="font-semibold text-gray-800">{p.name}</h2>
+                <div key={p.id} className="relative group">
+                  <Link
+                    href={`/projects/${p.id}`}
+                    className="block p-5 bg-white rounded-xl shadow-sm border hover:border-blue-400 transition"
+                  >
+                  <h2 className="font-semibold text-gray-800 pr-8">{p.name}</h2>
                   {p.location && (
                     <p className="text-sm text-gray-500">{p.location}</p>
                   )}
@@ -214,7 +228,36 @@ export default function ProjectsPage() {
                       </span>
                     )}
                   </p>
-                </Link>
+                  </Link>
+
+                  {/* Delete button — visible on hover */}
+                  {confirmDeleteId === p.id ? (
+                    <div className="absolute top-3 right-3 flex items-center gap-1 bg-white border border-red-200 rounded-lg px-2 py-1 shadow-sm z-10">
+                      <span className="text-xs text-red-600 whitespace-nowrap">Изтрий?</span>
+                      <button
+                        onClick={(e) => { e.preventDefault(); handleDelete(p.id); }}
+                        disabled={deleting}
+                        className="text-xs font-medium text-white bg-red-500 hover:bg-red-600 px-2 py-0.5 rounded disabled:opacity-50"
+                      >
+                        {deleting ? "…" : "Да"}
+                      </button>
+                      <button
+                        onClick={(e) => { e.preventDefault(); setConfirmDeleteId(null); }}
+                        className="text-xs text-gray-500 hover:text-gray-700 px-1"
+                      >
+                        Не
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={(e) => { e.preventDefault(); setConfirmDeleteId(p.id); }}
+                      title="Изтрий проект"
+                      className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity text-gray-300 hover:text-red-500 p-1 rounded"
+                    >
+                      🗑
+                    </button>
+                  )}
+                </div>
               );
             })}
           </div>
