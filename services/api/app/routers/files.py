@@ -18,7 +18,14 @@ ALLOWED_MIMETYPES = {
     "application/pdf",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     "application/msword",
+    # MPP — MS Project (Windows sends various MIME types for .mpp)
     "application/vnd.ms-project",
+    "application/msproj",
+    "application/x-project",
+    "application/x-msproject",
+    "application/x-dos_ms_project",
+    "application/mpp",
+    "application/octet-stream",
     # Excel formats (needed for schedule uploads)
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     "application/vnd.ms-excel",
