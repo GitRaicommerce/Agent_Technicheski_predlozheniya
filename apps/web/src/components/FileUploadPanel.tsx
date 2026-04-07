@@ -169,43 +169,75 @@ export default function FileUploadPanel({ projectId, module }: Props) {
     setUploading(false);
   };
 
-  // XHR upload with progress tracking
-  const xhrUpload = (file: File, tempKey: string): Promise<UploadedFile> =>
-    new Promise((resolve, reject) => {
+  // Chunked upload — splits file into 1.5 MB pieces so each request stays
+  // well under the GitHub Codespaces reverse-proxy body-size limit.
+  const CHUNK_SIZE = 1.5 * 1024 * 1024; // 1.5 MB
+
+  const xhrUpload = async (file: File, tempKey: string): Promise<UploadedFile> => {
+    const uploadId = crypto.randomUUID();
+    const totalChunks = Math.max(1, Math.ceil(file.size / CHUNK_SIZE));
+
+    // Upload each chunk via XHR for per-chunk progress tracking
+    for (let i = 0; i < totalChunks; i++) {
+      const start = i * CHUNK_SIZE;
+      const end = Math.min(start + CHUNK_SIZE, file.size);
+      const chunk = file.slice(start, end);
+
       const form = new FormData();
-      form.append("module", module as string);
-      form.append("file", file);
+      form.append("upload_id", uploadId);
+      form.append("chunk_index", String(i));
+      form.append("total_chunks", String(totalChunks));
+      form.append("chunk", chunk, file.name);
 
-      const xhr = new XMLHttpRequest();
-      xhr.open("POST", `/api/v1/files/${projectId}/upload`);
+      await new Promise<void>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open("POST", `/api/v1/files/${projectId}/upload-chunk`);
 
-      xhr.upload.onprogress = (e) => {
-        if (e.lengthComputable) {
-          const pct = Math.round((e.loaded / e.total) * 100);
-          setUploadProgress((prev) => ({ ...prev, [tempKey]: pct }));
-        }
-      };
-
-      xhr.onload = () => {
-        if (xhr.status >= 200 && xhr.status < 300) {
-          try {
-            resolve(JSON.parse(xhr.responseText));
-          } catch {
-            reject(new Error("Невалиден отговор от сървъра"));
+        xhr.upload.onprogress = (e) => {
+          if (e.lengthComputable) {
+            const chunkFraction = e.loaded / e.total;
+            const pct = Math.round(((i + chunkFraction) / totalChunks) * 95);
+            setUploadProgress((prev) => ({ ...prev, [tempKey]: pct }));
           }
-        } else {
-          try {
-            const err = JSON.parse(xhr.responseText);
-            reject(new Error(err.detail || `Upload error ${xhr.status}`));
-          } catch {
-            reject(new Error(`Upload error ${xhr.status}`));
-          }
-        }
-      };
+        };
 
-      xhr.onerror = () => reject(new Error("Мрежова грешка при качване"));
-      xhr.send(form);
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            resolve();
+          } else {
+            try {
+              const err = JSON.parse(xhr.responseText);
+              reject(new Error(err.detail || `Upload error ${xhr.status}`));
+            } catch {
+              reject(new Error(`Upload error ${xhr.status}`));
+            }
+          }
+        };
+        xhr.onerror = () => reject(new Error("Мрежова грешка при качване"));
+        xhr.send(form);
+      });
+    }
+
+    // Finalize — small form request, assembles chunks on server
+    setUploadProgress((prev) => ({ ...prev, [tempKey]: 98 }));
+    const finalForm = new FormData();
+    finalForm.append("upload_id", uploadId);
+    finalForm.append("total_chunks", String(totalChunks));
+    finalForm.append("filename", file.name);
+    finalForm.append("module", module as string);
+    finalForm.append("content_type", file.type || "application/octet-stream");
+
+    const res = await fetch(`/api/v1/files/${projectId}/upload-finalize`, {
+      method: "POST",
+      body: finalForm,
     });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: `Upload error ${res.status}` }));
+      throw new Error(err.detail || `Upload error ${res.status}`);
+    }
+    return res.json();
+  };
 
   const handleDeleteFile = async (fileId: string) => {
     try {

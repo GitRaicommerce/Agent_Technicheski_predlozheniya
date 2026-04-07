@@ -109,6 +109,109 @@ async def upload_file(
     return project_file
 
 
+@router.post("/{project_id}/upload-chunk", status_code=200)
+async def upload_chunk(
+    project_id: str,
+    upload_id: str = Form(...),
+    chunk_index: int = Form(...),
+    total_chunks: int = Form(...),
+    chunk: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+):
+    """Accept a single chunk and store it in MinIO temp storage."""
+    project = await db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    data = await chunk.read()
+    chunk_key = f"temp/{upload_id}/{chunk_index:05d}"
+    await storage.put_object(chunk_key, data, "application/octet-stream")
+    return {"received": chunk_index, "total": total_chunks}
+
+
+@router.post(
+    "/{project_id}/upload-finalize",
+    response_model=FileResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def upload_finalize(
+    project_id: str,
+    upload_id: str = Form(...),
+    total_chunks: int = Form(...),
+    filename: str = Form(...),
+    module: str = Form(...),
+    content_type: str = Form(...),
+    db: AsyncSession = Depends(get_db),
+):
+    """Assemble uploaded chunks, create the file record and enqueue ingestion."""
+    if module not in ALLOWED_MODULES:
+        raise HTTPException(
+            status_code=400, detail=f"Invalid module. Must be one of: {ALLOWED_MODULES}"
+        )
+    project = await db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    if content_type not in ALLOWED_MIMETYPES:
+        raise HTTPException(
+            status_code=415,
+            detail=f"Unsupported file type '{content_type}'. Allowed: PDF, DOCX, DOC, MPP, XLSX, XLS.",
+        )
+
+    # Assemble chunks from MinIO
+    parts: list[bytes] = []
+    for i in range(total_chunks):
+        chunk_key = f"temp/{upload_id}/{i:05d}"
+        parts.append(await storage.get_object(chunk_key))
+    content = b"".join(parts)
+
+    # Clean up temp chunks (best-effort)
+    for i in range(total_chunks):
+        try:
+            await storage.delete_object(f"temp/{upload_id}/{i:05d}")
+        except Exception:
+            pass
+
+    MAX_FILE_SIZE = 50 * 1024 * 1024  # 50 MB
+    if len(content) > MAX_FILE_SIZE:
+        raise HTTPException(status_code=413, detail="File too large. Maximum size is 50 MB.")
+
+    file_hash = hashlib.sha256(content).hexdigest()
+    file_id = str(uuid.uuid4())
+    storage_key = f"projects/{project_id}/{module}/{file_id}/{filename}"
+
+    await storage.put_object(storage_key, content, content_type)
+
+    project_file = ProjectFile(
+        id=file_id,
+        project_id=project_id,
+        module=module,
+        filename=filename,
+        storage_key=storage_key,
+        file_hash=file_hash,
+        ingest_status="pending",
+    )
+    db.add(project_file)
+    await db.flush()
+
+    from app.ingestion.worker import enqueue_ingest
+
+    enqueue_ingest(file_id)
+
+    if module in ("tender_docs", "examples", "legislation"):
+        await db.execute(
+            update(Generation)
+            .where(
+                Generation.project_id == project_id,
+                Generation.evidence_status == "ok",
+            )
+            .values(evidence_status="stale")
+        )
+
+    await db.refresh(project_file)
+    return project_file
+
+
 @router.get("/{project_id}/files", response_model=list[FileResponse])
 async def list_files(
     project_id: str,
