@@ -1,6 +1,23 @@
 // Empty string = use relative URLs proxied through Next.js (works in Codespaces + local)
 const API_URL = "";
 
+/**
+ * Returns the base URL for file uploads.
+ * In GitHub Codespaces the port-3000 forwarding proxy imposes a request-body
+ * limit, so we upload directly to port 8000 (the FastAPI server).
+ * Locally the relative URL goes via the Next.js Route Handler (no size limit).
+ */
+function uploadBaseUrl(): string {
+  if (typeof window === "undefined") return "";
+  const { hostname, protocol } = window.location;
+  // GitHub Codespaces hostnames look like: <name>-3000.app.github.dev
+  if (hostname.endsWith(".app.github.dev")) {
+    const apiHost = hostname.replace(/-\d+\.app\.github\.dev$/, "-8000.app.github.dev");
+    return `${protocol}//${apiHost}`;
+  }
+  return ""; // local dev: relative URL → Next.js Route Handler
+}
+
 export class RateLimitError extends Error {
   retryAfter: number;
   constructor(retryAfter: number) {
@@ -164,7 +181,7 @@ export const api = {
       const form = new FormData();
       form.append("module", module);
       form.append("file", file);
-      const res = await fetch(`${API_URL}/api/v1/files/${project_id}/upload`, {
+      const res = await fetch(`${uploadBaseUrl()}/api/v1/files/${project_id}/upload`, {
         method: "POST",
         body: form,
       });

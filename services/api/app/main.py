@@ -26,6 +26,8 @@ app.add_middleware(SlowAPIMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
+    # Allow any GitHub Codespaces forwarded-port URL (e.g. <name>-3000.app.github.dev)
+    allow_origin_regex=r"https://.*-\d+\.app\.github\.dev",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
