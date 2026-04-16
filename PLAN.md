@@ -27,6 +27,7 @@
 - Added `.githooks/pre-commit`, `.githooks/pre-push`, and `.githooks/run-docs`.
 - Added CI validation for generated docs.
 - Added GitHub workflow `docs-sync.yml` to keep generated docs in sync after push.
+- Aligned the shared frontend API client with the real backend endpoints, response shapes, and error handling used by the project flows.
 
 ## Active Goals
 
@@ -38,10 +39,9 @@
 ## Next Recommended Steps
 
 1. Expand generated documentation with more precise backend endpoint and workflow coverage.
-2. Fix contract mismatches between frontend and backend APIs.
-3. Add real frontend and integration-style tests for the critical user flows, especially project creation, editing, listing, chat, file upload, generations, and export.
-4. Build regression coverage around the frontend so changes in one area are checked against breakage in other core flows.
-5. Improve engineering docs for architecture, runbooks, and testing strategy.
+2. Add real frontend and integration-style tests for the critical user flows, especially project creation, editing, listing, chat, file upload, generations, and export.
+3. Build regression coverage around the frontend so changes in one area are checked against breakage in other core flows.
+4. Improve engineering docs for architecture, runbooks, and testing strategy.
 
 ## Notes
 

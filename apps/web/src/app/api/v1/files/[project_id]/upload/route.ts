@@ -22,7 +22,7 @@ export async function POST(
       "content-type": request.headers.get("content-type") ?? "",
     },
     // Required for streaming request body in Node.js fetch
-    // @ts-ignore
+    // @ts-expect-error Node.js fetch requires duplex for streamed request bodies.
     duplex: "half",
   });
 

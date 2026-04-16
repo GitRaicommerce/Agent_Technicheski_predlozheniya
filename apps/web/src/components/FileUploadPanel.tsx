@@ -37,7 +37,7 @@ interface UploadedFile {
   id: string;
   filename: string;
   ingest_status: string;
-  ingest_error?: string;
+  ingest_error?: string | null;
 }
 
 interface Props {
@@ -47,6 +47,20 @@ interface Props {
 
 const POLL_INTERVAL_MS = 3000;
 const TERMINAL_STATUSES = new Set(["done", "error"]);
+
+function normalizeUploadedFile(file: {
+  id: string;
+  filename: string;
+  ingest_status: string;
+  ingest_error?: string | null;
+}): UploadedFile {
+  return {
+    id: file.id,
+    filename: file.filename,
+    ingest_status: file.ingest_status,
+    ingest_error: file.ingest_error ?? null,
+  };
+}
 
 export default function FileUploadPanel({ projectId, module }: Props) {
   const [files, setFiles] = useState<UploadedFile[]>([]);
@@ -68,16 +82,7 @@ export default function FileUploadPanel({ projectId, module }: Props) {
   useEffect(() => {
     api.files
       .list(projectId, module)
-      .then((loaded) =>
-        setFiles(
-          loaded.map((f) => ({
-            id: f.id,
-            filename: f.filename,
-            ingest_status: f.ingest_status,
-            ingest_error: f.ingest_error,
-          })),
-        ),
-      )
+      .then((loaded) => setFiles(loaded.map(normalizeUploadedFile)))
       .catch((err: unknown) => setError(err instanceof Error ? err.message : "Грешка при зареждане на файловете."));
   }, [projectId, module]);
 
@@ -99,7 +104,7 @@ export default function FileUploadPanel({ projectId, module }: Props) {
         setFiles((current) =>
           current.map((f) => {
             const r = results.find((x) => x?.id === f.id);
-            return r ? { ...f, ...r.updated } : f;
+            return r ? normalizeUploadedFile(r.updated) : f;
           }),
         );
       });
@@ -219,7 +224,7 @@ export default function FileUploadPanel({ projectId, module }: Props) {
     }
 
     // Finalize — small form request, assembles chunks on server
-    setUploadProgress((prev) => ({ ...prev, [tempKey]: 98 }));
+      setUploadProgress((prev) => ({ ...prev, [tempKey]: 98 }));
     const finalForm = new FormData();
     finalForm.append("upload_id", uploadId);
     finalForm.append("total_chunks", String(totalChunks));
@@ -236,7 +241,8 @@ export default function FileUploadPanel({ projectId, module }: Props) {
       const err = await res.json().catch(() => ({ detail: `Upload error ${res.status}` }));
       throw new Error(err.detail || `Upload error ${res.status}`);
     }
-    return res.json();
+    const uploaded = (await res.json()) as UploadedFile;
+    return normalizeUploadedFile(uploaded);
   };
 
   const handleDeleteFile = async (fileId: string) => {
