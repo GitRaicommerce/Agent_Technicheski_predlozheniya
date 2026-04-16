@@ -33,15 +33,19 @@
 1. Keep documentation as a reliable source of truth tied to the real repository state.
 2. Reduce drift between code, documentation, and workflows.
 3. Continue stabilizing the codebase after the documentation foundation is in place.
+4. Add real regression protection so fixing one area does not silently break another.
 
 ## Next Recommended Steps
 
 1. Expand generated documentation with more precise backend endpoint and workflow coverage.
 2. Fix contract mismatches between frontend and backend APIs.
-3. Improve engineering docs for architecture, runbooks, and testing strategy.
-4. Review the main user flows and cover missing risky paths with tests.
+3. Add real frontend and integration-style tests for the critical user flows, especially project creation, editing, listing, chat, file upload, generations, and export.
+4. Build regression coverage around the frontend so changes in one area are checked against breakage in other core flows.
+5. Improve engineering docs for architecture, runbooks, and testing strategy.
 
 ## Notes
 
 - `env.txt` is intentionally not tracked.
 - This file is the shared working plan and should be updated as decisions and priorities change.
+- Frontend stability is now a top priority because the UI has been breaking repeatedly.
+- The goal is not only to fix current issues, but to create test coverage that gives confidence against regressions.
