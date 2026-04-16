@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+.githooks/run-docs
+
+if ! git diff --quiet -- docs/ENGINEERING_OVERVIEW.md; then
+  echo "Documentation changed during pre-push. Review and commit docs/ENGINEERING_OVERVIEW.md before pushing."
+  exit 1
+fi

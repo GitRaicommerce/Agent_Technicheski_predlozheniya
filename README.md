@@ -1,70 +1,43 @@
-# 🏗️ TP AI — Технически Предложения
+# TP AI
 
-AI асистент за съставяне на Технически предложения (ТП) за обществени поръчки за проектиране, инженеринг или изпълнение на СМР.
+AI асистент за изготвяне на технически предложения за обществени поръчки в строителство, инженеринг и проектиране.
 
-## Архитектура
+## Документация
 
-- **Оркестратор + 6 специализирани LLM агента** (Структура, График, Чернова, Примери, Законодателство, Верификатор)
-- **Детерминистичен ingest pipeline** — OCR / парсинг / chunking / pgvector ембединги, без LLM
-- **Evidence tracking** — всяка генерирана секция е свързана с конкретни документни фрагменти
-- **Pre-export gate** — блокира `.docx` експорт при липсваща информация или конфликти
-- **LLM Gateway** — единен интерфейс за OpenAI GPT-4o + Anthropic Claude (сменяеми)
-- **Закрепване на варианти** — потребителят избира кой от двата генерирани варианта влиза в документа
+- Основен инженерeн преглед: [docs/ENGINEERING_OVERVIEW.md](C:\Users\Admin\Agent_Technicheski_predlozheniya\docs\ENGINEERING_OVERVIEW.md)
+- Продуктова спецификация: `docs/TP_AI_Agent_Prompt_Architecture_v1.3.docx`
+- Пътна карта и насоки: `docs/TP_AI_Пътна_карта_и_Насоки_2026-02-11_240d50.docx`
 
-Пълна спецификация: `docs/TP_AI_Agent_Prompt_Architecture_v1.3.docx`
+`docs/ENGINEERING_OVERVIEW.md` е генериран файл и е източникът на истина за:
 
----
+- реалните версии на основните технологии;
+- структурата на repo-то;
+- backend router-и и test inventory;
+- docker услугите и CI automation.
 
-## Бърз старт (GitHub Codespaces)
+## Стартиране
 
-### 1. Добавяне на API ключове
-
-В GitHub → **Settings → Codespaces → Secrets**, добавете:
-
-| Секрет | Откъде |
-|--------|--------|
-| `OPENAI_API_KEY` | https://platform.openai.com/api-keys |
-| `ANTHROPIC_API_KEY` | https://console.anthropic.com/settings/keys |
-
-### 2. Стартиране на Codespace
-
-Натиснете зеления бутон **"Code" → "Codespaces" → "Create codespace on main"**.
-
-При първо стартиране (~3–5 мин) средата автоматично:
-- Стартира всички Docker services (PostgreSQL 16 + pgvector, Redis, MinIO, API, Worker, Frontend)
-- Прилага Alembic миграциите
-- Инсталира npm зависимостите
-
-### 3. Достъп
-
-| Услуга | URL |
-|--------|-----|
-| **Frontend** | http://localhost:3000 |
-| **API Docs** | http://localhost:8000/docs |
-| **MinIO Console** | http://localhost:9001 (minioadmin / minioadmin) |
-
----
-
-## Локална разработка (без Codespaces)
+### Локално
 
 ```bash
-# 1. Копирайте .env и попълнете API ключовете
 cp .env.example .env
-
-# 2. Стартирайте инфраструктурата + backend + worker + frontend
 docker compose -f docker-compose.dev.yml up -d
-
-# 3. Приложете DB миграциите
 bash migrate.sh
-
-# Или стартирайте само backend services и frontend отделно:
-docker compose -f docker-compose.dev.yml up -d postgres redis minio api worker
-cd apps/web && npm install && npm run dev
 ```
 
----
+Достъп:
+
+- Frontend: `http://localhost:3000`
+- API docs: `http://localhost:8000/docs`
+- MinIO Console: `http://localhost:9001`
+
+### GitHub Codespaces
+
+Добави `OPENAI_API_KEY` и/или `ANTHROPIC_API_KEY` в GitHub Codespaces secrets, после стартирай codespace върху `main`.
 
 ## Тестове
+
+### Backend
 
 ```bash
 cd services/api
@@ -72,55 +45,25 @@ pip install -r requirements.txt
 python -m pytest tests/ -v
 ```
 
-21 unit теста покриват: `/health` (с DB + Redis mocking), Projects CRUD, Files endpoints, Agents chat/outline.
+### Frontend
 
----
-
-## Структура на проекта
-
-```
-.devcontainer/          # GitHub Codespaces конфигурация
-apps/web/               # Frontend (Next.js 15, React 19, Tailwind CSS 4)
-services/
-└── api/                # Backend (FastAPI + SQLAlchemy async)
-    ├── app/
-    │   ├── core/       # Config, DB, LLM Gateway, embedding, storage
-    │   ├── routers/    # REST endpoints (projects, files, agents, export)
-    │   ├── agents/     # LLM агенти + промпт шаблони
-    │   ├── ingestion/  # Парсъри, OCR, chunking, RQ worker
-    │   └── export/     # DOCX генерация (python-docx)
-    ├── alembic/        # DB миграции (3 версии)
-    └── tests/          # pytest unit тестове
-packages/schemas/       # JSON схеми за агентски отговори
-docs/                   # Спецификация и документация
+```bash
+cd apps/web
+npm ci
+npx tsc --noEmit
+npm run lint
 ```
 
----
+## Автоматизация на документацията
 
-## Технологии
+Документацията се поддържа автоматично на две нива:
 
-| Компонент | Технология |
-|-----------|-----------|
-| Frontend | Next.js 15, React 19, Tailwind CSS 4 |
-| Backend | FastAPI, SQLAlchemy 2 (async), asyncpg |
-| Database | PostgreSQL 16 + pgvector (1536-dim embeddings) |
-| LLM | OpenAI GPT-4o + Anthropic Claude (LLM Gateway) |
-| Queue | Redis + RQ |
-| Storage | MinIO (S3-compatible) |
-| OCR | Tesseract (bul + eng) |
-| DOCX | python-docx |
-| Schedule | mpxj (Java/JRE) за .mpp файлове |
-| Rate limiting | slowapi (200/min глобален, 20/min за /chat) |
-| Dev | GitHub Codespaces + GitHub Copilot |
+- `pre-commit` hook регенерира `docs/ENGINEERING_OVERVIEW.md` преди всеки commit;
+- `pre-push` hook проверява дали няма нерегенерирани промени;
+- GitHub Action при `push` регенерира документацията и я commit-ва обратно, ако е изостанала.
 
----
+Ръчно регенериране:
 
-## Пътна карта
-
-| Фаза | Описание | Статус |
-|------|----------|--------|
-| 0 | Scaffold + схеми + DB + ingest pipeline + embeddings | ✅ Готово |
-| 1 | Оркестратор + Структура + График + LLM history | ✅ Готово |
-| 2 | Чернова + Верификатор + Evidence lifecycle + закрепване | ✅ Готово |
-| 3 | Pre-export gate + DOCX експорт + Outline UI | ✅ Готово |
-| 4 | Тестове + CI/CD + мащабиране | 🔄 В ход |
+```bash
+py -3 scripts/generate_docs.py
+```

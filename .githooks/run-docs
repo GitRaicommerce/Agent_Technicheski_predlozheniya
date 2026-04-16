@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if command -v py >/dev/null 2>&1; then
+  py -3 scripts/generate_docs.py
+elif command -v python3 >/dev/null 2>&1; then
+  python3 scripts/generate_docs.py
+elif command -v python >/dev/null 2>&1; then
+  python scripts/generate_docs.py
+else
+  echo "No Python interpreter found for documentation generation."
+  exit 1
+fi

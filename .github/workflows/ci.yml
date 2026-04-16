@@ -7,6 +7,24 @@ on:
     branches: [main]
 
 jobs:
+  docs-check:
+    name: Docs sync check
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Regenerate docs
+        run: python scripts/generate_docs.py
+
+      - name: Verify generated docs are committed
+        run: git diff --exit-code -- docs/ENGINEERING_OVERVIEW.md
+
   test:
     name: pytest (Python 3.11)
     runs-on: ubuntu-latest

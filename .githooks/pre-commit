@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+.githooks/run-docs
+git add docs/ENGINEERING_OVERVIEW.md
