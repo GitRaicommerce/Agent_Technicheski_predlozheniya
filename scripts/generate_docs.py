@@ -55,7 +55,14 @@ def parse_services(compose_text: str) -> list[str]:
 def top_level_tree() -> list[str]:
     items: list[str] = []
     for path in sorted(ROOT.iterdir(), key=lambda p: (not p.is_dir(), p.name.lower())):
-        if path.name in {".git", ".next", "node_modules", "__pycache__"}:
+        if path.name in {
+            ".git",
+            ".next",
+            "node_modules",
+            "__pycache__",
+            ".env",
+            "env.txt",
+        }:
             continue
         suffix = "/" if path.is_dir() else ""
         items.append(f"- `{path.name}{suffix}`")
