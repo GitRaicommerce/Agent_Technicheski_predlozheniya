@@ -21,17 +21,23 @@ export default function GenerationsPanel({ projectId }: Props) {
       .listGenerations(projectId)
       .then(setSections)
       .catch((e: unknown) =>
-        setError(e instanceof Error ? e.message : "Грешка при зареждане.")
+        setError(e instanceof Error ? e.message : "Р“СЂРµС€РєР° РїСЂРё Р·Р°СЂРµР¶РґР°РЅРµ."),
       )
       .finally(() => setLoading(false));
   }, [projectId]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+  }, [load]);
 
   const toggleSection = (uid: string) => {
     setExpanded((prev) => {
       const next = new Set(prev);
-      if (next.has(uid)) { next.delete(uid); } else { next.add(uid); }
+      if (next.has(uid)) {
+        next.delete(uid);
+      } else {
+        next.add(uid);
+      }
       return next;
     });
   };
@@ -40,10 +46,9 @@ export default function GenerationsPanel({ projectId }: Props) {
     setRegenerating(sectionUid);
     try {
       await api.agents.regenerateSection(projectId, sectionUid);
-      // reload to show the new variants
       await api.agents.listGenerations(projectId).then(setSections);
     } catch {
-      // ignore — user can retry
+      // ignore - user can retry
     } finally {
       setRegenerating(null);
     }
@@ -52,7 +57,7 @@ export default function GenerationsPanel({ projectId }: Props) {
   if (loading) {
     return (
       <p className="text-xs text-gray-400 py-2 animate-pulse">
-        Зарежда генерациите...
+        Р—Р°СЂРµР¶РґР° РіРµРЅРµСЂР°С†РёРёС‚Рµ...
       </p>
     );
   }
@@ -62,7 +67,7 @@ export default function GenerationsPanel({ projectId }: Props) {
       <div className="space-y-1">
         <p className="text-xs text-red-400">{error}</p>
         <button onClick={load} className="text-xs text-blue-500 hover:underline">
-          ↺ Опитай отново
+          в†є РћРїРёС‚Р°Р№ РѕС‚РЅРѕРІРѕ
         </button>
       </div>
     );
@@ -72,10 +77,10 @@ export default function GenerationsPanel({ projectId }: Props) {
     return (
       <div className="space-y-1">
         <p className="text-xs text-gray-400 leading-relaxed">
-          Няма генерирани текстове. Поискайте от TP AI да генерира раздел от ТП-то.
+          РќСЏРјР° РіРµРЅРµСЂРёСЂР°РЅРё С‚РµРєСЃС‚РѕРІРµ. РџРѕРёСЃРєР°Р№С‚Рµ РѕС‚ TP AI РґР° РіРµРЅРµСЂРёСЂР° СЂР°Р·РґРµР» РѕС‚ РўРџ-С‚Рѕ.
         </p>
         <button onClick={load} className="text-xs text-blue-500 hover:underline">
-          ↺ Обнови
+          в†є РћР±РЅРѕРІРё
         </button>
       </div>
     );
@@ -84,48 +89,46 @@ export default function GenerationsPanel({ projectId }: Props) {
   return (
     <div className="space-y-1">
       <div className="flex justify-between items-center mb-1">
-        <span className="text-xs text-gray-400">{sections.length} раздела</span>
+        <span className="text-xs text-gray-400">{sections.length} СЂР°Р·РґРµР»Р°</span>
         <button
           onClick={load}
           className="text-xs text-gray-400 hover:text-blue-500 transition"
-          title="Обнови"
+          title="РћР±РЅРѕРІРё"
         >
-          ↺
+          в†є
         </button>
       </div>
 
       {sections.map((sec) => {
         const isOpen = expanded.has(sec.section_uid);
-        // Show the selected variant, or the first one
-        const displayVariant = sec.variants.find((v) => v.selected) ?? sec.variants[0];
+        const displayVariant =
+          sec.variants.find((v) => v.selected) ?? sec.variants[0];
 
         return (
           <div key={sec.section_uid} className="border rounded-lg overflow-hidden">
-            {/* Section header */}
-            <button
-              onClick={() => toggleSection(sec.section_uid)}
-              className="w-full flex items-start justify-between px-3 py-2 text-left bg-gray-50 hover:bg-gray-100 transition"
-            >
-              <p className="text-xs font-medium text-gray-700 flex-1 min-w-0 truncate pr-2">
-                {sec.section_title || sec.section_uid.slice(0, 8) + "…"}
-              </p>
+            <div className="flex items-start justify-between px-3 py-2 bg-gray-50 hover:bg-gray-100 transition">
+              <button
+                onClick={() => toggleSection(sec.section_uid)}
+                className="flex-1 min-w-0 text-left"
+              >
+                <p className="text-xs font-medium text-gray-700 truncate pr-2">
+                  {sec.section_title || `${sec.section_uid.slice(0, 8)}вЂ¦`}
+                </p>
+              </button>
               <div className="flex items-center gap-1 shrink-0">
                 <button
-                  onClick={(e) => { e.stopPropagation(); handleRegenerate(sec.section_uid); }}
+                  onClick={() => handleRegenerate(sec.section_uid)}
                   disabled={regenerating === sec.section_uid}
                   className="px-1.5 py-0.5 text-xs rounded bg-amber-100 text-amber-700 hover:bg-amber-200 disabled:opacity-50 transition"
-                  title="Регенерирай раздела"
+                  title="Р РµРіРµРЅРµСЂРёСЂР°Р№ СЂР°Р·РґРµР»Р°"
                 >
-                  {regenerating === sec.section_uid ? "…" : "↻"}
+                  {regenerating === sec.section_uid ? "вЂ¦" : "в†»"}
                 </button>
-                <span className="text-gray-400 text-xs">{isOpen ? "▾" : "▸"}</span>
+                <span className="text-gray-400 text-xs">{isOpen ? "в–ѕ" : "в–ё"}</span>
               </div>
-            </button>
+            </div>
 
-            {/* Text */}
-            {isOpen && displayVariant && (
-              <SectionText variant={displayVariant} />
-            )}
+            {isOpen && displayVariant && <SectionText variant={displayVariant} />}
           </div>
         );
       })}
@@ -141,14 +144,14 @@ function SectionText({ variant }: { variant: Generation }) {
   return (
     <div className="px-3 py-3 bg-white">
       <p className="text-xs text-gray-700 leading-relaxed whitespace-pre-wrap">
-        {expanded || !isLong ? variant.text : variant.text.slice(0, previewLen) + "…"}
+        {expanded || !isLong ? variant.text : `${variant.text.slice(0, previewLen)}вЂ¦`}
       </p>
       {isLong && (
         <button
           onClick={() => setExpanded((v) => !v)}
           className="mt-2 text-xs text-blue-500 hover:underline"
         >
-          {expanded ? "▴ Скрий" : "▾ Виж целия текст"}
+          {expanded ? "в–ґ РЎРєСЂРёР№" : "в–ѕ Р’РёР¶ С†РµР»РёСЏ С‚РµРєСЃС‚"}
         </button>
       )}
     </div>

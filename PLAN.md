@@ -28,6 +28,8 @@
 - Added CI validation for generated docs.
 - Added GitHub workflow `docs-sync.yml` to keep generated docs in sync after push.
 - Aligned the shared frontend API client with the real backend endpoints, response shapes, and error handling used by the project flows.
+- Added a frontend unit test setup with Vitest and Testing Library for the first critical project flows.
+- Expanded frontend regression tests to cover project details editing/deletion, chat interactions, generation pinning, rate limiting, and DOCX export behavior.
 
 ## Active Goals
 
@@ -39,8 +41,8 @@
 ## Next Recommended Steps
 
 1. Expand generated documentation with more precise backend endpoint and workflow coverage.
-2. Add real frontend and integration-style tests for the critical user flows, especially project creation, editing, listing, chat, file upload, generations, and export.
-3. Build regression coverage around the frontend so changes in one area are checked against breakage in other core flows.
+2. Extend frontend and integration-style tests to the remaining critical user flows: file upload, generations panel behavior, schedule handling, outline approval, and end-to-end export readiness.
+3. Build broader regression coverage around the frontend so changes in one area are checked against breakage in other core flows.
 4. Improve engineering docs for architecture, runbooks, and testing strategy.
 
 ## Notes

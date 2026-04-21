@@ -80,21 +80,30 @@ TP AI is a monorepo for an AI-assisted workflow that prepares technical proposal
   - `apps/web/src/app/projects/`
     - `apps/web/src/app/projects/[id]/`
     - `apps/web/src/app/projects/new/`
+    - `apps/web/src/app/projects/page.test.tsx`
     - `apps/web/src/app/projects/page.tsx`
   - `apps/web/src/app/favicon.ico`
   - `apps/web/src/app/globals.css`
   - `apps/web/src/app/layout.tsx`
   - `apps/web/src/app/page.tsx`
 - `apps/web/src/components/`
+  - `apps/web/src/components/ChatPanel.test.tsx`
   - `apps/web/src/components/ChatPanel.tsx`
+  - `apps/web/src/components/ExportButton.test.tsx`
   - `apps/web/src/components/ExportButton.tsx`
+  - `apps/web/src/components/FileUploadPanel.test.tsx`
   - `apps/web/src/components/FileUploadPanel.tsx`
+  - `apps/web/src/components/GenerationsPanel.test.tsx`
   - `apps/web/src/components/GenerationsPanel.tsx`
+  - `apps/web/src/components/OutlinePanel.test.tsx`
   - `apps/web/src/components/OutlinePanel.tsx`
+  - `apps/web/src/components/SchedulePanel.test.tsx`
   - `apps/web/src/components/SchedulePanel.tsx`
   - `apps/web/src/components/ToastProvider.tsx`
 - `apps/web/src/lib/`
   - `apps/web/src/lib/api.ts`
+- `apps/web/src/test/`
+  - `apps/web/src/test/setup.ts`
 - `services/api/app/agents/`
   - `services/api/app/agents/__init__.py`
   - `services/api/app/agents/drafting.py`
