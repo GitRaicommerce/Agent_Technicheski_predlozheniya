@@ -48,6 +48,7 @@ export default function NewProjectPage() {
             </label>
             <input
               required
+              data-testid="project-name-input"
               className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
@@ -59,6 +60,7 @@ export default function NewProjectPage() {
               Местоположение
             </label>
             <input
+              data-testid="project-location-input"
               className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               value={form.location}
               onChange={(e) => setForm({ ...form, location: e.target.value })}
@@ -71,6 +73,7 @@ export default function NewProjectPage() {
             </label>
             <textarea
               rows={3}
+              data-testid="project-description-input"
               className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               value={form.description}
               onChange={(e) =>
@@ -84,6 +87,7 @@ export default function NewProjectPage() {
               Възложител
             </label>
             <input
+              data-testid="project-authority-input"
               className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               value={form.contracting_authority}
               onChange={(e) =>
@@ -98,6 +102,7 @@ export default function NewProjectPage() {
             </label>
             <input
               type="date"
+              data-testid="project-tender-date-input"
               className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               value={form.tender_date}
               onChange={(e) =>
@@ -111,6 +116,7 @@ export default function NewProjectPage() {
           <div className="flex gap-3 pt-2">
             <button
               type="submit"
+              data-testid="create-project-submit"
               disabled={loading}
               className="flex-1 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50"
             >

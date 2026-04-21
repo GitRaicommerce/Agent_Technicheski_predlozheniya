@@ -99,6 +99,7 @@ export default function ProjectsPage() {
           <h1 className="text-2xl font-bold text-gray-800">Моите проекти</h1>
           <Link
             href="/projects/new"
+            data-testid="new-project-link"
             className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700"
           >
             + Нов проект
@@ -176,6 +177,7 @@ export default function ProjectsPage() {
                 <div key={p.id} className="relative group">
                   <Link
                     href={`/projects/${p.id}`}
+                    data-testid={`project-card-${p.id}`}
                     className="block p-5 bg-white rounded-xl shadow-sm border hover:border-blue-400 transition"
                   >
                   <h2 className="font-semibold text-gray-800 pr-8">{p.name}</h2>

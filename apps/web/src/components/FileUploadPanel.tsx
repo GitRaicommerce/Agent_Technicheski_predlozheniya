@@ -272,6 +272,7 @@ export default function FileUploadPanel({ projectId, module }: Props) {
 
   return (
     <div
+      data-testid={`file-upload-panel-${module}`}
       className="border-2 border-dashed border-gray-200 rounded-xl p-4 bg-gray-50 hover:border-blue-300 transition"
       onDrop={handleDrop}
       onDragOver={(e) => e.preventDefault()}
@@ -284,6 +285,7 @@ export default function FileUploadPanel({ projectId, module }: Props) {
 
       <button
         onClick={() => inputRef.current?.click()}
+        data-testid={`file-upload-trigger-${module}`}
         disabled={uploading}
         className="w-full py-2 px-3 bg-white border rounded-lg text-sm text-blue-600 hover:bg-blue-50 disabled:opacity-50 transition"
       >
@@ -292,6 +294,7 @@ export default function FileUploadPanel({ projectId, module }: Props) {
       <input
         ref={inputRef}
         type="file"
+        data-testid={`file-upload-input-${module}`}
         accept={meta.accept}
         multiple
         className="hidden"
@@ -321,7 +324,7 @@ export default function FileUploadPanel({ projectId, module }: Props) {
       {files.length > 0 && (
         <ul className="mt-3 space-y-1">
           {files.map((f) => (
-            <li key={f.id} className="text-xs text-gray-600">
+            <li key={f.id} data-testid={`uploaded-file-${module}-${f.id}`} className="text-xs text-gray-600">
               <div className="flex justify-between items-center gap-1">
                 <span className="truncate max-w-36" title={f.filename}>
                   {f.filename}

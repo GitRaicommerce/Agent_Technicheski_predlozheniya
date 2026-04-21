@@ -130,6 +130,7 @@ export default function ProjectPage() {
           {!showEdit && (
             <button
               onClick={() => setShowDeleteConfirm(true)}
+              data-testid="project-delete-button"
               className="text-xs text-red-400 hover:text-red-600 hover:bg-red-50 px-2 py-0.5 rounded transition"
             >
               🗑 Изтрий
@@ -147,6 +148,7 @@ export default function ProjectPage() {
               <div className="flex gap-2 shrink-0">
                 <button
                   onClick={handleDelete}
+                  data-testid="project-delete-confirm"
                   disabled={deleting}
                   className="px-3 py-1 bg-red-600 text-white text-xs rounded-lg hover:bg-red-700 disabled:opacity-50"
                 >
@@ -170,18 +172,21 @@ export default function ProjectPage() {
           <div className="flex items-start gap-3">
             <div className="flex-1 space-y-2">
               <input
+                data-testid="project-edit-name-input"
                 className="w-full border rounded-lg px-3 py-1.5 text-sm font-semibold text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-400"
                 value={editData.name}
                 onChange={(e) => setEditData((d) => ({ ...d, name: e.target.value }))}
                 placeholder="Наименование на проекта"
               />
               <input
+                data-testid="project-edit-location-input"
                 className="w-full border rounded-lg px-3 py-1.5 text-sm text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-400"
                 value={editData.location}
                 onChange={(e) => setEditData((d) => ({ ...d, location: e.target.value }))}
                 placeholder="Местоположение"
               />
               <input
+                data-testid="project-edit-authority-input"
                 className="w-full border rounded-lg px-3 py-1.5 text-sm text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-400"
                 value={editData.contracting_authority}
                 onChange={(e) => setEditData((d) => ({ ...d, contracting_authority: e.target.value }))}
@@ -189,6 +194,7 @@ export default function ProjectPage() {
               />
               <div className="flex gap-2">
                 <input
+                  data-testid="project-edit-tender-date-input"
                   className="flex-1 border rounded-lg px-3 py-1.5 text-sm text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-400"
                   type="date"
                   value={editData.tender_date}
@@ -196,6 +202,7 @@ export default function ProjectPage() {
                   title="Дата на подаване"
                 />
                 <input
+                  data-testid="project-edit-description-input"
                   className="flex-1 border rounded-lg px-3 py-1.5 text-sm text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-400"
                   value={editData.description}
                   onChange={(e) => setEditData((d) => ({ ...d, description: e.target.value }))}
@@ -209,6 +216,7 @@ export default function ProjectPage() {
             <div className="flex gap-2 pt-0.5">
               <button
                 onClick={handleSaveEdit}
+                data-testid="project-save-button"
                 disabled={saving || !editData.name.trim()}
                 className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50"
               >
@@ -233,6 +241,7 @@ export default function ProjectPage() {
               </div>
               <button
                 onClick={() => setShowEdit(true)}
+                data-testid="project-edit-button"
                 className="mt-0.5 text-gray-400 hover:text-gray-600 text-sm px-1.5 py-0.5 rounded hover:bg-gray-100"
                 title="Редактирай проекта"
               >
@@ -255,6 +264,7 @@ export default function ProjectPage() {
               {MODULES.map((m) => (
                 <button
                   key={m.key}
+                  data-testid={`module-toggle-${m.key}`}
                   onClick={() =>
                     setActiveModule((prev) => (prev === m.key ? null : m.key))
                   }
@@ -275,6 +285,7 @@ export default function ProjectPage() {
           <div className="border-b">
             <button
               onClick={() => setShowOutline((v) => !v)}
+              data-testid="outline-panel-toggle"
               className="w-full px-3 py-2.5 text-left text-sm font-semibold text-gray-700 flex justify-between items-center hover:bg-gray-50 transition"
             >
               <span>📐 Съдържание на ТП</span>
@@ -293,6 +304,7 @@ export default function ProjectPage() {
           <div className="border-b">
             <button
               onClick={() => setShowSchedule((v) => !v)}
+              data-testid="schedule-panel-toggle"
               className="w-full px-3 py-2.5 text-left text-sm font-semibold text-gray-700 flex justify-between items-center hover:bg-gray-50 transition"
             >
               <span>📅 Линеен график</span>
@@ -312,6 +324,7 @@ export default function ProjectPage() {
           <div className="border-b">
             <button
               onClick={() => setShowGenerations((v) => !v)}
+              data-testid="generations-panel-toggle"
               className="w-full px-3 py-2.5 text-left text-sm font-semibold text-gray-700 flex justify-between items-center hover:bg-gray-50 transition"
             >
               <span>📝 Генерации</span>

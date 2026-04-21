@@ -30,6 +30,7 @@
 - Aligned the shared frontend API client with the real backend endpoints, response shapes, and error handling used by the project flows.
 - Added a frontend unit test setup with Vitest and Testing Library for the first critical project flows.
 - Expanded frontend regression tests to cover project details editing/deletion, chat interactions, generation pinning, rate limiting, and DOCX export behavior.
+- Added browser-level smoke coverage with Playwright for real create/edit/delete project flows and file uploads against the live local stack.
 
 ## Active Goals
 
@@ -41,7 +42,7 @@
 ## Next Recommended Steps
 
 1. Expand generated documentation with more precise backend endpoint and workflow coverage.
-2. Extend frontend and integration-style tests to the remaining critical user flows: file upload, generations panel behavior, schedule handling, outline approval, and end-to-end export readiness.
+2. Extend browser smoke coverage toward outline approval, generation workflow, and export readiness once those flows are deterministic enough for automation.
 3. Build broader regression coverage around the frontend so changes in one area are checked against breakage in other core flows.
 4. Improve engineering docs for architecture, runbooks, and testing strategy.
 
@@ -51,3 +52,4 @@
 - This file is the shared working plan and should be updated as decisions and priorities change.
 - Frontend stability is now a top priority because the UI has been breaking repeatedly.
 - The goal is not only to fix current issues, but to create test coverage that gives confidence against regressions.
+- Current stability baseline for the web app now includes lint, TypeScript, Vitest regression coverage, and Playwright smoke tests on the live local environment.
