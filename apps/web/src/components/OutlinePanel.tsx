@@ -159,6 +159,7 @@ export default function OutlinePanel({ projectId }: Props) {
           <button
             onClick={handleUnlock}
             disabled={locking}
+            data-testid="outline-unlock-button"
             className="text-xs text-amber-600 hover:underline disabled:opacity-50"
           >
             🔓 Редактирай
@@ -172,6 +173,7 @@ export default function OutlinePanel({ projectId }: Props) {
           <button
             onClick={handleLock}
             disabled={locking}
+            data-testid="outline-lock-button"
             className="w-full py-1.5 px-3 bg-green-600 text-white text-xs rounded-lg hover:bg-green-700 disabled:opacity-50 transition"
           >
             {locking ? "Одобрява се..." : "✓ Одобри и генерирай"}

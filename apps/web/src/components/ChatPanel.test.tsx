@@ -134,4 +134,51 @@ describe("ChatPanel", () => {
 
     expect(await screen.findByRole("button", { name: /7s/ })).toBeInTheDocument();
   });
+
+  it("renders a UI notice from orchestrator actions and allows dismissing it", async () => {
+    chatMock.mockResolvedValue({
+      schema_version: "v1.3",
+      status: "ok",
+      trace_id: "trace-1",
+      assistant_message: "Notice delivered",
+      ui_actions: [
+        {
+          type: "show_notice",
+          payload: { message: "Outline is ready for review" },
+        },
+      ],
+      questions_to_user: [],
+    });
+
+    render(<ChatPanel projectId="project-1" />);
+
+    await userEvent.type(
+      screen.getByRole("textbox"),
+      "Check outline",
+    );
+    await userEvent.click(screen.getByRole("button", { name: /Изпрати/i }));
+
+    expect(await screen.findByText("Outline is ready for review")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /Затвори/i }));
+
+    await waitFor(() => {
+      expect(
+        screen.queryByText("Outline is ready for review"),
+      ).not.toBeInTheDocument();
+    });
+  });
+
+  it("loads persisted chat history from localStorage", () => {
+    localStorage.setItem(
+      "tp_chat_history_project-1",
+      JSON.stringify([
+        { role: "assistant", content: "Persisted response" },
+      ]),
+    );
+
+    render(<ChatPanel projectId="project-1" />);
+
+    expect(screen.getByText("Persisted response")).toBeInTheDocument();
+  });
 });

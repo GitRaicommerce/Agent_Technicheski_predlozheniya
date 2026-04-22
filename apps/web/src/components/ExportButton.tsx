@@ -46,13 +46,14 @@ export default function ExportButton({ projectId, projectName }: Props) {
       <button
         onClick={handleExport}
         disabled={loading}
+        data-testid="export-docx-button"
         className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50"
       >
         {loading ? "Генерира се..." : "Експорт .docx"}
       </button>
 
       {staleWarning && (
-        <p className="text-amber-600 text-xs mt-1 max-w-xs">
+        <p data-testid="export-stale-warning" className="text-amber-600 text-xs mt-1 max-w-xs">
           ⚠ Някои секции имат остаряло доказателство — качете актуализирани
           файлове или регенерирайте преди експорт.
         </p>

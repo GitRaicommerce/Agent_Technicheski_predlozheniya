@@ -47,8 +47,9 @@ function stringifyDetail(detail: unknown): string | null {
   if (typeof detail === "object") {
     const detailRecord = detail as JsonObject;
 
-    if (typeof detailRecord.detail === "string") {
-      return detailRecord.detail;
+    const nestedDetail = stringifyDetail(detailRecord.detail);
+    if (nestedDetail) {
+      return nestedDetail;
     }
 
     if (typeof detailRecord.message === "string") {

@@ -92,6 +92,7 @@ export default function GenerationsPanel({ projectId }: Props) {
         <span className="text-xs text-gray-400">{sections.length} СЂР°Р·РґРµР»Р°</span>
         <button
           onClick={load}
+          data-testid="generations-refresh-button"
           className="text-xs text-gray-400 hover:text-blue-500 transition"
           title="РћР±РЅРѕРІРё"
         >
@@ -109,6 +110,7 @@ export default function GenerationsPanel({ projectId }: Props) {
             <div className="flex items-start justify-between px-3 py-2 bg-gray-50 hover:bg-gray-100 transition">
               <button
                 onClick={() => toggleSection(sec.section_uid)}
+                data-testid={`generation-section-${sec.section_uid}`}
                 className="flex-1 min-w-0 text-left"
               >
                 <p className="text-xs font-medium text-gray-700 truncate pr-2">
@@ -119,6 +121,7 @@ export default function GenerationsPanel({ projectId }: Props) {
                 <button
                   onClick={() => handleRegenerate(sec.section_uid)}
                   disabled={regenerating === sec.section_uid}
+                  data-testid={`generation-regenerate-${sec.section_uid}`}
                   className="px-1.5 py-0.5 text-xs rounded bg-amber-100 text-amber-700 hover:bg-amber-200 disabled:opacity-50 transition"
                   title="Р РµРіРµРЅРµСЂРёСЂР°Р№ СЂР°Р·РґРµР»Р°"
                 >
