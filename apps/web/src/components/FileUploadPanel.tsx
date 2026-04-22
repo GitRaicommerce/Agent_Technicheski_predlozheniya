@@ -43,6 +43,10 @@ interface UploadedFile {
 interface Props {
   projectId: string;
   module: keyof typeof MODULE_LABELS;
+  onFileStatusChange?: (
+    file: UploadedFile,
+    module: keyof typeof MODULE_LABELS,
+  ) => void;
 }
 
 const POLL_INTERVAL_MS = 3000;
@@ -62,7 +66,11 @@ function normalizeUploadedFile(file: {
   };
 }
 
-export default function FileUploadPanel({ projectId, module }: Props) {
+export default function FileUploadPanel({
+  projectId,
+  module,
+  onFileStatusChange,
+}: Props) {
   const [files, setFiles] = useState<UploadedFile[]>([]);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<Record<string, number>>({});
@@ -70,6 +78,7 @@ export default function FileUploadPanel({ projectId, module }: Props) {
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const statusRef = useRef<Record<string, string>>({});
 
   const meta = MODULE_LABELS[module];
 
@@ -130,6 +139,25 @@ export default function FileUploadPanel({ projectId, module }: Props) {
       }
     };
   }, [files, pollPending]);
+
+  useEffect(() => {
+    const previousStatuses = statusRef.current;
+
+    for (const file of files) {
+      const previousStatus = previousStatuses[file.id];
+      if (
+        previousStatus &&
+        previousStatus !== file.ingest_status &&
+        TERMINAL_STATUSES.has(file.ingest_status)
+      ) {
+        onFileStatusChange?.(file, module);
+      }
+    }
+
+    statusRef.current = Object.fromEntries(
+      files.map((file) => [file.id, file.ingest_status]),
+    );
+  }, [files, module, onFileStatusChange]);
 
   const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault();

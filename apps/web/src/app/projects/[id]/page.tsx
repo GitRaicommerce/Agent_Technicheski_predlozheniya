@@ -40,6 +40,9 @@ export default function ProjectPage() {
   const [showOutline, setShowOutline] = useState(false);
   const [showSchedule, setShowSchedule] = useState(false);
   const [showGenerations, setShowGenerations] = useState(false);
+  const [outlineRefreshKey, setOutlineRefreshKey] = useState(0);
+  const [scheduleRefreshKey, setScheduleRefreshKey] = useState(0);
+  const [generationsRefreshKey, setGenerationsRefreshKey] = useState(0);
   const [showEdit, setShowEdit] = useState(false);
   const [editData, setEditData] = useState({ name: "", location: "", description: "", contracting_authority: "", tender_date: "" });
   const [saving, setSaving] = useState(false);
@@ -74,6 +77,25 @@ export default function ProjectPage() {
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [handleKeyDown]);
+
+  const handleFileStatusChange = useCallback(
+    (file: { ingest_status: string }, module: string) => {
+      if (file.ingest_status !== "done") {
+        return;
+      }
+
+      if (module === "schedule") {
+        setShowSchedule(true);
+        setScheduleRefreshKey((value) => value + 1);
+      }
+
+      if (module === "tender_docs") {
+        setShowOutline(true);
+        setOutlineRefreshKey((value) => value + 1);
+      }
+    },
+    [],
+  );
 
   async function handleSaveEdit() {
     if (!project) return;
@@ -295,7 +317,10 @@ export default function ProjectPage() {
             </button>
             {showOutline && (
               <div className="px-3 pb-3">
-                <OutlinePanel projectId={project.id} />
+                <OutlinePanel
+                  projectId={project.id}
+                  refreshKey={outlineRefreshKey}
+                />
               </div>
             )}
           </div>
@@ -314,8 +339,15 @@ export default function ProjectPage() {
             </button>
             {showSchedule && (
               <div className="px-3 pb-3 space-y-3">
-                <FileUploadPanel projectId={project.id} module="schedule" />
-                <SchedulePanel projectId={project.id} />
+                <FileUploadPanel
+                  projectId={project.id}
+                  module="schedule"
+                  onFileStatusChange={handleFileStatusChange}
+                />
+                <SchedulePanel
+                  projectId={project.id}
+                  refreshKey={scheduleRefreshKey}
+                />
               </div>
             )}
           </div>
@@ -334,7 +366,10 @@ export default function ProjectPage() {
             </button>
             {showGenerations && (
               <div className="px-3 pb-3">
-                <GenerationsPanel projectId={project.id} />
+                <GenerationsPanel
+                  projectId={project.id}
+                  refreshKey={generationsRefreshKey}
+                />
               </div>
             )}
           </div>
@@ -342,7 +377,11 @@ export default function ProjectPage() {
           {/* Active module upload panel */}
           {activeModule && (
             <div className="p-3 flex-1">
-              <FileUploadPanel projectId={project.id} module={activeModule} />
+              <FileUploadPanel
+                projectId={project.id}
+                module={activeModule}
+                onFileStatusChange={handleFileStatusChange}
+              />
             </div>
           )}
 
@@ -372,7 +411,17 @@ export default function ProjectPage() {
 
         {/* Right: Chat */}
         <div className="flex-1 p-4">
-          <ChatPanel projectId={project.id} />
+          <ChatPanel
+            projectId={project.id}
+            onOpenOutline={() => {
+              setShowOutline(true);
+              setOutlineRefreshKey((value) => value + 1);
+            }}
+            onOpenGenerations={() => {
+              setShowGenerations(true);
+              setGenerationsRefreshKey((value) => value + 1);
+            }}
+          />
         </div>
       </div>
     </main>

@@ -5,9 +5,10 @@ import { api, TpOutline, TpOutlineSection } from "@/lib/api";
 
 interface Props {
   projectId: string;
+  refreshKey?: number;
 }
 
-export default function OutlinePanel({ projectId }: Props) {
+export default function OutlinePanel({ projectId, refreshKey = 0 }: Props) {
   const [outline, setOutline] = useState<TpOutline | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -26,7 +27,7 @@ export default function OutlinePanel({ projectId }: Props) {
       .finally(() => setLoading(false));
   };
 
-  useEffect(() => { load(); }, [projectId]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { load(); }, [projectId, refreshKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleLock = async () => {
     if (!outline) return;

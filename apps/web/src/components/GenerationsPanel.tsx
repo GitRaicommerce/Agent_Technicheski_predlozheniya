@@ -1,13 +1,18 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { api, SectionGenerations, Generation } from "@/lib/api";
+import { useCallback, useEffect, useState } from "react";
+import { api, Generation, SectionGenerations } from "@/lib/api";
+import { repairLikelyMojibake } from "@/lib/text";
 
 interface Props {
   projectId: string;
+  refreshKey?: number;
 }
 
-export default function GenerationsPanel({ projectId }: Props) {
+export default function GenerationsPanel({
+  projectId,
+  refreshKey = 0,
+}: Props) {
   const [sections, setSections] = useState<SectionGenerations[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -21,14 +26,16 @@ export default function GenerationsPanel({ projectId }: Props) {
       .listGenerations(projectId)
       .then(setSections)
       .catch((e: unknown) =>
-        setError(e instanceof Error ? e.message : "Р“СЂРµС€РєР° РїСЂРё Р·Р°СЂРµР¶РґР°РЅРµ."),
+        setError(
+          e instanceof Error ? e.message : "Грешка при зареждане на генерациите.",
+        ),
       )
       .finally(() => setLoading(false));
   }, [projectId]);
 
   useEffect(() => {
     load();
-  }, [load]);
+  }, [load, refreshKey]);
 
   const toggleSection = (uid: string) => {
     setExpanded((prev) => {
@@ -48,7 +55,7 @@ export default function GenerationsPanel({ projectId }: Props) {
       await api.agents.regenerateSection(projectId, sectionUid);
       await api.agents.listGenerations(projectId).then(setSections);
     } catch {
-      // ignore - user can retry
+      // Allow a manual retry without blocking the rest of the panel.
     } finally {
       setRegenerating(null);
     }
@@ -56,8 +63,8 @@ export default function GenerationsPanel({ projectId }: Props) {
 
   if (loading) {
     return (
-      <p className="text-xs text-gray-400 py-2 animate-pulse">
-        Р—Р°СЂРµР¶РґР° РіРµРЅРµСЂР°С†РёРёС‚Рµ...
+      <p className="py-2 text-xs text-gray-400 animate-pulse">
+        Зареждане на генерациите...
       </p>
     );
   }
@@ -66,8 +73,11 @@ export default function GenerationsPanel({ projectId }: Props) {
     return (
       <div className="space-y-1">
         <p className="text-xs text-red-400">{error}</p>
-        <button onClick={load} className="text-xs text-blue-500 hover:underline">
-          в†є РћРїРёС‚Р°Р№ РѕС‚РЅРѕРІРѕ
+        <button
+          onClick={load}
+          className="text-xs text-blue-500 hover:underline"
+        >
+          Обнови
         </button>
       </div>
     );
@@ -76,11 +86,15 @@ export default function GenerationsPanel({ projectId }: Props) {
   if (sections.length === 0) {
     return (
       <div className="space-y-1">
-        <p className="text-xs text-gray-400 leading-relaxed">
-          РќСЏРјР° РіРµРЅРµСЂРёСЂР°РЅРё С‚РµРєСЃС‚РѕРІРµ. РџРѕРёСЃРєР°Р№С‚Рµ РѕС‚ TP AI РґР° РіРµРЅРµСЂРёСЂР° СЂР°Р·РґРµР» РѕС‚ РўРџ-С‚Рѕ.
+        <p className="text-xs leading-relaxed text-gray-400">
+          Все още няма генерирани текстове. Използвайте TP AI, за да
+          генерирате съдържание по одобрения outline.
         </p>
-        <button onClick={load} className="text-xs text-blue-500 hover:underline">
-          в†є РћР±РЅРѕРІРё
+        <button
+          onClick={load}
+          className="text-xs text-blue-500 hover:underline"
+        >
+          Обнови
         </button>
       </div>
     );
@@ -88,50 +102,61 @@ export default function GenerationsPanel({ projectId }: Props) {
 
   return (
     <div className="space-y-1">
-      <div className="flex justify-between items-center mb-1">
-        <span className="text-xs text-gray-400">{sections.length} СЂР°Р·РґРµР»Р°</span>
+      <div className="mb-1 flex items-center justify-between">
+        <span className="text-xs text-gray-400">
+          {sections.length} раздела
+        </span>
         <button
           onClick={load}
           data-testid="generations-refresh-button"
-          className="text-xs text-gray-400 hover:text-blue-500 transition"
-          title="РћР±РЅРѕРІРё"
+          className="text-xs text-gray-400 transition hover:text-blue-500"
+          title="Обнови"
         >
-          в†є
+          ↻
         </button>
       </div>
 
-      {sections.map((sec) => {
-        const isOpen = expanded.has(sec.section_uid);
+      {sections.map((section) => {
+        const isOpen = expanded.has(section.section_uid);
         const displayVariant =
-          sec.variants.find((v) => v.selected) ?? sec.variants[0];
+          section.variants.find((variant) => variant.selected) ??
+          section.variants[0];
 
         return (
-          <div key={sec.section_uid} className="border rounded-lg overflow-hidden">
-            <div className="flex items-start justify-between px-3 py-2 bg-gray-50 hover:bg-gray-100 transition">
+          <div
+            key={section.section_uid}
+            className="overflow-hidden rounded-lg border"
+          >
+            <div className="flex items-start justify-between bg-gray-50 px-3 py-2 transition hover:bg-gray-100">
               <button
-                onClick={() => toggleSection(sec.section_uid)}
-                data-testid={`generation-section-${sec.section_uid}`}
-                className="flex-1 min-w-0 text-left"
+                onClick={() => toggleSection(section.section_uid)}
+                data-testid={`generation-section-${section.section_uid}`}
+                className="min-w-0 flex-1 text-left"
               >
-                <p className="text-xs font-medium text-gray-700 truncate pr-2">
-                  {sec.section_title || `${sec.section_uid.slice(0, 8)}вЂ¦`}
+                <p className="truncate pr-2 text-xs font-medium text-gray-700">
+                  {repairLikelyMojibake(section.section_title) ||
+                    `${section.section_uid.slice(0, 8)}...`}
                 </p>
               </button>
-              <div className="flex items-center gap-1 shrink-0">
+              <div className="flex shrink-0 items-center gap-1">
                 <button
-                  onClick={() => handleRegenerate(sec.section_uid)}
-                  disabled={regenerating === sec.section_uid}
-                  data-testid={`generation-regenerate-${sec.section_uid}`}
-                  className="px-1.5 py-0.5 text-xs rounded bg-amber-100 text-amber-700 hover:bg-amber-200 disabled:opacity-50 transition"
-                  title="Р РµРіРµРЅРµСЂРёСЂР°Р№ СЂР°Р·РґРµР»Р°"
+                  onClick={() => handleRegenerate(section.section_uid)}
+                  disabled={regenerating === section.section_uid}
+                  data-testid={`generation-regenerate-${section.section_uid}`}
+                  className="rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-700 transition hover:bg-amber-200 disabled:opacity-50"
+                  title="Регенерирай раздела"
                 >
-                  {regenerating === sec.section_uid ? "вЂ¦" : "в†»"}
+                  {regenerating === section.section_uid ? "..." : "↻"}
                 </button>
-                <span className="text-gray-400 text-xs">{isOpen ? "в–ѕ" : "в–ё"}</span>
+                <span className="text-xs text-gray-400">
+                  {isOpen ? "▾" : "▸"}
+                </span>
               </div>
             </div>
 
-            {isOpen && displayVariant && <SectionText variant={displayVariant} />}
+            {isOpen && displayVariant && (
+              <SectionText variant={displayVariant} />
+            )}
           </div>
         );
       })}
@@ -142,19 +167,20 @@ export default function GenerationsPanel({ projectId }: Props) {
 function SectionText({ variant }: { variant: Generation }) {
   const [expanded, setExpanded] = useState(false);
   const previewLen = 400;
-  const isLong = variant.text.length > previewLen;
+  const text = repairLikelyMojibake(variant.text);
+  const isLong = text.length > previewLen;
 
   return (
-    <div className="px-3 py-3 bg-white">
-      <p className="text-xs text-gray-700 leading-relaxed whitespace-pre-wrap">
-        {expanded || !isLong ? variant.text : `${variant.text.slice(0, previewLen)}вЂ¦`}
+    <div className="bg-white px-3 py-3">
+      <p className="whitespace-pre-wrap text-xs leading-relaxed text-gray-700">
+        {expanded || !isLong ? text : `${text.slice(0, previewLen)}...`}
       </p>
       {isLong && (
         <button
-          onClick={() => setExpanded((v) => !v)}
+          onClick={() => setExpanded((value) => !value)}
           className="mt-2 text-xs text-blue-500 hover:underline"
         >
-          {expanded ? "в–ґ РЎРєСЂРёР№" : "в–ѕ Р’РёР¶ С†РµР»РёСЏ С‚РµРєСЃС‚"}
+          {expanded ? "Покажи по-малко" : "Покажи целия текст"}
         </button>
       )}
     </div>

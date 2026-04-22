@@ -5,9 +5,10 @@ import { api, ScheduleInfo } from "@/lib/api";
 
 interface Props {
   projectId: string;
+  refreshKey?: number;
 }
 
-export default function SchedulePanel({ projectId }: Props) {
+export default function SchedulePanel({ projectId, refreshKey = 0 }: Props) {
   const [schedule, setSchedule] = useState<ScheduleInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -25,7 +26,7 @@ export default function SchedulePanel({ projectId }: Props) {
       .finally(() => setLoading(false));
   };
 
-  useEffect(() => { load(); }, [projectId]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { load(); }, [projectId, refreshKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleLock = async () => {
     if (!schedule) return;
