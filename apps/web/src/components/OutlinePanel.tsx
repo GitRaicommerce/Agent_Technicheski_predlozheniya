@@ -202,6 +202,7 @@ function SectionItem({
     <li>
       <button
         onClick={() => children.length > 0 && setExpanded((e) => !e)}
+        data-testid={section.uid ? `outline-section-${section.uid}` : undefined}
         style={{ paddingLeft: `${0.5 + depth * 0.75}rem` }}
         className="text-left w-full text-xs py-1 pr-2 rounded flex items-start gap-1 hover:bg-gray-100 transition"
       >

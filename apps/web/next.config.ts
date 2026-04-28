@@ -4,6 +4,7 @@ const nextConfig: NextConfig = {
   // Prevent Next.js from 308-redirecting /api/v1/x/ → /api/v1/x
   // so rewrites forward the original URL (with trailing slash) directly to FastAPI
   skipTrailingSlashRedirect: true,
+  allowedDevOrigins: ["127.0.0.1", "localhost"],
   async rewrites() {
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
     return [

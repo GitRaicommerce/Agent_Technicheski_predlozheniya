@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { Client } from "pg";
 
 const minimalPdf = Buffer.from(
@@ -154,6 +154,13 @@ async function seedProjectState(
   return { sectionUid };
 }
 
+async function waitForProjectPage(page: Page, projectName: string) {
+  await page.waitForLoadState("domcontentloaded");
+  await expect(
+    page.getByRole("heading", { level: 1, name: projectName }),
+  ).toBeVisible({ timeout: 20_000 });
+}
+
 test.describe("smoke", () => {
   test("creates, edits, and deletes a project through the UI", async ({ page, request }) => {
     const projectName = `Smoke Project ${Date.now()}`;
@@ -168,10 +175,10 @@ test.describe("smoke", () => {
       await page.getByTestId("project-authority-input").fill("Smoke Authority");
       await page.getByTestId("create-project-submit").click();
 
-      await page.waitForURL(/\/projects\/[^/]+$/);
+      await page.waitForURL(/\/projects\/(?!new$)[^/]+$/);
       projectId = page.url().split("/").pop() ?? null;
 
-      await expect(page.getByRole("heading", { level: 1, name: projectName })).toBeVisible();
+      await waitForProjectPage(page, projectName);
 
       await page.getByTestId("project-edit-button").click();
       await page.getByTestId("project-edit-location-input").fill("Plovdiv");
@@ -208,7 +215,7 @@ test.describe("smoke", () => {
 
     try {
       await page.goto(`/projects/${projectId}`);
-      await expect(page.getByRole("heading", { level: 1, name: projectName })).toBeVisible();
+      await waitForProjectPage(page, projectName);
 
       await page.getByTestId("module-toggle-examples").click();
       await page.getByTestId("file-upload-input-examples").setInputFiles({
@@ -252,7 +259,7 @@ test.describe("smoke", () => {
 
     try {
       await page.goto(`/projects/${projectId}`);
-      await expect(page.getByRole("heading", { level: 1, name: projectName })).toBeVisible();
+      await waitForProjectPage(page, projectName);
 
       await page.getByTestId("outline-panel-toggle").click();
       await expect(page.getByText("General Requirements")).toBeVisible();
@@ -286,7 +293,7 @@ test.describe("smoke", () => {
 
     try {
       await page.goto(`/projects/${projectId}`);
-      await expect(page.getByRole("heading", { level: 1, name: projectName })).toBeVisible();
+      await waitForProjectPage(page, projectName);
 
       await expect(page.getByRole("button", { name: /\.docx/i })).toBeVisible();
       const exportResponse = await request.get(`/api/v1/export/${projectId}/docx`);
@@ -346,9 +353,7 @@ test.describe("smoke", () => {
       });
 
       await page.goto(`/projects/${projectId}`);
-      await expect(
-        page.getByRole("heading", { level: 1, name: projectName }),
-      ).toBeVisible();
+      await waitForProjectPage(page, projectName);
 
       await page.getByRole("textbox").fill("Генерирай текстовете по outline-а");
       await page.getByRole("button", { name: "Изпрати" }).click();
@@ -358,7 +363,7 @@ test.describe("smoke", () => {
       ).toBeVisible();
       await expect(page.getByText("Outline е готов за преглед.")).toBeVisible();
       await expect(
-        page.getByRole("button", { name: /General Requirements/ }),
+        page.getByTestId(`outline-section-${sectionUid}`),
       ).toBeVisible();
       await expect(
         page.getByTestId(`generation-section-${sectionUid}`),

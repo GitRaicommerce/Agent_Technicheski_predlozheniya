@@ -106,7 +106,19 @@ services:
     depends_on:
       api:
         condition: service_healthy
-    command: sh -c "npm install && npm run dev"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/projects/new').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 15s
+    command: sh -c "npm install && npm run dev:docker"
 
 volumes:
   postgres_data:

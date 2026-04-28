@@ -25,6 +25,19 @@ docker compose -f docker-compose.dev.yml up -d
 bash migrate.sh
 ```
 
+На Windows най-стабилният старт е:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\start-dev.ps1
+```
+
+Този script:
+
+- пуска Docker стека;
+- изчаква API и web приложението реално да станат достъпни;
+- подгрява основните web routes, за да намали първоначалното забавяне при първи тест;
+- отваря `http://localhost:3000` чак когато приложението е готово.
+
 Достъп:
 
 - Frontend: `http://localhost:3000`

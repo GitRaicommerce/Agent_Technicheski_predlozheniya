@@ -33,6 +33,7 @@
 - Added browser-level smoke coverage with Playwright for real create/edit/delete project flows and file uploads against the live local stack.
 - Expanded browser smoke coverage with deterministic seeded checks for outline visibility, generations panel opening, export readiness, and stale export conflicts.
 - Added deterministic browser smoke coverage for chat-driven opening of outline and generations panels without relying on a live LLM response.
+- Stabilized local startup by moving the Dockerized web dev server away from Turbopack on Windows mounts, adding a web healthcheck, and adding a startup script that waits for readiness before opening the app.
 
 ## Active Goals
 
