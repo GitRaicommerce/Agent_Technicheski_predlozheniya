@@ -77,7 +77,8 @@ async def test_get_outline_not_found(client, mock_db):
 
     resp = await client.get(f"/api/v1/agents/{uuid.uuid4()}/outline")
 
-    assert resp.status_code == 404
+    assert resp.status_code == 200
+    assert resp.json() is None
 
 
 # ---------------------------------------------------------------------------
@@ -111,7 +112,8 @@ async def test_get_schedule_not_found(client, mock_db):
 
     resp = await client.get(f"/api/v1/agents/{uuid.uuid4()}/schedule")
 
-    assert resp.status_code == 404
+    assert resp.status_code == 200
+    assert resp.json() is None
 
 
 @pytest.mark.asyncio

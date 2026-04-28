@@ -33,12 +33,14 @@ describe("OutlinePanel", () => {
     vi.clearAllMocks();
   });
 
-  it("renders load error state when outline request fails", async () => {
-    getOutlineMock.mockRejectedValue(new Error("Outline not found"));
+  it("renders empty state when outline is not generated yet", async () => {
+    getOutlineMock.mockResolvedValue(null);
 
     render(<OutlinePanel projectId="project-1" />);
 
-    expect(await screen.findByText("Outline not found")).toBeInTheDocument();
+    expect(
+      await screen.findByRole("button", { name: /Опресни/i }),
+    ).toBeInTheDocument();
   });
 
   it("locks an unlocked outline", async () => {

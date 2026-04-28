@@ -290,7 +290,7 @@ export const api = {
         body: JSON.stringify({ project_id: projectId, message, history }),
       }),
     getOutline: (projectId: string) =>
-      apiFetch<TpOutline>(`/api/v1/agents/${projectId}/outline`),
+      apiFetch<TpOutline | null>(`/api/v1/agents/${projectId}/outline`),
     lockOutline: (projectId: string, outlineId: string) =>
       apiFetch<{ status: string; outline_id: string }>(
         `/api/v1/agents/${projectId}/outline/lock?outline_id=${encodeURIComponent(outlineId)}`,
@@ -304,7 +304,7 @@ export const api = {
     deleteOutline: (projectId: string) =>
       apiNoContent(`/api/v1/agents/${projectId}/outline`, { method: "DELETE" }),
     getSchedule: (projectId: string) =>
-      apiFetch<ScheduleInfo>(`/api/v1/agents/${projectId}/schedule`),
+      apiFetch<ScheduleInfo | null>(`/api/v1/agents/${projectId}/schedule`),
     lockSchedule: (projectId: string, scheduleId: string) =>
       apiFetch<{ status: string; schedule_id: string }>(
         `/api/v1/agents/${projectId}/schedule/lock?schedule_id=${encodeURIComponent(scheduleId)}`,

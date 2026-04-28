@@ -184,7 +184,7 @@ class TpOutlineResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
-@router.get("/{project_id}/outline", response_model=TpOutlineResponse)
+@router.get("/{project_id}/outline", response_model=TpOutlineResponse | None)
 async def get_outline(project_id: str, db: AsyncSession = Depends(get_db)):
     """Връща последния (най-нов) outline за проекта."""
     from app.core.models import TpOutline
@@ -197,8 +197,6 @@ async def get_outline(project_id: str, db: AsyncSession = Depends(get_db)):
         .limit(1)
     )
     outline = result.scalar_one_or_none()
-    if not outline:
-        raise HTTPException(status_code=404, detail="Outline not found")
     return outline
 
 
@@ -236,7 +234,7 @@ class ScheduleNormalizedResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
-@router.get("/{project_id}/schedule", response_model=ScheduleNormalizedResponse)
+@router.get("/{project_id}/schedule", response_model=ScheduleNormalizedResponse | None)
 async def get_schedule(project_id: str, db: AsyncSession = Depends(get_db)):
     """Връща последния нормализиран график за проекта."""
     from app.core.models import ScheduleNormalized
@@ -249,8 +247,6 @@ async def get_schedule(project_id: str, db: AsyncSession = Depends(get_db)):
         .limit(1)
     )
     schedule = result.scalar_one_or_none()
-    if not schedule:
-        raise HTTPException(status_code=404, detail="Schedule not found")
     return schedule
 
 

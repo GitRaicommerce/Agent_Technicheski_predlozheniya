@@ -31,12 +31,14 @@ describe("SchedulePanel", () => {
     vi.clearAllMocks();
   });
 
-  it("renders load error state when schedule request fails", async () => {
-    getScheduleMock.mockRejectedValue(new Error("Schedule not found"));
+  it("renders empty state when schedule is not uploaded yet", async () => {
+    getScheduleMock.mockResolvedValue(null);
 
     render(<SchedulePanel projectId="project-1" />);
 
-    expect(await screen.findByText("Schedule not found")).toBeInTheDocument();
+    expect(
+      await screen.findByRole("button", { name: /Опресни/i }),
+    ).toBeInTheDocument();
   });
 
   it("renders schedule summary and task list", async () => {
