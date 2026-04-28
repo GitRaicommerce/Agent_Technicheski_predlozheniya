@@ -295,4 +295,81 @@ test.describe("smoke", () => {
       await request.delete(`/api/v1/projects/${projectId}`);
     }
   });
+
+  test("opens outline and generations panels from a deterministic chat flow", async ({
+    page,
+    request,
+  }) => {
+    const projectName = `Smoke Chat ${Date.now()}`;
+    const createResponse = await request.post("/api/v1/projects", {
+      data: {
+        name: projectName,
+        location: "Sofia",
+      },
+    });
+
+    expect(createResponse.ok()).toBeTruthy();
+    const project = (await createResponse.json()) as { id: string };
+    const projectId = project.id;
+    const { sectionUid } = await seedProjectState(projectId, {
+      outlineLocked: true,
+    });
+
+    try {
+      await page.route("**/api/v1/agents/chat", async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            schema_version: "v1.3",
+            status: "ok",
+            trace_id: randomUUID(),
+            assistant_message:
+              "Генерирах текстовете и отворих панелите за преглед.",
+            ui_actions: [
+              {
+                type: "show_outline",
+                payload: {
+                  message: "Outline е готов за преглед.",
+                },
+              },
+            ],
+            agent_called: "drafting_all",
+            questions_to_user: [],
+            agent_result: {
+              generation_ids: {
+                variant_1: randomUUID(),
+              },
+            },
+          }),
+        });
+      });
+
+      await page.goto(`/projects/${projectId}`);
+      await expect(
+        page.getByRole("heading", { level: 1, name: projectName }),
+      ).toBeVisible();
+
+      await page.getByRole("textbox").fill("Генерирай текстовете по outline-а");
+      await page.getByRole("button", { name: "Изпрати" }).click();
+
+      await expect(
+        page.getByText("Генерирах текстовете и отворих панелите за преглед."),
+      ).toBeVisible();
+      await expect(page.getByText("Outline е готов за преглед.")).toBeVisible();
+      await expect(
+        page.getByRole("button", { name: /General Requirements/ }),
+      ).toBeVisible();
+      await expect(
+        page.getByTestId(`generation-section-${sectionUid}`),
+      ).toBeVisible();
+
+      await page.getByTestId(`generation-section-${sectionUid}`).click();
+      await expect(
+        page.getByText("Seeded generated text for smoke export."),
+      ).toBeVisible();
+    } finally {
+      await request.delete(`/api/v1/projects/${projectId}`);
+    }
+  });
 });

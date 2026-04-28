@@ -32,6 +32,7 @@
 - Expanded frontend regression tests to cover project details editing/deletion, chat interactions, generation pinning, rate limiting, and DOCX export behavior.
 - Added browser-level smoke coverage with Playwright for real create/edit/delete project flows and file uploads against the live local stack.
 - Expanded browser smoke coverage with deterministic seeded checks for outline visibility, generations panel opening, export readiness, and stale export conflicts.
+- Added deterministic browser smoke coverage for chat-driven opening of outline and generations panels without relying on a live LLM response.
 
 ## Active Goals
 
@@ -43,7 +44,7 @@
 ## Next Recommended Steps
 
 1. Expand generated documentation with more precise backend endpoint and workflow coverage.
-2. Extend browser smoke coverage toward deeper chat-to-generation flows once we have a deterministic way to seed or stub orchestrator outputs end-to-end.
+2. Extend browser smoke coverage further around chat-to-generation flows, regeneration behavior, and selection/pinning actions now that deterministic orchestrator stubbing is in place.
 3. Build broader regression coverage around the frontend so changes in one area are checked against breakage in other core flows.
 4. Improve engineering docs for architecture, runbooks, and testing strategy.
 
