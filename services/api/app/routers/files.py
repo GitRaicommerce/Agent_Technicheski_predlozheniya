@@ -40,6 +40,8 @@ class FileResponse(BaseModel):
     file_hash: str
     ingest_status: str
     ingest_error: Optional[str] = None
+    ingest_quality_status: str = "pending"
+    ingest_report_json: Optional[dict] = None
 
     model_config = {"from_attributes": True}
 
@@ -91,6 +93,7 @@ async def upload_file(
         storage_key=storage_key,
         file_hash=file_hash,
         ingest_status="pending",
+        ingest_quality_status="pending",
     )
     db.add(project_file)
     await db.flush()
@@ -197,6 +200,7 @@ async def upload_finalize(
         storage_key=storage_key,
         file_hash=file_hash,
         ingest_status="pending",
+        ingest_quality_status="pending",
     )
     db.add(project_file)
     await db.flush()

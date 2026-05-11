@@ -45,6 +45,7 @@ TP AI is a monorepo for an AI-assisted workflow that prepares technical proposal
 - `python-magic`: `==0.4.27`
 - `openpyxl`: `==3.1.5`
 - `markitdown[all]`: `>=0.1.1`
+- `opendataloader-pdf`: `>=2.0.0,<3.0.0`
 
 ## Docker Services
 
@@ -149,12 +150,16 @@ TP AI is a monorepo for an AI-assisted workflow that prepares technical proposal
 
 ## Test Inventory
 
-- Total backend tests discovered: `48`
-- `test_agents.py`: `20`
+- Total backend tests discovered: `63`
+- `test_agents.py`: `21`
 - `test_export.py`: `3`
 - `test_files.py`: `10`
 - `test_health.py`: `3`
+- `test_orchestrator.py`: `1`
+- `test_parsers.py`: `4`
 - `test_projects.py`: `12`
+- `test_tender_struct.py`: `8`
+- `test_worker.py`: `1`
 
 ## Automation
 

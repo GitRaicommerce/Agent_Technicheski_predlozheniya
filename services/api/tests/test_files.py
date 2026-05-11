@@ -20,6 +20,8 @@ def _make_file(**kwargs) -> MagicMock:
     f.file_size = kwargs.get("file_size", 1024)
     f.ingest_status = kwargs.get("ingest_status", "done")
     f.ingest_error = kwargs.get("ingest_error", None)
+    f.ingest_quality_status = kwargs.get("ingest_quality_status", "ok")
+    f.ingest_report_json = kwargs.get("ingest_report_json", None)
     f.content_type = kwargs.get("content_type", "application/pdf")
     f.storage_key = kwargs.get("storage_key", "some/key.pdf")
     f.file_hash = kwargs.get("file_hash", "abc123")
@@ -29,8 +31,9 @@ def _make_file(**kwargs) -> MagicMock:
             k: getattr(f, k)
             for k in [
                 "id", "project_id", "filename", "module", "file_size",
-                "ingest_status", "ingest_error", "content_type",
-                "storage_key", "file_hash", "created_at",
+                "ingest_status", "ingest_error", "ingest_quality_status",
+                "ingest_report_json", "content_type", "storage_key",
+                "file_hash", "created_at",
             ]
         }
     )
@@ -83,6 +86,7 @@ async def test_file_status_done(client, mock_db):
 
     assert resp.status_code == 200
     assert resp.json()["ingest_status"] == "done"
+    assert resp.json()["ingest_quality_status"] == "ok"
 
 
 @pytest.mark.asyncio
@@ -186,6 +190,7 @@ async def test_upload_ok(client, mock_db):
     assert body["module"] == "tender_docs"
     assert body["filename"] == "report.pdf"
     assert body["ingest_status"] == "pending"
+    assert body["ingest_quality_status"] == "pending"
 
 
 @pytest.mark.asyncio

@@ -12,6 +12,99 @@ from sqlalchemy import select
 log = structlog.get_logger()
 
 
+def _chunk_embedding_meta(text: str, embedding: list | None) -> dict:
+    from app.core.config import settings
+
+    return {
+        "chunk_hash": hashlib.sha256(text.encode("utf-8")).hexdigest(),
+        "embedding_model": settings.embedding_model if embedding else None,
+        "embedding_dims": len(embedding) if embedding else 0,
+        "embedding_status": "ok" if embedding else "missing",
+    }
+
+
+def _chunk_storage_meta(chunk: dict, embedding: list | None) -> dict:
+    meta = _chunk_embedding_meta(str(chunk.get("text", "")), embedding)
+    chunk_meta = chunk.get("meta")
+    if isinstance(chunk_meta, dict):
+        meta.update(chunk_meta)
+
+    parser_method = chunk.get("parser_method")
+    if parser_method:
+        meta.setdefault("parser_method", parser_method)
+
+    return meta
+
+
+def _embedding_report(texts: list[str], embeddings: list | None) -> dict:
+    from app.core.config import settings
+
+    embeddings = embeddings or []
+    valid = 0
+    missing = 0
+    invalid_dims = 0
+
+    for index, text in enumerate(texts):
+        if not text.strip():
+            continue
+        embedding = embeddings[index] if index < len(embeddings) else None
+        if not embedding:
+            missing += 1
+        elif len(embedding) == settings.embedding_dims:
+            valid += 1
+        else:
+            invalid_dims += 1
+
+    warnings = []
+    if missing:
+        warnings.append("missing_embeddings")
+    if invalid_dims:
+        warnings.append("invalid_embedding_dimensions")
+
+    return {
+        "model": settings.embedding_model,
+        "expected_dims": settings.embedding_dims,
+        "text_count": len([text for text in texts if text.strip()]),
+        "valid_count": valid,
+        "missing_count": missing,
+        "invalid_dims_count": invalid_dims,
+        "warnings": warnings,
+    }
+
+
+def _set_ingest_report(file, report: dict, texts: list[str] | None = None, embeddings=None) -> None:
+    report = dict(report)
+    warnings = list(report.get("warnings") or [])
+    errors = list(report.get("errors") or [])
+
+    if texts is not None:
+        embedding = _embedding_report(texts, embeddings)
+        report["embedding"] = embedding
+        warnings.extend(embedding["warnings"])
+
+    quality_status = report.get("quality_status", "ok")
+    if errors:
+        quality_status = "error"
+    elif warnings or report.get("page_issue_count", 0):
+        quality_status = "warning"
+
+    report["warnings"] = sorted(set(warnings))
+    report["errors"] = sorted(set(errors))
+    report["quality_status"] = quality_status
+    file.ingest_quality_status = quality_status
+    file.ingest_report_json = report
+
+
+def _mark_no_chunks(file, report: dict, message: str) -> None:
+    errors = list(report.get("errors") or [])
+    errors.append("no_chunks_extracted")
+    report["errors"] = sorted(set(errors))
+    report["quality_status"] = "error"
+    file.ingest_status = "error"
+    file.ingest_error = message
+    _set_ingest_report(file, report)
+
+
 def enqueue_ingest(file_id: str):
     """Постави задача в Redis queue 'ingest'."""
     from redis import Redis
@@ -45,6 +138,8 @@ async def _process_file_async(file_id: str):
             return
 
         file.ingest_status = "processing"
+        file.ingest_quality_status = "pending"
+        file.ingest_report_json = None
         await db.commit()
 
         try:
@@ -61,26 +156,39 @@ async def _process_file_async(file_id: str):
             elif file.module == "legislation":
                 await _ingest_legislation(file, content, db)
 
-            file.ingest_status = "done"
+            if file.ingest_status != "error":
+                file.ingest_status = "done"
             await db.commit()
             log.info("ingest_done", file_id=file_id, module=file.module)
 
         except Exception as e:
             file.ingest_status = "error"
             file.ingest_error = str(e)
+            file.ingest_quality_status = "error"
+            file.ingest_report_json = {
+                "schema_version": 1,
+                "quality_status": "error",
+                "errors": [str(e)],
+                "warnings": [],
+            }
             await db.commit()
             log.error("ingest_error", file_id=file_id, error=str(e))
             raise
 
 
 async def _ingest_examples(file, content: bytes, db):
-    from app.ingestion.parsers import extract_chunks
+    from app.ingestion.parsers import extract_chunks_with_audit
     from app.core.models import ExtractedChunk, ExampleSnippet
     from app.core.embedding import embed_texts
     import uuid
 
-    chunks = extract_chunks(content, file.filename)
+    chunks, report = extract_chunks_with_audit(content, file.filename)
     if not chunks:
+        _mark_no_chunks(
+            file,
+            report,
+            "No extractable text was found in the examples document.",
+        )
         return
 
     texts = [c.get("text", "") for c in chunks]
@@ -92,8 +200,10 @@ async def _ingest_examples(file, content: bytes, db):
         log.warning("ingest_examples_embedding_failed", error=str(e))
         embeddings = [None] * len(chunks)
 
+    _set_ingest_report(file, report, texts, embeddings)
+
     for i, chunk in enumerate(chunks):
-        emb = embeddings[i] if embeddings[i] else None
+        emb = embeddings[i] if i < len(embeddings) and embeddings[i] else None
         extracted = ExtractedChunk(
             project_id=file.project_id,
             file_id=file.id,
@@ -102,6 +212,7 @@ async def _ingest_examples(file, content: bytes, db):
             page=chunk.get("page"),
             section_path=chunk.get("section_path"),
             embedding=emb,
+            meta_json=_chunk_storage_meta(chunk, emb),
         )
         db.add(extracted)
         await db.flush()  # ensure extracted.id is populated
@@ -120,12 +231,17 @@ async def _ingest_examples(file, content: bytes, db):
 
 
 async def _ingest_tender_docs(file, content: bytes, db):
-    from app.ingestion.parsers import extract_chunks
+    from app.ingestion.parsers import extract_chunks_with_audit
     from app.core.models import ExtractedChunk
     from app.core.embedding import embed_texts
 
-    chunks = extract_chunks(content, file.filename)
+    chunks, report = extract_chunks_with_audit(content, file.filename)
     if not chunks:
+        _mark_no_chunks(
+            file,
+            report,
+            "No extractable text was found in the tender document.",
+        )
         return
 
     texts = [c.get("text", "") for c in chunks]
@@ -135,7 +251,10 @@ async def _ingest_tender_docs(file, content: bytes, db):
         log.warning("ingest_tender_embedding_failed", error=str(e))
         embeddings = [None] * len(chunks)
 
+    _set_ingest_report(file, report, texts, embeddings)
+
     for i, chunk in enumerate(chunks):
+        emb = embeddings[i] if i < len(embeddings) and embeddings[i] else None
         extracted = ExtractedChunk(
             project_id=file.project_id,
             file_id=file.id,
@@ -143,7 +262,8 @@ async def _ingest_tender_docs(file, content: bytes, db):
             text=chunk["text"],
             page=chunk.get("page"),
             section_path=chunk.get("section_path"),
-            embedding=embeddings[i] if embeddings[i] else None,
+            embedding=emb,
+            meta_json=_chunk_storage_meta(chunk, emb),
         )
         db.add(extracted)
 
@@ -159,6 +279,27 @@ async def _ingest_schedule(file, content: bytes, db):
     )
 
     result = parse_schedule(content, file.filename)
+    warnings = []
+    if result.get("warning"):
+        warnings.append(str(result["warning"]))
+    file.ingest_quality_status = (
+        "error" if result.get("error") else ("warning" if warnings else "ok")
+    )
+    file.ingest_report_json = {
+        "schema_version": 1,
+        "filename": file.filename,
+        "file_type": (
+            file.filename.rsplit(".", 1)[-1].lower()
+            if "." in file.filename
+            else "unknown"
+        ),
+        "quality_status": file.ingest_quality_status,
+        "primary_method": result.get("parser", "schedule_parser"),
+        "warnings": warnings,
+        "errors": [result["error"]] if result.get("error") else [],
+        "tasks_count": len(result.get("tasks", [])),
+        "resources_count": len(result.get("resources", [])),
+    }
 
     snapshot = ScheduleSnapshot(
         project_id=file.project_id,
@@ -223,12 +364,17 @@ async def _ingest_legislation(file, content: bytes, db):
     """
     import re
     import hashlib
-    from app.ingestion.parsers import extract_chunks
+    from app.ingestion.parsers import extract_chunks_with_audit
     from app.core.models import LexSnapshot, LexChunk
 
-    chunks = extract_chunks(content, file.filename)
+    chunks, report = extract_chunks_with_audit(content, file.filename)
     if not chunks:
         log.warning("ingest_legislation_no_chunks", file_id=file.id)
+        _mark_no_chunks(
+            file,
+            report,
+            "No extractable text was found in the legislation document.",
+        )
         return
 
     act_name = file.filename.rsplit(".", 1)[0]  # filename without extension as act name
@@ -259,6 +405,8 @@ async def _ingest_legislation(file, content: bytes, db):
         log.warning("ingest_legislation_embedding_failed", error=str(e))
         embeddings = [None] * len(texts)
 
+    _set_ingest_report(file, report, texts, embeddings)
+
     emb_idx = 0
     for chunk in chunks:
         text = chunk.get("text", "").strip()
@@ -276,7 +424,9 @@ async def _ingest_legislation(file, content: bytes, db):
                 act_name=act_name,
                 article_ref=article_ref or "—",
                 text=text,
-                embedding=embeddings[emb_idx] if embeddings[emb_idx] else None,
+                embedding=embeddings[emb_idx]
+                if emb_idx < len(embeddings) and embeddings[emb_idx]
+                else None,
             )
         )
         emb_idx += 1

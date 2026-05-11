@@ -79,6 +79,8 @@ class ProjectFile(Base):
         String(32), default="pending"
     )  # pending|processing|done|error
     ingest_error: Mapped[Optional[str]] = mapped_column(Text)
+    ingest_quality_status: Mapped[str] = mapped_column(String(16), default="pending")
+    ingest_report_json: Mapped[Optional[dict]] = mapped_column(JSONB)
 
     project: Mapped[Project] = relationship(back_populates="files")
     chunks: Mapped[list[ExtractedChunk]] = relationship(

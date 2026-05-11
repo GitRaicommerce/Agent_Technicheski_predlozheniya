@@ -6,7 +6,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     tesseract-ocr-bul \
     libmagic1 \
     poppler-utils \
-    default-jre-headless \
+    openjdk-21-jre-headless \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
