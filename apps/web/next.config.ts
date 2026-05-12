@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  output: "standalone",
   // Prevent Next.js from 308-redirecting /api/v1/x/ → /api/v1/x
   // so rewrites forward the original URL (with trailing slash) directly to FastAPI
   skipTrailingSlashRedirect: true,
