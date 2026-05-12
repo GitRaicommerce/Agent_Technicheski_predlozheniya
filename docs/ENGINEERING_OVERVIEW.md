@@ -73,6 +73,7 @@ TP AI is a monorepo for an AI-assisted workflow that prepares technical proposal
 - `AGENTS.md`
 - `CLAUDE.md`
 - `docker-compose.dev.yml`
+- `docker-compose.yml`
 - `migrate.sh`
 - `PLAN.md`
 - `README.md`
@@ -168,6 +169,7 @@ TP AI is a monorepo for an AI-assisted workflow that prepares technical proposal
 - Generator: `scripts/generate_docs.py`
 - GitHub workflows:
 - `ci.yml`
+- `deploy.yml`
 - `docs-sync.yml`
 
 ## Notes
