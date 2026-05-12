@@ -77,6 +77,7 @@ TP AI is a monorepo for an AI-assisted workflow that prepares technical proposal
 - `migrate.sh`
 - `PLAN.md`
 - `README.md`
+- `SETUP_PROGRESS.md`
 
 ### Key Application Paths
 
