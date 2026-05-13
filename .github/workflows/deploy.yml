@@ -17,6 +17,6 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.SERVER_PORT || 22 }}
+          windows: true
           script: |
-            set -e
-            bash ${{ secrets.DEPLOY_PATH }}/scripts/deploy.sh
+            powershell -ExecutionPolicy Bypass -File "C:\Users\Admin\Desktop\Agent_Technicheski_predlozheniya-main\scripts\deploy.ps1"
