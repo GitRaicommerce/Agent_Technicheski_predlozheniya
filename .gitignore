@@ -33,3 +33,5 @@ Thumbs.db
 # MinIO data (local)
 minio_data/
 postgres_data/
+
+old/
