@@ -170,7 +170,6 @@ TP AI is a monorepo for an AI-assisted workflow that prepares technical proposal
 - Generator: `scripts/generate_docs.py`
 - GitHub workflows:
 - `ci.yml`
-- `deploy.yml`
 - `docs-sync.yml`
 
 ## Notes
