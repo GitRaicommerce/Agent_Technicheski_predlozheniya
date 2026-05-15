@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     anthropic_api_key: str = ""
     llm_default_provider: str = "openai"
-    llm_default_model: str = "gpt-4o"
+    llm_default_model: str = "gpt-5.5"
     llm_fallback_provider: str = "anthropic"
     llm_fallback_model: str = "claude-3-5-sonnet-20241022"
     llm_max_tokens: int = 4096
@@ -33,6 +33,11 @@ class Settings(BaseSettings):
     # Embeddings
     embedding_model: str = "text-embedding-3-small"
     embedding_dims: int = 1536
+
+    # Legislation refresh
+    lex_bg_auto_refresh_enabled: bool = True
+    lex_bg_refresh_ttl_hours: int = 24
+    lex_bg_request_timeout_seconds: float = 20.0
 
     # App
     app_secret_key: str = "change-me-in-production"

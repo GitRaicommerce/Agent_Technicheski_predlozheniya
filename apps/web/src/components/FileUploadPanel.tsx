@@ -38,6 +38,8 @@ interface UploadedFile {
   filename: string;
   ingest_status: string;
   ingest_error?: string | null;
+  ingest_quality_status?: string | null;
+  ingest_report_json?: Record<string, unknown> | null;
 }
 
 interface Props {
@@ -57,12 +59,16 @@ function normalizeUploadedFile(file: {
   filename: string;
   ingest_status: string;
   ingest_error?: string | null;
+  ingest_quality_status?: string | null;
+  ingest_report_json?: Record<string, unknown> | null;
 }): UploadedFile {
   return {
     id: file.id,
     filename: file.filename,
     ingest_status: file.ingest_status,
     ingest_error: file.ingest_error ?? null,
+    ingest_quality_status: file.ingest_quality_status ?? null,
+    ingest_report_json: file.ingest_report_json ?? null,
   };
 }
 
@@ -298,6 +304,33 @@ export default function FileUploadPanel({
     return "⌛ на опашка";
   };
 
+  const qualityColor = (status?: string | null) => {
+    if (status === "ok") return "text-green-600";
+    if (status === "warning") return "text-amber-600";
+    if (status === "error") return "text-red-500";
+    return "text-gray-400";
+  };
+
+  const qualityLabel = (status?: string | null) => {
+    if (status === "ok") return "QA ok";
+    if (status === "warning") return "QA warning";
+    if (status === "error") return "QA failed";
+    return "QA pending";
+  };
+
+  const qualityDetails = (file: UploadedFile) => {
+    const report = file.ingest_report_json;
+    if (!report) return "";
+    const warnings = Array.isArray(report.warnings) ? report.warnings.length : 0;
+    const pages = typeof report.page_count === "number" ? report.page_count : null;
+    const chunks = typeof report.chunk_count === "number" ? report.chunk_count : null;
+    const parts: string[] = [];
+    if (pages !== null) parts.push(`${pages} pages`);
+    if (chunks !== null) parts.push(`${chunks} chunks`);
+    if (warnings) parts.push(`${warnings} warnings`);
+    return parts.join(" / ");
+  };
+
   return (
     <div
       data-testid={`file-upload-panel-${module}`}
@@ -399,6 +432,15 @@ export default function FileUploadPanel({
                   title={f.ingest_error}
                 >
                   {f.ingest_error}
+                </p>
+              )}
+              {TERMINAL_STATUSES.has(f.ingest_status) && f.ingest_quality_status && (
+                <p
+                  className={`${qualityColor(f.ingest_quality_status)} mt-0.5 truncate`}
+                  title={qualityDetails(f)}
+                >
+                  {qualityLabel(f.ingest_quality_status)}
+                  {qualityDetails(f) ? ` · ${qualityDetails(f)}` : ""}
                 </p>
               )}
             </li>

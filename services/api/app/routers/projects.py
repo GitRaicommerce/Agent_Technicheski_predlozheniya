@@ -4,6 +4,7 @@ from sqlalchemy import select, func, distinct
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
 from datetime import datetime, timezone
+import uuid
 
 from app.core.database import get_db
 from app.core.models import Project, ProjectFile, TpOutline, Generation
@@ -39,6 +40,16 @@ class ProjectResponse(BaseModel):
     updated_at: Optional[datetime] = None
 
     model_config = {"from_attributes": True}
+
+
+class LegislationRefreshResponse(BaseModel):
+    status: str
+    checked: int
+    changed: int
+    unchanged: int
+    skipped_fresh: int
+    refreshed: list[dict[str, str]]
+    errors: list[dict[str, str]]
 
 
 @router.post("", response_model=ProjectResponse, status_code=status.HTTP_201_CREATED)
@@ -123,6 +134,29 @@ async def get_project(project_id: str, db: AsyncSession = Depends(get_db)):
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     return project
+
+
+@router.post(
+    "/{project_id}/legislation/refresh",
+    response_model=LegislationRefreshResponse,
+)
+async def refresh_project_legislation(
+    project_id: str,
+    force: bool = Query(default=False),
+    db: AsyncSession = Depends(get_db),
+):
+    project = await db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    from app.legislation.lex_bg import ensure_project_legislation_current
+
+    return await ensure_project_legislation_current(
+        project_id=project_id,
+        db=db,
+        trace_id=str(uuid.uuid4()),
+        force=force,
+    )
 
 
 @router.put("/{project_id}", response_model=ProjectResponse)

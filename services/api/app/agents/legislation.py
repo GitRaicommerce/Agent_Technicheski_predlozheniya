@@ -56,17 +56,30 @@ async def run_legislation(
     trace_id = trace_id or str(uuid.uuid4())
     log.info("agent_legislation_start", project_id=project_id, trace_id=trace_id)
 
+    from app.legislation.lex_bg import (
+        ensure_project_legislation_current,
+        latest_snapshot_ids_for_project,
+    )
+
+    refresh_result = await ensure_project_legislation_current(
+        project_id=project_id,
+        db=db,
+        trace_id=trace_id,
+    )
+    latest_snapshot_ids = await latest_snapshot_ids_for_project(project_id, db)
+
     # Try vector similarity search first; fall back to LIMIT if unavailable
     chunks = []
     try:
         from app.core.embedding import embed_query
 
         query_vec = await embed_query(query)
-        if query_vec:
+        if query_vec and latest_snapshot_ids:
             result = await db.execute(
                 select(LexChunk)
                 .where(
                     LexChunk.project_id == project_id,
+                    LexChunk.snapshot_id.in_(latest_snapshot_ids),
                     LexChunk.embedding.is_not(None),
                 )
                 .order_by(LexChunk.embedding.cosine_distance(query_vec))
@@ -85,9 +98,10 @@ async def run_legislation(
 
     # Fallback: naive fetch when no embeddings exist yet
     if not chunks:
-        result = await db.execute(
-            select(LexChunk).where(LexChunk.project_id == project_id).limit(60)
-        )
+        query_stmt = select(LexChunk).where(LexChunk.project_id == project_id)
+        if latest_snapshot_ids:
+            query_stmt = query_stmt.where(LexChunk.snapshot_id.in_(latest_snapshot_ids))
+        result = await db.execute(query_stmt.limit(60))
         chunks = result.scalars().all()
 
     if not chunks:
@@ -97,6 +111,7 @@ async def run_legislation(
             "message": "Няма заредени нормативни документи за този проект.",
             "_agent": "legislation",
             "_trace_id": trace_id,
+            "_legislation_refresh": refresh_result,
         }
 
     # Mark document content as untrusted to prevent prompt injection
@@ -120,4 +135,5 @@ async def run_legislation(
 
     llm_result["_agent"] = "legislation"
     llm_result["_trace_id"] = trace_id
+    llm_result["_legislation_refresh"] = refresh_result
     return llm_result

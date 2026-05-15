@@ -69,6 +69,7 @@ vi.mock("@/lib/api", async () => {
         ...actual.api.projects,
         get: vi.fn(),
         update: vi.fn(),
+        refreshLegislation: vi.fn(),
         delete: vi.fn(),
       },
     },
@@ -77,6 +78,7 @@ vi.mock("@/lib/api", async () => {
 
 const getMock = vi.mocked(api.projects.get);
 const updateMock = vi.mocked(api.projects.update);
+const refreshLegislationMock = vi.mocked(api.projects.refreshLegislation);
 const deleteMock = vi.mocked(api.projects.delete);
 
 describe("ProjectPage", () => {
@@ -90,6 +92,15 @@ describe("ProjectPage", () => {
       contracting_authority: "Municipality",
       tender_date: "2026-04-20",
       created_at: "2026-04-20T10:00:00.000Z",
+    });
+    refreshLegislationMock.mockResolvedValue({
+      status: "ok",
+      checked: 0,
+      changed: 0,
+      unchanged: 0,
+      skipped_fresh: 9,
+      refreshed: [],
+      errors: [],
     });
   });
 
@@ -108,6 +119,9 @@ describe("ProjectPage", () => {
     const { container } = render(<ProjectPage />);
 
     expect(await screen.findByText("Project Alpha")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(refreshLegislationMock).toHaveBeenCalledWith("project-1");
+    });
 
     const editButton = screen.getByRole("button", { name: "✎" });
     await userEvent.click(editButton!);

@@ -182,6 +182,12 @@ py -3 scripts/generate_docs.py
 
 Do not manually edit `docs/ENGINEERING_OVERVIEW.md`.
 
+Validate the shared executor guide when editing `Agent.md`, `AGENTS.md`, `CLAUDE.md`, or CI documentation rules:
+
+```powershell
+py -3 scripts/check_agent_guides.py
+```
+
 ## Stability Definition
 
 Do not tell the user the app is stable until these are true for the area touched:

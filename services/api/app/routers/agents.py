@@ -295,6 +295,7 @@ async def list_generations(project_id: str, db: AsyncSession = Depends(get_db)):
     outline = outline_result.scalar_one_or_none()
 
     section_title_map: dict[str, str] = {}
+    section_order: list[str] = []
     if outline:
         sections = outline.outline_json.get("sections", outline.outline_json.get("outline", []))
 
@@ -303,6 +304,7 @@ async def list_generations(project_id: str, db: AsyncSession = Depends(get_db)):
                 uid = s.get("uid") or s.get("section_uid", "")
                 if uid:
                     section_title_map[uid] = s.get("title", "")
+                    section_order.append(uid)
                 _collect(s.get("subsections", s.get("children", [])))
 
         _collect(sections)
@@ -319,13 +321,20 @@ async def list_generations(project_id: str, db: AsyncSession = Depends(get_db)):
     )
     generations = gen_result.scalars().all()
 
+    if section_title_map:
+        generations = [g for g in generations if g.section_uid in section_title_map]
+
     # Group by section_uid preserving order
     grouped: dict[str, list[Generation]] = {}
     for g in generations:
         grouped.setdefault(g.section_uid, []).append(g)
 
     result = []
-    for section_uid, variants in grouped.items():
+    ordered_section_uids = section_order if section_order else list(grouped.keys())
+    for section_uid in ordered_section_uids:
+        variants = grouped.get(section_uid)
+        if not variants:
+            continue
         result.append(
             SectionGenerations(
                 section_uid=section_uid,

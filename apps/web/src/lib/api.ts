@@ -84,6 +84,7 @@ async function ensureOk(response: Response): Promise<void> {
 
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   const response = await fetch(buildUrl(path), {
+    cache: "no-store",
     headers: {
       "Content-Type": "application/json",
       ...options?.headers,
@@ -116,6 +117,16 @@ export interface ProjectStat {
   outline_locked: boolean;
   sections_generated: number;
   sections_selected: number;
+}
+
+export interface LegislationRefreshResponse {
+  status: string;
+  checked: number;
+  changed: number;
+  unchanged: number;
+  skipped_fresh: number;
+  refreshed: Array<Record<string, string>>;
+  errors: Array<Record<string, string>>;
 }
 
 export interface ChatMessage {
@@ -163,6 +174,8 @@ export interface UploadedFile {
   file_hash: string;
   ingest_status: string;
   ingest_error?: string | null;
+  ingest_quality_status?: string | null;
+  ingest_report_json?: Record<string, unknown> | null;
 }
 
 export interface TpOutlineSection {
@@ -251,6 +264,11 @@ export const api = {
         method: "PUT",
         body: JSON.stringify(data),
       }),
+    refreshLegislation: (id: string, force = false) =>
+      apiFetch<LegislationRefreshResponse>(
+        `/api/v1/projects/${id}/legislation/refresh?force=${String(force)}`,
+        { method: "POST" },
+      ),
     delete: (id: string) =>
       apiNoContent(`/api/v1/projects/${id}`, { method: "DELETE" }),
   },

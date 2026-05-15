@@ -71,6 +71,7 @@ TP AI is a monorepo for an AI-assisted workflow that prepares technical proposal
 - `.gitignore`
 - `Agent.md`
 - `AGENTS.md`
+- `backup.sql`
 - `CLAUDE.md`
 - `docker-compose.dev.yml`
 - `docker-compose.yml`
@@ -137,6 +138,9 @@ TP AI is a monorepo for an AI-assisted workflow that prepares technical proposal
   - `services/api/app/ingestion/parsers.py`
   - `services/api/app/ingestion/schedule_parser.py`
   - `services/api/app/ingestion/worker.py`
+- `services/api/app/legislation/`
+  - `services/api/app/legislation/__init__.py`
+  - `services/api/app/legislation/lex_bg.py`
 - `services/api/app/routers/`
   - `services/api/app/routers/__init__.py`
   - `services/api/app/routers/agents.py`
@@ -155,13 +159,17 @@ TP AI is a monorepo for an AI-assisted workflow that prepares technical proposal
 
 ## Test Inventory
 
-- Total backend tests discovered: `53`
-- `test_agents.py`: `20`
+- Total backend tests discovered: `69`
+- `test_agents.py`: `21`
 - `test_export.py`: `3`
 - `test_files.py`: `10`
 - `test_health.py`: `3`
+- `test_legislation.py`: `1`
+- `test_lex_bg.py`: `3`
+- `test_orchestrator.py`: `1`
 - `test_parsers.py`: `4`
-- `test_projects.py`: `12`
+- `test_projects.py`: `14`
+- `test_tender_struct.py`: `8`
 - `test_worker.py`: `1`
 
 ## Automation

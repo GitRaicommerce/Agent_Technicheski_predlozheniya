@@ -52,16 +52,48 @@ export default function ProjectPage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   useEffect(() => {
-    if (params.id) {
-      api.projects
-        .get(params.id)
-        .then((p) => {
-          setProject(p);
-          setEditData({ name: p.name, location: p.location ?? "", description: p.description ?? "", contracting_authority: p.contracting_authority ?? "", tender_date: p.tender_date ?? "" });
-        })
-        .finally(() => setLoading(false));
+    let cancelled = false;
+
+    if (!params.id) {
+      return () => {
+        cancelled = true;
+      };
     }
-  }, [params.id]);
+
+    api.projects
+      .get(params.id)
+      .then((p) => {
+        if (cancelled) return;
+
+        setProject(p);
+        setEditData({ name: p.name, location: p.location ?? "", description: p.description ?? "", contracting_authority: p.contracting_authority ?? "", tender_date: p.tender_date ?? "" });
+
+        void api.projects
+          .refreshLegislation(p.id)
+          .then((refresh) => {
+            if (cancelled) return;
+            if (refresh.changed > 0) {
+              toast("Нормативната база е обновена от Lex.bg.", "success");
+            } else if (refresh.status === "warning") {
+              toast("Част от нормативната база не можа да бъде обновена.", "warning");
+            }
+          })
+          .catch(() => {
+            if (!cancelled) {
+              toast("Не успях да проверя нормативната база в Lex.bg.", "error");
+            }
+          });
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [params.id, toast]);
 
   // Close edit/delete with Escape
   const handleKeyDown = useCallback((e: KeyboardEvent) => {

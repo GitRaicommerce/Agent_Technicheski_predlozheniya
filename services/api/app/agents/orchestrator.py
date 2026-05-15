@@ -223,22 +223,24 @@ async def _run_drafting_all(
     trace_id: str,
 ) -> dict[str, Any]:
     """
-    Генерира текст за ВСИЧКИ негенерирани раздели от одобрения outline.
+    Генерира текст за ВСИЧКИ негенерирани раздели от най-актуалния outline.
     Събира примерите, графика и нормативната база веднъж и ги преизползва.
     """
     from sqlalchemy import select, func
     from app.core.models import TpOutline, Generation
 
-    # Load the approved outline
+    # Prefer the newest outline version, even if the previous approved version
+    # is older. Otherwise "generate all" can keep drafting against stale
+    # generic sections after the user has regenerated a better structure.
     outline_result = await db.execute(
         select(TpOutline)
-        .where(TpOutline.project_id == project.id, TpOutline.status_locked == True)
+        .where(TpOutline.project_id == project.id)
         .order_by(TpOutline.version.desc())
         .limit(1)
     )
     outline = outline_result.scalar_one_or_none()
     if not outline:
-        return {"error": "Няма одобрено съдържание (outline). Одобрете разделите първо.", "_agent": "drafting_all"}
+        return {"error": "Няма налично съдържание (outline). Генерирайте разделите първо.", "_agent": "drafting_all"}
 
     # Find already generated section uids (skip them)
     gen_result = await db.execute(
@@ -313,6 +315,9 @@ async def _run_drafting_all(
 
     return {
         "_agent": "drafting_all",
+        "outline_id": outline.id,
+        "outline_version": outline.version,
+        "outline_locked": outline.status_locked,
         "generated_count": generated_count,
         "skipped_count": skipped_count,
         "sections": results,

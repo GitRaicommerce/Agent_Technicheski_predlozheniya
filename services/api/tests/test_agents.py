@@ -215,6 +215,62 @@ async def test_get_generations_grouped(client, mock_db):
     assert section["variants"][0]["selected"] is True
 
 
+@pytest.mark.asyncio
+async def test_get_generations_filters_out_stale_sections_not_in_latest_outline(client, mock_db):
+    """Показва само генерации за секциите от последния outline."""
+    from datetime import datetime, timezone
+    from app.core.models import Generation, TpOutline
+
+    pid = str(uuid.uuid4())
+    current_sec_uid = str(uuid.uuid4())
+    stale_sec_uid = str(uuid.uuid4())
+    now = datetime.now(timezone.utc)
+
+    outline = TpOutline(
+        id=str(uuid.uuid4()),
+        project_id=pid,
+        outline_json={"sections": [{"uid": current_sec_uid, "title": "Концепция и подход"}]},
+        status_locked=False,
+        version=7,
+    )
+    current_generation = Generation(
+        id=str(uuid.uuid4()),
+        project_id=pid,
+        section_uid=current_sec_uid,
+        variant=1,
+        text="Нов текст",
+        evidence_status="ok",
+        selected=True,
+        created_at=now,
+    )
+    stale_generation = Generation(
+        id=str(uuid.uuid4()),
+        project_id=pid,
+        section_uid=stale_sec_uid,
+        variant=1,
+        text="Стар текст",
+        evidence_status="ok",
+        selected=True,
+        created_at=now,
+    )
+
+    outline_result = MagicMock()
+    outline_result.scalar_one_or_none = MagicMock(return_value=outline)
+    gen_result = MagicMock()
+    gen_result.scalars = MagicMock(
+        return_value=MagicMock(all=MagicMock(return_value=[current_generation, stale_generation]))
+    )
+    mock_db.execute = AsyncMock(side_effect=[outline_result, gen_result])
+
+    resp = await client.get(f"/api/v1/agents/{pid}/generations")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) == 1
+    assert data[0]["section_uid"] == current_sec_uid
+    assert data[0]["section_title"] == "Концепция и подход"
+
+
 # ---------------------------------------------------------------------------
 # POST /api/v1/agents/{project_id}/sections/{section_uid}/regenerate
 # ---------------------------------------------------------------------------

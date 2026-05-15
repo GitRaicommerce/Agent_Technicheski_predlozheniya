@@ -19,6 +19,9 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Verify shared agent guide
+        run: python scripts/check_agent_guides.py
+
       - name: Regenerate docs
         run: python scripts/generate_docs.py
 

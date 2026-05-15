@@ -107,6 +107,42 @@ async def test_get_project_not_found(client, mock_db):
     assert resp.status_code == 404
 
 
+@pytest.mark.asyncio
+async def test_refresh_project_legislation(client, mock_db):
+    project = _make_project()
+    mock_db.get = AsyncMock(return_value=project)
+    refresh_result = {
+        "status": "ok",
+        "checked": 1,
+        "changed": 1,
+        "unchanged": 0,
+        "skipped_fresh": 0,
+        "refreshed": [{"act_name": "Закон за устройство на територията"}],
+        "errors": [],
+    }
+
+    with patch(
+        "app.legislation.lex_bg.ensure_project_legislation_current",
+        new=AsyncMock(return_value=refresh_result),
+    ) as refresh:
+        resp = await client.post(f"/api/v1/projects/{project.id}/legislation/refresh")
+
+    assert resp.status_code == 200
+    assert resp.json()["changed"] == 1
+    refresh.assert_awaited_once()
+    assert refresh.await_args.kwargs["project_id"] == project.id
+    assert refresh.await_args.kwargs["force"] is False
+
+
+@pytest.mark.asyncio
+async def test_refresh_project_legislation_not_found(client, mock_db):
+    mock_db.get = AsyncMock(return_value=None)
+
+    resp = await client.post(f"/api/v1/projects/{uuid.uuid4()}/legislation/refresh")
+
+    assert resp.status_code == 404
+
+
 # ---------------------------------------------------------------------------
 # PUT /api/v1/projects/{id}
 # ---------------------------------------------------------------------------
