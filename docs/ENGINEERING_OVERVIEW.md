@@ -71,7 +71,6 @@ TP AI is a monorepo for an AI-assisted workflow that prepares technical proposal
 - `.gitignore`
 - `Agent.md`
 - `AGENTS.md`
-- `backup.sql`
 - `CLAUDE.md`
 - `docker-compose.dev.yml`
 - `docker-compose.yml`

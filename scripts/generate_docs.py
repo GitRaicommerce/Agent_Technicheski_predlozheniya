@@ -62,6 +62,7 @@ def top_level_tree() -> list[str]:
             "__pycache__",
             ".env",
             "env.txt",
+            "backup.sql",
         }:
             continue
         suffix = "/" if path.is_dir() else ""
