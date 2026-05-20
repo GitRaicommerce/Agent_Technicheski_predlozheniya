@@ -30,6 +30,8 @@ const WORKFLOW_STEPS = [
   "Експортирайте готовия документ (DOCX)",
 ];
 
+const DISABLE_AUTO_LEX_REFRESH_KEY = "tp_disable_auto_lex_refresh";
+
 export default function ProjectPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
@@ -67,6 +69,10 @@ export default function ProjectPage() {
 
         setProject(p);
         setEditData({ name: p.name, location: p.location ?? "", description: p.description ?? "", contracting_authority: p.contracting_authority ?? "", tender_date: p.tender_date ?? "" });
+
+        if (window.localStorage.getItem(DISABLE_AUTO_LEX_REFRESH_KEY) === "1") {
+          return;
+        }
 
         void api.projects
           .refreshLegislation(p.id)

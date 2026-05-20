@@ -44,6 +44,12 @@ function createDbClient() {
   });
 }
 
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => {
+    window.localStorage.setItem("tp_disable_auto_lex_refresh", "1");
+  });
+});
+
 async function seedProjectState(
   projectId: string,
   options?: { staleGeneration?: boolean; outlineLocked?: boolean },
