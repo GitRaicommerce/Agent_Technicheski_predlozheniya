@@ -10,7 +10,7 @@ import uuid
 from typing import Any
 
 import structlog
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_not_exception_type
+from tenacity import retry, retry_if_not_exception_type, stop_after_attempt, wait_exponential
 
 from app.core.config import settings
 
@@ -45,6 +45,7 @@ class LLMGateway:
         stop=stop_after_attempt(2),
         wait=wait_exponential(multiplier=1, min=2, max=10),
         retry=retry_if_not_exception_type(LLMNotConfiguredError),
+        reraise=True,
     )
     async def call(
         self,
@@ -103,6 +104,7 @@ class LLMGateway:
             if (
                 fallback_provider
                 and fallback_model
+                and _provider_has_key(fallback_provider)
                 and (fallback_provider != provider or fallback_model != model)
             ):
                 log.warning(
@@ -148,15 +150,22 @@ class LLMGateway:
 
         if provider == "openai":
             client = self._get_openai()
-            response = await client.chat.completions.create(
-                model=model,
-                messages=[
+            request_kwargs: dict[str, Any] = {
+                "model": model,
+                "messages": [
                     {"role": "system", "content": system_prompt},
                     *built_messages,
                 ],
-                max_tokens=settings.llm_max_tokens,
-                temperature=settings.llm_temperature,
-                response_format={"type": "json_object"},
+                "response_format": {"type": "json_object"},
+            }
+            if _uses_completion_token_limit(model):
+                request_kwargs["max_completion_tokens"] = settings.llm_max_tokens
+            else:
+                request_kwargs["max_tokens"] = settings.llm_max_tokens
+                request_kwargs["temperature"] = settings.llm_temperature
+
+            response = await client.chat.completions.create(
+                **request_kwargs,
             )
             return response.choices[0].message.content
 
@@ -200,3 +209,16 @@ class LLMGateway:
 
 
 llm_gateway = LLMGateway()
+
+
+def _provider_has_key(provider: str) -> bool:
+    if provider == "openai":
+        return bool(settings.openai_api_key and settings.openai_api_key.strip())
+    if provider == "anthropic":
+        return bool(settings.anthropic_api_key and settings.anthropic_api_key.strip())
+    return False
+
+
+def _uses_completion_token_limit(model: str) -> bool:
+    normalized = model.lower()
+    return normalized.startswith(("gpt-5", "o1", "o3", "o4"))

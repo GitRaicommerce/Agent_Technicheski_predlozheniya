@@ -2,6 +2,7 @@ from types import SimpleNamespace
 
 from app.agents.tender_struct import (
     _build_domain_outline,
+    _build_deterministic_outline,
     _ensure_mandatory_sections,
     _extract_explicit_numbered_outline,
     _extract_mandatory_sections,
@@ -115,6 +116,39 @@ def test_ensure_mandatory_sections_inserts_missing_explicit_titles():
     assert result[0]["title"] == "Концепция и подход"
     assert result[0]["source_refs"] == ["chunk-1"]
     assert result[1]["title"] == "Организация на изпълнението"
+
+
+def test_build_deterministic_outline_uses_extracted_sections_when_llm_omits_outline():
+    explicit_sections = [
+        {
+            "uid": f"section-{index}",
+            "title": title,
+            "required": True,
+            "requirements": [f"РР·РёСЃРєРІР°РЅРµ Р·Р° {title}"],
+            "source_refs": [f"chunk-{index}"],
+            "subsections": [],
+        }
+        for index, title in enumerate(
+            [
+                "РљРѕРЅС†РµРїС†РёСЏ Рё РїРѕРґС…РѕРґ",
+                "Р Р°Р·СЂР°Р±РѕС‚РІР°РЅРµ РЅР° РёРЅРІРµСЃС‚РёС†РёРѕРЅРµРЅ РїСЂРѕРµРєС‚",
+                "Р›РёРЅРµРµРЅ РіСЂР°С„РёРє",
+                "РњРµСЂРєРё Р·Р° РѕСЃРёРіСѓСЂСЏРІР°РЅРµ РЅР° РєР°С‡РµСЃС‚РІРѕС‚Рѕ",
+                "РћСЂРіР°РЅРёР·Р°С†РёСЏ РЅР° РєРѕРјСѓРЅРёРєР°С†РёСЏС‚Р°",
+            ]
+        )
+    ]
+
+    outline = _build_deterministic_outline(
+        explicit_numbered_sections=explicit_sections,
+        domain_outline_sections=[],
+        mandatory_sections=[],
+    )
+
+    assert outline is not None
+    assert [section["title"] for section in outline["sections"]] == [
+        section["title"] for section in explicit_sections
+    ]
 
 
 def test_extract_mandatory_sections_ignores_numbered_lines_without_tp_context():

@@ -578,6 +578,26 @@ def _ensure_mandatory_sections(
     return [*missing_sections, *outline_sections]
 
 
+def _build_deterministic_outline(
+    explicit_numbered_sections: list[dict[str, Any]],
+    domain_outline_sections: list[dict[str, Any]],
+    mandatory_sections: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    if len(domain_outline_sections) >= 6:
+        sections = domain_outline_sections
+    elif len(explicit_numbered_sections) >= 5:
+        sections = explicit_numbered_sections
+    else:
+        sections = []
+
+    sections = _ensure_mandatory_sections(sections, mandatory_sections)
+    sections = _dedupe_outline_sections(sections)
+    if not sections:
+        return None
+
+    return {"sections": sections}
+
+
 async def run_tender_struct(
     project_id: str,
     db: "AsyncSession",
@@ -716,6 +736,22 @@ async def run_tender_struct(
         agent="tender_struct",
         trace_id=trace_id,
     )
+
+    outline_payload = llm_result.get("outline")
+    outline_sections = (
+        outline_payload.get("sections", []) if isinstance(outline_payload, dict) else []
+    )
+    if not outline_sections:
+        deterministic_outline = _build_deterministic_outline(
+            explicit_numbered_sections=explicit_numbered_sections,
+            domain_outline_sections=domain_outline_sections,
+            mandatory_sections=mandatory_sections,
+        )
+        if deterministic_outline:
+            llm_result["outline"] = deterministic_outline
+            warnings = llm_result.setdefault("warnings", [])
+            if isinstance(warnings, list):
+                warnings.append("llm_outline_missing_used_deterministic_fallback")
 
     if "outline" in llm_result:
         if len(domain_outline_sections) >= 6:
