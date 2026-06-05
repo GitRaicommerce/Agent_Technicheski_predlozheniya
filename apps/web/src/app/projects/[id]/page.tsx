@@ -17,7 +17,6 @@ type Module = "examples" | "tender_docs" | "schedule" | "legislation";
 const MODULES: { key: Module; label: string; icon: string }[] = [
   { key: "examples", label: "Примерни ТП", icon: "📄" },
   { key: "tender_docs", label: "Документация", icon: "📋" },
-  { key: "schedule", label: "Линеен график", icon: "📅" },
   { key: "legislation", label: "Законодателство", icon: "⚖️" },
 ];
 

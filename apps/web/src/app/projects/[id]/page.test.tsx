@@ -166,4 +166,13 @@ describe("ProjectPage", () => {
     });
     expect(pushMock).toHaveBeenCalledWith("/projects");
   });
+
+  it("shows schedule only as a dedicated panel, not as a duplicate upload module", async () => {
+    render(<ProjectPage />);
+
+    expect(await screen.findByText("Project Alpha")).toBeInTheDocument();
+
+    expect(screen.queryByTestId("module-toggle-schedule")).not.toBeInTheDocument();
+    expect(screen.getByTestId("schedule-panel-toggle")).toBeInTheDocument();
+  });
 });
