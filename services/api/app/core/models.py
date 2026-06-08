@@ -54,6 +54,9 @@ class Project(Base):
     generations: Mapped[list[Generation]] = relationship(
         back_populates="project", cascade="all, delete-orphan"
     )
+    generation_jobs: Mapped[list[GenerationJob]] = relationship(
+        back_populates="project", cascade="all, delete-orphan"
+    )
 
 
 class ProjectFile(Base):
@@ -336,3 +339,33 @@ class Generation(Base):
     trace_id: Mapped[Optional[str]] = mapped_column(UUID(as_uuid=False))
 
     project: Mapped[Project] = relationship(back_populates="generations")
+
+
+class GenerationJob(Base):
+    __tablename__ = "generation_jobs"
+
+    id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), primary_key=True, default=_uuid
+    )
+    project_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("projects.id", ondelete="CASCADE")
+    )
+    job_type: Mapped[str] = mapped_column(String(32), default="drafting_all")
+    status: Mapped[str] = mapped_column(String(32), default="queued")
+    total_sections: Mapped[int] = mapped_column(Integer, default=0)
+    completed_sections: Mapped[int] = mapped_column(Integer, default=0)
+    skipped_sections: Mapped[int] = mapped_column(Integer, default=0)
+    current_section_uid: Mapped[Optional[str]] = mapped_column(String(128))
+    current_section_title: Mapped[Optional[str]] = mapped_column(String(1024))
+    error: Mapped[Optional[str]] = mapped_column(Text)
+    result_json: Mapped[Optional[dict]] = mapped_column(JSONB)
+    trace_id: Mapped[Optional[str]] = mapped_column(UUID(as_uuid=False))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+
+    project: Mapped[Project] = relationship(back_populates="generation_jobs")

@@ -152,6 +152,8 @@ export interface OrchestratorAgentResult {
   variant_1?: GenerationVariant;
   variant_2?: GenerationVariant;
   generation_ids?: Record<string, string>;
+  job_id?: string;
+  job_status?: string;
   verification?: VerificationResult;
 }
 
@@ -248,6 +250,24 @@ export interface RegenerateResponse {
   trace_id: string;
 }
 
+export interface GenerationJob {
+  id: string;
+  project_id: string;
+  job_type: string;
+  status: "queued" | "processing" | "done" | "error" | string;
+  total_sections: number;
+  completed_sections: number;
+  skipped_sections: number;
+  current_section_uid?: string | null;
+  current_section_title?: string | null;
+  error?: string | null;
+  result_json?: Record<string, unknown> | null;
+  trace_id?: string | null;
+  created_at: string;
+  updated_at: string;
+  completed_at?: string | null;
+}
+
 export const api = {
   projects: {
     list: (limit = 20, offset = 0) =>
@@ -335,6 +355,14 @@ export const api = {
       ),
     listGenerations: (projectId: string) =>
       apiFetch<SectionGenerations[]>(`/api/v1/agents/${projectId}/generations`),
+    latestGenerationJob: (projectId: string) =>
+      apiFetch<GenerationJob | null>(
+        `/api/v1/agents/${projectId}/generation-jobs/latest`,
+      ),
+    getGenerationJob: (projectId: string, jobId: string) =>
+      apiFetch<GenerationJob>(
+        `/api/v1/agents/${projectId}/generation-jobs/${jobId}`,
+      ),
     selectGeneration: (projectId: string, generationId: string) =>
       apiFetch<{ status: string; generation_id: string }>(
         `/api/v1/agents/${projectId}/generations/${generationId}/select`,

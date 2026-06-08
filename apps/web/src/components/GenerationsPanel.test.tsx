@@ -15,6 +15,7 @@ vi.mock("@/lib/api", async () => {
       agents: {
         ...actual.api.agents,
         listGenerations: vi.fn(),
+        latestGenerationJob: vi.fn(),
         regenerateSection: vi.fn(),
       },
     },
@@ -22,11 +23,13 @@ vi.mock("@/lib/api", async () => {
 });
 
 const listGenerationsMock = vi.mocked(api.agents.listGenerations);
+const latestGenerationJobMock = vi.mocked(api.agents.latestGenerationJob);
 const regenerateSectionMock = vi.mocked(api.agents.regenerateSection);
 
 describe("GenerationsPanel", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    latestGenerationJobMock.mockResolvedValue(null);
   });
 
   it("renders empty state when there are no generations", async () => {
@@ -119,5 +122,33 @@ describe("GenerationsPanel", () => {
     await waitFor(() => {
       expect(listGenerationsMock).toHaveBeenCalledTimes(2);
     });
+  });
+
+  it("shows progress for an active all-sections generation job", async () => {
+    listGenerationsMock.mockResolvedValue([]);
+    latestGenerationJobMock.mockResolvedValue({
+      id: "job-1",
+      project_id: "project-1",
+      job_type: "drafting_all",
+      status: "processing",
+      total_sections: 4,
+      completed_sections: 1,
+      skipped_sections: 1,
+      current_section_uid: "sec-2",
+      current_section_title: "Section 2",
+      error: null,
+      result_json: null,
+      trace_id: "trace-1",
+      created_at: "2026-04-20T10:00:00.000Z",
+      updated_at: "2026-04-20T10:01:00.000Z",
+      completed_at: null,
+    });
+
+    render(<GenerationsPanel projectId="project-1" />);
+
+    expect(await screen.findByTestId("generation-job-progress")).toHaveTextContent(
+      "2 / 4",
+    );
+    expect(screen.getByText("Section 2")).toBeInTheDocument();
   });
 });

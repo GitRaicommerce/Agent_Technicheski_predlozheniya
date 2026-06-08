@@ -166,6 +166,19 @@ async def run_orchestrator(
         log.info("orchestrator_dispatch", agent=agent_name, trace_id=trace_id)
 
         if agent_name == "drafting_all":
+            from app.agents.generation_jobs import create_drafting_all_job
+
+            job = await create_drafting_all_job(project=project, db=db)
+            result["agent_result"] = {
+                "_agent": "drafting_all",
+                "job_id": job.id,
+                "job_status": job.status,
+            }
+            result["assistant_message"] = (
+                "Стартирах генериране на всички раздели във фонов режим. "
+                "Следете напредъка в секция **Генерации**."
+            )
+        elif False and agent_name == "drafting_all":
             # Generate ALL ungeneated sections in sequence
             sub_result = await _run_drafting_all(
                 project=project,

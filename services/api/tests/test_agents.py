@@ -272,6 +272,48 @@ async def test_get_generations_filters_out_stale_sections_not_in_latest_outline(
 
 
 # ---------------------------------------------------------------------------
+# GET /api/v1/agents/{project_id}/generation-jobs/latest
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_get_latest_generation_job(client, mock_db):
+    """Returns the latest background generation job."""
+    from datetime import datetime, timezone
+    from app.core.models import GenerationJob
+
+    pid = str(uuid.uuid4())
+    now = datetime.now(timezone.utc)
+    job = GenerationJob(
+        id=str(uuid.uuid4()),
+        project_id=pid,
+        job_type="drafting_all",
+        status="processing",
+        total_sections=5,
+        completed_sections=2,
+        skipped_sections=1,
+        current_section_uid="s3",
+        current_section_title="Методология",
+        trace_id=str(uuid.uuid4()),
+        created_at=now,
+        updated_at=now,
+    )
+
+    result_mock = MagicMock()
+    result_mock.scalar_one_or_none = MagicMock(return_value=job)
+    mock_db.execute = AsyncMock(return_value=result_mock)
+
+    resp = await client.get(f"/api/v1/agents/{pid}/generation-jobs/latest")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["id"] == job.id
+    assert data["status"] == "processing"
+    assert data["completed_sections"] == 2
+    assert data["skipped_sections"] == 1
+
+
+# ---------------------------------------------------------------------------
 # POST /api/v1/agents/{project_id}/sections/{section_uid}/regenerate
 # ---------------------------------------------------------------------------
 

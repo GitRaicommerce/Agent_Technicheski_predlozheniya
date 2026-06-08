@@ -276,6 +276,24 @@ class SectionGenerations(BaseModel):
     variants: list[GenerationResponse]
 
 
+class GenerationJobResponse(BaseModel):
+    id: str
+    project_id: str
+    job_type: str
+    status: str
+    total_sections: int
+    completed_sections: int
+    skipped_sections: int
+    current_section_uid: str | None = None
+    current_section_title: str | None = None
+    error: str | None = None
+    result_json: dict | None = None
+    trace_id: str | None = None
+    created_at: str
+    updated_at: str
+    completed_at: str | None = None
+
+
 @router.get("/{project_id}/generations", response_model=list[SectionGenerations])
 async def list_generations(project_id: str, db: AsyncSession = Depends(get_db)):
     """
@@ -358,6 +376,61 @@ async def list_generations(project_id: str, db: AsyncSession = Depends(get_db)):
             )
         )
     return result
+
+
+@router.get(
+    "/{project_id}/generation-jobs/latest",
+    response_model=GenerationJobResponse | None,
+)
+async def get_latest_generation_job(
+    project_id: str, db: AsyncSession = Depends(get_db)
+):
+    from app.core.models import GenerationJob
+    from sqlalchemy import select
+
+    result = await db.execute(
+        select(GenerationJob)
+        .where(GenerationJob.project_id == project_id)
+        .order_by(GenerationJob.created_at.desc())
+        .limit(1)
+    )
+    job = result.scalar_one_or_none()
+    return _generation_job_response(job) if job else None
+
+
+@router.get(
+    "/{project_id}/generation-jobs/{job_id}",
+    response_model=GenerationJobResponse,
+)
+async def get_generation_job(
+    project_id: str, job_id: str, db: AsyncSession = Depends(get_db)
+):
+    from app.core.models import GenerationJob
+
+    job = await db.get(GenerationJob, job_id)
+    if not job or job.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Generation job not found")
+    return _generation_job_response(job)
+
+
+def _generation_job_response(job) -> GenerationJobResponse:
+    return GenerationJobResponse(
+        id=job.id,
+        project_id=job.project_id,
+        job_type=job.job_type,
+        status=job.status,
+        total_sections=job.total_sections,
+        completed_sections=job.completed_sections,
+        skipped_sections=job.skipped_sections,
+        current_section_uid=job.current_section_uid,
+        current_section_title=job.current_section_title,
+        error=job.error,
+        result_json=job.result_json,
+        trace_id=job.trace_id,
+        created_at=job.created_at.isoformat(),
+        updated_at=job.updated_at.isoformat(),
+        completed_at=job.completed_at.isoformat() if job.completed_at else None,
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.agents.orchestrator import _run_drafting_all
+from app.agents.orchestrator import _run_drafting_all, run_orchestrator
 from app.core.models import TpOutline
 from tests.conftest import _make_project
 
@@ -14,6 +14,55 @@ def _outline_result(outline: TpOutline) -> MagicMock:
     result = MagicMock()
     result.scalar_one_or_none = MagicMock(return_value=outline)
     return result
+
+
+@pytest.mark.asyncio
+async def test_run_orchestrator_enqueues_drafting_all_job(mock_db):
+    project = _make_project()
+
+    no_outline_result = MagicMock()
+    no_outline_result.scalar_one_or_none = MagicMock(return_value=None)
+    mock_db.execute = AsyncMock(side_effect=[[], no_outline_result, []])
+
+    job = MagicMock()
+    job.id = str(uuid.uuid4())
+    job.status = "queued"
+
+    with (
+        patch(
+            "app.agents.orchestrator.llm_gateway.call",
+            new=AsyncMock(
+                return_value={
+                    "schema_version": "v1.3",
+                    "status": "ok",
+                    "assistant_message": "",
+                    "ui_actions": [],
+                    "agent_called": "drafting_all",
+                    "agent_params": {},
+                    "questions_to_user": [],
+                }
+            ),
+        ),
+        patch(
+            "app.agents.generation_jobs.create_drafting_all_job",
+            new=AsyncMock(return_value=job),
+        ) as create_job,
+        patch(
+            "app.agents.orchestrator._run_drafting_all",
+            new=AsyncMock(),
+        ) as run_sync,
+    ):
+        result = await run_orchestrator(
+            project=project,
+            message="Генерирай всички раздели",
+            history=[],
+            db=mock_db,
+        )
+
+    create_job.assert_awaited_once_with(project=project, db=mock_db)
+    run_sync.assert_not_awaited()
+    assert result["agent_result"]["job_id"] == job.id
+    assert result["agent_result"]["job_status"] == "queued"
 
 
 @pytest.mark.asyncio
