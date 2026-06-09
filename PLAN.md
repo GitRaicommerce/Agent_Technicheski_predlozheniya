@@ -37,6 +37,7 @@
 - Moved all-sections proposal generation to a persisted background job with progress polling in the Generations panel.
 - Expanded deterministic browser smoke coverage for background generation progress, section regeneration reloads, and chat-driven variant pinning.
 - Added project grounding context for drafting and verification so generated sections use tender scope excerpts and schedule tasks, not only example snippets.
+- Made all-section background generation resilient to transient LLM connection failures by preserving successful sections and recording failed sections for retry.
 
 ## Active Goals
 

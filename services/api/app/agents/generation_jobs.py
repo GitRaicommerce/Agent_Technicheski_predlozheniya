@@ -18,6 +18,38 @@ log = structlog.get_logger()
 TERMINAL_JOB_STATUSES = {"done", "error"}
 
 
+def _section_result(
+    uid: str,
+    title: str,
+    *,
+    generation_ids: dict[str, str] | None = None,
+    error: str | None = None,
+) -> dict[str, Any]:
+    result: dict[str, Any] = {
+        "section_uid": uid,
+        "title": title,
+    }
+    if generation_ids is not None:
+        result["generation_ids"] = generation_ids
+    if error is not None:
+        result["error"] = error
+    return result
+
+
+def _set_job_result(
+    job: GenerationJob,
+    outline: TpOutline,
+    results: list[dict[str, Any]],
+    failed_sections: list[dict[str, Any]],
+) -> None:
+    job.result_json = {
+        "outline_id": outline.id,
+        "outline_version": outline.version,
+        "sections": results,
+        "failed_sections": failed_sections,
+    }
+
+
 async def create_drafting_all_job(project: Project, db) -> GenerationJob:
     trace_id = str(uuid.uuid4())
     job = GenerationJob(
@@ -78,7 +110,7 @@ async def _process_generation_job_async(job_id: str) -> None:
                 job.updated_at = datetime.now(timezone.utc)
                 await db.commit()
             log.error("generation_job_failed", job_id=job_id, error=str(exc))
-            raise
+            return
 
 
 async def _run_drafting_all_job(job: GenerationJob, db) -> None:
@@ -127,15 +159,32 @@ async def _run_drafting_all_job(job: GenerationJob, db) -> None:
 
     from app.agents.schedule import run_schedule
 
-    schedule_result = await run_schedule(project_id=project.id, db=db, trace_id=job.trace_id)
-    schedule_summary = (
-        schedule_result.get("tp_section_text")
-        if "error" not in schedule_result.get("status", "")
-        else None
-    )
+    try:
+        schedule_result = await run_schedule(
+            project_id=project.id,
+            db=db,
+            trace_id=job.trace_id,
+        )
+        schedule_summary = (
+            schedule_result.get("tp_section_text")
+            if "error" not in schedule_result.get("status", "")
+            else None
+        )
+    except Exception as exc:
+        await db.rollback()
+        job = await db.get(GenerationJob, job.id)
+        if not job:
+            raise
+        schedule_summary = None
+        job.error = (
+            "Schedule summary failed; continuing with raw schedule grounding. "
+            f"{exc}"
+        )
+        job.updated_at = datetime.now(timezone.utc)
     await db.commit()
 
-    results = []
+    results: list[dict[str, Any]] = []
+    failed_sections: list[dict[str, Any]] = []
     for section in pending_sections:
         uid = section.get("uid")
         title = section.get("title", "")
@@ -159,56 +208,81 @@ async def _run_drafting_all_job(job: GenerationJob, db) -> None:
         from app.agents.drafting import run_drafting
         from app.agents.context import build_project_grounding_context
 
-        examples_result = await run_examples(
-            project_id=project.id,
-            query=title,
-            db=db,
-            max_snippets=5,
-            trace_id=job.trace_id,
-        )
-        lex_result = await run_legislation(
-            project_id=project.id,
-            query=title,
-            db=db,
-            trace_id=job.trace_id,
-        )
-        project_grounding_context = await build_project_grounding_context(
-            project_id=project.id,
-            section_title=title,
-            section_requirements=requirements,
-            db=db,
-        )
-        drafting_result = await run_drafting(
-            project_id=project.id,
-            section_uid=uid,
-            section_title=title,
-            section_requirements=requirements,
-            evidence_snippets=examples_result.get("selected_snippets", []),
-            schedule_summary=schedule_summary,
-            lex_citations=lex_result.get("citations", []),
-            db=db,
-            trace_id=job.trace_id,
-            project_grounding_context=project_grounding_context,
-        )
+        try:
+            examples_result = await run_examples(
+                project_id=project.id,
+                query=title,
+                db=db,
+                max_snippets=5,
+                trace_id=job.trace_id,
+            )
+            lex_result = await run_legislation(
+                project_id=project.id,
+                query=title,
+                db=db,
+                trace_id=job.trace_id,
+            )
+            project_grounding_context = await build_project_grounding_context(
+                project_id=project.id,
+                section_title=title,
+                section_requirements=requirements,
+                db=db,
+            )
+            drafting_result = await run_drafting(
+                project_id=project.id,
+                section_uid=uid,
+                section_title=title,
+                section_requirements=requirements,
+                evidence_snippets=examples_result.get("selected_snippets", []),
+                schedule_summary=schedule_summary,
+                lex_citations=lex_result.get("citations", []),
+                db=db,
+                trace_id=job.trace_id,
+                project_grounding_context=project_grounding_context,
+            )
+        except Exception as exc:
+            await db.rollback()
+            job = await db.get(GenerationJob, job.id)
+            if not job:
+                raise
+            error = str(exc)
+            log.warning(
+                "generation_job_section_failed",
+                job_id=job.id,
+                project_id=project.id,
+                section=title,
+                error=error,
+                trace_id=job.trace_id,
+            )
+            failed_sections.append(_section_result(uid, title, error=error))
+            job.skipped_sections += 1
+            job.error = (
+                f"{len(failed_sections)} section(s) failed. "
+                "Run generation again to retry remaining sections."
+            )
+            _set_job_result(job, outline, results, failed_sections)
+            job.updated_at = datetime.now(timezone.utc)
+            await db.commit()
+            continue
 
         job.completed_sections += 1
-        job.result_json = {
-            "outline_id": outline.id,
-            "outline_version": outline.version,
-            "sections": [
-                *results,
-                {
-                    "section_uid": uid,
-                    "title": title,
-                    "generation_ids": drafting_result.get("generation_ids"),
-                },
-            ],
-        }
+        results.append(
+            _section_result(
+                uid,
+                title,
+                generation_ids=drafting_result.get("generation_ids"),
+            )
+        )
+        _set_job_result(job, outline, results, failed_sections)
         job.updated_at = datetime.now(timezone.utc)
         await db.commit()
-        results = job.result_json["sections"]
 
-    job.status = "done"
+    job.status = "error" if failed_sections else "done"
+    if failed_sections:
+        job.error = (
+            f"{len(failed_sections)} section(s) failed. "
+            "Run generation again to retry remaining sections."
+        )
     job.current_section_uid = None
     job.current_section_title = None
     job.completed_at = datetime.now(timezone.utc)
