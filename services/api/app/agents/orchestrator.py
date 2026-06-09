@@ -312,6 +312,14 @@ async def _run_drafting_all(
 
         # Generate text
         from app.agents.drafting import run_drafting
+        from app.agents.context import build_project_grounding_context
+
+        project_grounding_context = await build_project_grounding_context(
+            project_id=project.id,
+            section_title=title,
+            section_requirements=requirements,
+            db=db,
+        )
         drafting_result = await run_drafting(
             project_id=project.id,
             section_uid=uid,
@@ -322,6 +330,7 @@ async def _run_drafting_all(
             lex_citations=lex_citations,
             db=db,
             trace_id=trace_id,
+            project_grounding_context=project_grounding_context,
         )
         results.append({"section_uid": uid, "title": title, "generation_ids": drafting_result.get("generation_ids")})
         generated_count += 1
@@ -402,6 +411,14 @@ async def _run_drafting_pipeline(
 
     # 4. Run drafting agent with gathered evidence
     from app.agents.drafting import run_drafting
+    from app.agents.context import build_project_grounding_context
+
+    project_grounding_context = await build_project_grounding_context(
+        project_id=project_id,
+        section_title=section_title,
+        section_requirements=section_requirements,
+        db=db,
+    )
 
     drafting_result = await run_drafting(
         project_id=project_id,
@@ -413,6 +430,7 @@ async def _run_drafting_pipeline(
         lex_citations=lex_citations,
         db=db,
         trace_id=trace_id,
+        project_grounding_context=project_grounding_context,
     )
     pipeline_trace["drafting"] = {
         "status": "ok" if "error" not in drafting_result else "error"
@@ -492,17 +510,28 @@ async def _dispatch_agent(
 
         elif agent_name == "drafting":
             from app.agents.drafting import run_drafting
+            from app.agents.context import build_project_grounding_context
+
+            section_title = params.get("section_title", "")
+            section_requirements = params.get("section_requirements", [])
+            project_grounding_context = await build_project_grounding_context(
+                project_id=project_id,
+                section_title=section_title,
+                section_requirements=section_requirements,
+                db=db,
+            )
 
             return await run_drafting(
                 project_id=project_id,
                 section_uid=params.get("section_uid", str(uuid.uuid4())),
-                section_title=params.get("section_title", ""),
-                section_requirements=params.get("section_requirements", []),
+                section_title=section_title,
+                section_requirements=section_requirements,
                 evidence_snippets=params.get("evidence_snippets", []),
                 schedule_summary=params.get("schedule_summary"),
                 lex_citations=params.get("lex_citations", []),
                 db=db,
                 trace_id=trace_id,
+                project_grounding_context=project_grounding_context,
             )
 
         elif agent_name == "verifier":

@@ -36,6 +36,7 @@
 - Stabilized local startup by moving the Dockerized web dev server away from Turbopack on Windows mounts, adding a web healthcheck, and adding a startup script that waits for readiness before opening the app.
 - Moved all-sections proposal generation to a persisted background job with progress polling in the Generations panel.
 - Expanded deterministic browser smoke coverage for background generation progress, section regeneration reloads, and chat-driven variant pinning.
+- Added project grounding context for drafting and verification so generated sections use tender scope excerpts and schedule tasks, not only example snippets.
 
 ## Active Goals
 
@@ -47,7 +48,7 @@
 ## Next Recommended Steps
 
 1. Expand generated documentation with more precise backend endpoint and workflow coverage.
-2. Extend browser smoke coverage further around export edge cases and multi-section generation completion states.
+2. Re-test live proposal generation quality on a real tender project and tune grounding selection if specific project parts or schedule tasks are still missed.
 3. Build broader regression coverage around the frontend so changes in one area are checked against breakage in other core flows.
 4. Improve engineering docs for architecture, runbooks, and testing strategy.
 

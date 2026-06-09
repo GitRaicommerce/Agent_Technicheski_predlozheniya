@@ -157,6 +157,7 @@ async def _run_drafting_all_job(job: GenerationJob, db) -> None:
         from app.agents.examples import run_examples
         from app.agents.legislation import run_legislation
         from app.agents.drafting import run_drafting
+        from app.agents.context import build_project_grounding_context
 
         examples_result = await run_examples(
             project_id=project.id,
@@ -171,6 +172,12 @@ async def _run_drafting_all_job(job: GenerationJob, db) -> None:
             db=db,
             trace_id=job.trace_id,
         )
+        project_grounding_context = await build_project_grounding_context(
+            project_id=project.id,
+            section_title=title,
+            section_requirements=requirements,
+            db=db,
+        )
         drafting_result = await run_drafting(
             project_id=project.id,
             section_uid=uid,
@@ -181,6 +188,7 @@ async def _run_drafting_all_job(job: GenerationJob, db) -> None:
             lex_citations=lex_result.get("citations", []),
             db=db,
             trace_id=job.trace_id,
+            project_grounding_context=project_grounding_context,
         )
 
         job.completed_sections += 1

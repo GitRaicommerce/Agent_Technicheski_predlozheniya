@@ -12,7 +12,8 @@ import structlog
 from sqlalchemy import select
 
 from app.core.llm_gateway import llm_gateway
-from app.core.models import Generation, ExampleSnippet, LexChunk
+from app.core.models import Generation, ExampleSnippet, LexChunk, TpOutline
+from app.agents.context import build_project_grounding_context, format_grounding_context
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -44,6 +45,19 @@ SYSTEM_PROMPT = """Ти си агент-верификатор за Технич
   "summary": "<обобщение на проверката на български>"
 }"""
 
+GROUNDING_VERIFIER_APPENDIX = """
+
+Additional verification rules:
+- Check the generated text against PROJECT GROUNDING CONTEXT as a mandatory
+  source, especially tender scope excerpts and schedule tasks.
+- Mark gaps when required project parts, design disciplines, deliverables,
+  schedule activities, review/approval steps, or timing are missing.
+- For investment/design project sections, return needs_review or reject if the
+  text mentions only one discipline while the sources list multiple parts such
+  as Geodesy, Structural, Water supply, PBZ, PUSO, cost estimate documentation,
+  bills of quantities, or other listed parts.
+"""
+
 
 async def run_verifier(
     project_id: str,
@@ -72,6 +86,30 @@ async def run_verifier(
     # Load referenced evidence items based on evidence_map
     evidence_texts: list[str] = []
     evidence_map = generation.evidence_map_json or {}
+    section_title = str(generation.section_uid)
+    section_requirements: list[str] = []
+
+    outline_result = await db.execute(
+        select(TpOutline)
+        .where(TpOutline.project_id == project_id)
+        .order_by(TpOutline.version.desc())
+        .limit(1)
+    )
+    outline = outline_result.scalar_one_or_none()
+    if outline:
+        def _find_section(sections: list[dict[str, Any]]) -> dict[str, Any] | None:
+            for section in sections:
+                if str(section.get("uid")) == str(generation.section_uid):
+                    return section
+                found = _find_section(section.get("subsections", []))
+                if found:
+                    return found
+            return None
+
+        section = _find_section(outline.outline_json.get("sections", []))
+        if section:
+            section_title = section.get("title", section_title)
+            section_requirements = section.get("requirements", [])
 
     import uuid as _uuid
 
@@ -116,6 +154,20 @@ async def run_verifier(
         else "Няма налични доказателства за проверка."
     )
 
+    project_grounding_context = (
+        generation.used_sources_json.get("grounding_context")
+        if generation.used_sources_json
+        else None
+    )
+    if not project_grounding_context:
+        project_grounding_context = await build_project_grounding_context(
+            project_id=project_id,
+            section_title=section_title,
+            section_requirements=section_requirements,
+            db=db,
+        )
+    grounding_context_block = format_grounding_context(project_grounding_context)
+
     user_message = (
         f"ГЕНЕРИРАН ТЕКСТ:\n"
         f"[UNTRUSTED CONTENT START]\n{generation.text}\n[UNTRUSTED CONTENT END]\n\n"
@@ -123,8 +175,13 @@ async def run_verifier(
         f"ИЗХОДНИ ДАННИ:\n{evidence_block}"
     )
 
+    user_message += (
+        "\n\nPROJECT GROUNDING CONTEXT:\n"
+        f"[UNTRUSTED DATA START]\n{grounding_context_block}\n[UNTRUSTED DATA END]"
+    )
+
     llm_result = await llm_gateway.call(
-        system_prompt=SYSTEM_PROMPT,
+        system_prompt=SYSTEM_PROMPT + GROUNDING_VERIFIER_APPENDIX,
         user_message=user_message,
         agent="verifier",
         trace_id=trace_id,

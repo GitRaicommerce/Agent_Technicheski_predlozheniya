@@ -127,9 +127,13 @@ async def test_run_drafting_all_prefers_latest_outline_even_if_unlocked(mock_db)
             new=AsyncMock(return_value={"citations": [], "total_found": 0}),
         ),
         patch(
+            "app.agents.context.build_project_grounding_context",
+            new=AsyncMock(return_value={"schedule": {"tasks": []}, "tender_chunks": []}),
+        ) as build_context,
+        patch(
             "app.agents.drafting.run_drafting",
             new=AsyncMock(return_value={"generation_ids": {"variant_1": str(uuid.uuid4())}}),
-        ),
+        ) as run_drafting,
     ):
         result = await _run_drafting_all(project=project, db=mock_db, trace_id=str(uuid.uuid4()))
 
