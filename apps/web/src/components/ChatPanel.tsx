@@ -303,6 +303,7 @@ export default function ChatPanel({
                           onClick={() =>
                             void handlePin(msg.generationIds!.variant_1!)
                           }
+                          data-testid={`pin-generation-${msg.generationIds.variant_1}`}
                           className={`rounded border px-2 py-0.5 text-xs transition ${
                             pinnedGenerations.has(msg.generationIds.variant_1)
                               ? "border-green-200 bg-green-50 text-green-700"
@@ -319,6 +320,7 @@ export default function ChatPanel({
                           onClick={() =>
                             void handlePin(msg.generationIds!.variant_2!)
                           }
+                          data-testid={`pin-generation-${msg.generationIds.variant_2}`}
                           className={`rounded border px-2 py-0.5 text-xs transition ${
                             pinnedGenerations.has(msg.generationIds.variant_2)
                               ? "border-green-200 bg-green-50 text-green-700"

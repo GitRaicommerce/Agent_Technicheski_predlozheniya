@@ -52,7 +52,19 @@ test.beforeEach(async ({ page }) => {
 
 async function seedProjectState(
   projectId: string,
-  options?: { staleGeneration?: boolean; outlineLocked?: boolean },
+  options?: {
+    staleGeneration?: boolean;
+    outlineLocked?: boolean;
+    includeAlternativeGeneration?: boolean;
+    generationJob?: {
+      status?: string;
+      totalSections?: number;
+      completedSections?: number;
+      skippedSections?: number;
+      currentSectionTitle?: string;
+      error?: string | null;
+    };
+  },
 ) {
   const client = createDbClient();
   const sectionUid = randomUUID();
@@ -62,6 +74,8 @@ async function seedProjectState(
   const snapshotId = randomUUID();
   const normalizedId = randomUUID();
   const generationId = randomUUID();
+  const alternativeGenerationId = randomUUID();
+  const generationJobId = randomUUID();
 
   const outlineJson = {
     sections: [
@@ -153,11 +167,122 @@ async function seedProjectState(
         randomUUID(),
       ],
     );
+
+    if (options?.includeAlternativeGeneration) {
+      await client.query(
+        `
+          INSERT INTO generations (
+            id, project_id, section_uid, variant, text, evidence_status, selected, trace_id
+          )
+          VALUES ($1, $2, $3, '2', $4, 'ok', false, $5)
+        `,
+        [
+          alternativeGenerationId,
+          projectId,
+          sectionUid,
+          "Alternative smoke variant text.",
+          randomUUID(),
+        ],
+      );
+    }
+
+    if (options?.generationJob) {
+      await client.query(
+        `
+          INSERT INTO generation_jobs (
+            id,
+            project_id,
+            job_type,
+            status,
+            total_sections,
+            completed_sections,
+            skipped_sections,
+            current_section_uid,
+            current_section_title,
+            error,
+            result_json,
+            trace_id
+          )
+          VALUES ($1, $2, 'drafting_all', $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11)
+        `,
+        [
+          generationJobId,
+          projectId,
+          options.generationJob.status ?? "processing",
+          options.generationJob.totalSections ?? 3,
+          options.generationJob.completedSections ?? 1,
+          options.generationJob.skippedSections ?? 0,
+          subsectionUid,
+          options.generationJob.currentSectionTitle ?? "Execution Plan",
+          options.generationJob.error ?? null,
+          JSON.stringify({ source: "playwright-smoke" }),
+          randomUUID(),
+        ],
+      );
+    }
   } finally {
     await client.end();
   }
 
-  return { sectionUid };
+  return {
+    sectionUid,
+    generationId,
+    alternativeGenerationId: options?.includeAlternativeGeneration
+      ? alternativeGenerationId
+      : null,
+    generationJobId: options?.generationJob ? generationJobId : null,
+  };
+}
+
+async function seedGenerationVariant(
+  projectId: string,
+  sectionUid: string,
+  options: {
+    variant: string;
+    text: string;
+    selected?: boolean;
+    evidenceStatus?: string;
+  },
+) {
+  const client = createDbClient();
+  const generationId = randomUUID();
+
+  await client.connect();
+  try {
+    if (options.selected) {
+      await client.query(
+        `
+          UPDATE generations
+          SET selected = false
+          WHERE project_id = $1 AND section_uid = $2
+        `,
+        [projectId, sectionUid],
+      );
+    }
+
+    await client.query(
+      `
+        INSERT INTO generations (
+          id, project_id, section_uid, variant, text, evidence_status, selected, trace_id
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      `,
+      [
+        generationId,
+        projectId,
+        sectionUid,
+        options.variant,
+        options.text,
+        options.evidenceStatus ?? "ok",
+        options.selected ?? false,
+        randomUUID(),
+      ],
+    );
+  } finally {
+    await client.end();
+  }
+
+  return generationId;
 }
 
 async function waitForProjectPage(page: Page, projectName: string) {
@@ -309,6 +434,111 @@ test.describe("smoke", () => {
     }
   });
 
+  test("shows latest all-section background generation progress", async ({
+    page,
+    request,
+  }) => {
+    const projectName = `Smoke Progress ${Date.now()}`;
+    const createResponse = await request.post("/api/v1/projects", {
+      data: {
+        name: projectName,
+        location: "Sofia",
+      },
+    });
+
+    expect(createResponse.ok()).toBeTruthy();
+    const project = (await createResponse.json()) as { id: string };
+    const projectId = project.id;
+    await seedProjectState(projectId, {
+      outlineLocked: true,
+      generationJob: {
+        status: "processing",
+        totalSections: 3,
+        completedSections: 1,
+        skippedSections: 1,
+        currentSectionTitle: "Execution Plan",
+      },
+    });
+
+    try {
+      await page.goto(`/projects/${projectId}`);
+      await waitForProjectPage(page, projectName);
+
+      await page.getByTestId("generations-panel-toggle").click();
+
+      const progress = page.getByTestId("generation-job-progress");
+      await expect(progress).toBeVisible();
+      await expect(progress).toContainText("2 / 3");
+      await expect(progress).toContainText("Execution Plan");
+    } finally {
+      await request.delete(`/api/v1/projects/${projectId}`);
+    }
+  });
+
+  test("reloads a section after a deterministic regenerate action", async ({
+    page,
+    request,
+  }) => {
+    const projectName = `Smoke Regenerate ${Date.now()}`;
+    const createResponse = await request.post("/api/v1/projects", {
+      data: {
+        name: projectName,
+        location: "Sofia",
+      },
+    });
+
+    expect(createResponse.ok()).toBeTruthy();
+    const project = (await createResponse.json()) as { id: string };
+    const projectId = project.id;
+    const { sectionUid } = await seedProjectState(projectId, {
+      outlineLocked: true,
+    });
+    let regeneratedGenerationId: string | null = null;
+
+    try {
+      await page.route(
+        `**/api/v1/agents/${projectId}/sections/${sectionUid}/regenerate`,
+        async (route) => {
+          regeneratedGenerationId = await seedGenerationVariant(
+            projectId,
+            sectionUid,
+            {
+              variant: "2",
+              text: "Regenerated smoke text for the section.",
+              selected: true,
+            },
+          );
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify({
+              generation_ids: { variant_1: regeneratedGenerationId },
+              trace_id: randomUUID(),
+            }),
+          });
+        },
+      );
+
+      await page.goto(`/projects/${projectId}`);
+      await waitForProjectPage(page, projectName);
+
+      await page.getByTestId("generations-panel-toggle").click();
+      await page.getByTestId(`generation-section-${sectionUid}`).click();
+      await expect(
+        page.getByText("Seeded generated text for smoke export."),
+      ).toBeVisible();
+
+      await page.getByTestId(`generation-regenerate-${sectionUid}`).click();
+
+      await expect(
+        page.getByText("Regenerated smoke text for the section."),
+      ).toBeVisible();
+      expect(regeneratedGenerationId).not.toBeNull();
+    } finally {
+      await request.delete(`/api/v1/projects/${projectId}`);
+    }
+  });
+
   test("opens outline and generations panels from a deterministic chat flow", async ({
     page,
     request,
@@ -324,8 +554,10 @@ test.describe("smoke", () => {
     expect(createResponse.ok()).toBeTruthy();
     const project = (await createResponse.json()) as { id: string };
     const projectId = project.id;
-    const { sectionUid } = await seedProjectState(projectId, {
+    const { sectionUid, generationId, alternativeGenerationId } =
+      await seedProjectState(projectId, {
       outlineLocked: true,
+      includeAlternativeGeneration: true,
     });
 
     try {
@@ -350,9 +582,17 @@ test.describe("smoke", () => {
             agent_called: "drafting_all",
             questions_to_user: [],
             agent_result: {
-              generation_ids: {
-                variant_1: randomUUID(),
+              variant_1: {
+                text: "Chat smoke variant 1 text.",
               },
+              variant_2: {
+                text: "Chat smoke variant 2 text.",
+              },
+              generation_ids: {
+                variant_1: generationId,
+                variant_2: alternativeGenerationId,
+              },
+              verification: { verdict: "ok" },
             },
           }),
         });
@@ -379,6 +619,21 @@ test.describe("smoke", () => {
       await expect(
         page.getByText("Seeded generated text for smoke export."),
       ).toBeVisible();
+
+      expect(alternativeGenerationId).not.toBeNull();
+      await page.getByTestId(`pin-generation-${alternativeGenerationId}`).click();
+
+      await expect.poll(async () => {
+        const response = await request.get(
+          `/api/v1/agents/${projectId}/generations`,
+        );
+        const sections = (await response.json()) as Array<{
+          variants: Array<{ id: string; selected: boolean }>;
+        }>;
+        return sections
+          .flatMap((section) => section.variants)
+          .find((variant) => variant.id === alternativeGenerationId)?.selected;
+      }).toBe(true);
     } finally {
       await request.delete(`/api/v1/projects/${projectId}`);
     }

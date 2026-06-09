@@ -35,6 +35,7 @@
 - Added deterministic browser smoke coverage for chat-driven opening of outline and generations panels without relying on a live LLM response.
 - Stabilized local startup by moving the Dockerized web dev server away from Turbopack on Windows mounts, adding a web healthcheck, and adding a startup script that waits for readiness before opening the app.
 - Moved all-sections proposal generation to a persisted background job with progress polling in the Generations panel.
+- Expanded deterministic browser smoke coverage for background generation progress, section regeneration reloads, and chat-driven variant pinning.
 
 ## Active Goals
 
@@ -46,7 +47,7 @@
 ## Next Recommended Steps
 
 1. Expand generated documentation with more precise backend endpoint and workflow coverage.
-2. Extend browser smoke coverage further around chat-to-generation flows, background generation progress, regeneration behavior, and selection/pinning actions now that deterministic orchestrator stubbing is in place.
+2. Extend browser smoke coverage further around export edge cases and multi-section generation completion states.
 3. Build broader regression coverage around the frontend so changes in one area are checked against breakage in other core flows.
 4. Improve engineering docs for architecture, runbooks, and testing strategy.
 
