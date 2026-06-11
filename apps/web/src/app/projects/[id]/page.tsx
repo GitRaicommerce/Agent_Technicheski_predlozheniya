@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { api, Project } from "@/lib/api";
+import { api, LegislationStatusResponse, Project } from "@/lib/api";
 import { useToast } from "@/components/ToastProvider";
 import ChatPanel from "@/components/ChatPanel";
 import ExportButton from "@/components/ExportButton";
@@ -31,6 +31,9 @@ const WORKFLOW_STEPS = [
 
 const DISABLE_AUTO_LEX_REFRESH_KEY = "tp_disable_auto_lex_refresh";
 
+const displayModuleLabel = (module: { key: Module; label: string }) =>
+  module.key === "legislation" ? "Нормативна база" : module.label;
+
 export default function ProjectPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
@@ -51,6 +54,56 @@ export default function ProjectPage() {
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [legislationStatus, setLegislationStatus] =
+    useState<LegislationStatusResponse | null>(null);
+  const [legislationStatusLoading, setLegislationStatusLoading] = useState(false);
+  const [legislationRefreshing, setLegislationRefreshing] = useState(false);
+  const [legislationError, setLegislationError] = useState<string | null>(null);
+
+  const loadLegislationStatus = useCallback(async (projectId: string) => {
+    setLegislationStatusLoading(true);
+    setLegislationError(null);
+    try {
+      const status = await api.projects.legislationStatus(projectId);
+      setLegislationStatus(status);
+    } catch (error: unknown) {
+      setLegislationError(
+        error instanceof Error
+          ? error.message
+          : "Не успях да заредя статуса на нормативната база.",
+      );
+    } finally {
+      setLegislationStatusLoading(false);
+    }
+  }, []);
+
+  const refreshLegislation = useCallback(
+    async (projectId: string, force = false) => {
+      setLegislationRefreshing(true);
+      setLegislationError(null);
+      try {
+        const refresh = await api.projects.refreshLegislation(projectId, force);
+        await loadLegislationStatus(projectId);
+        if (refresh.status === "warning") {
+          toast("Част от нормативната база не можа да бъде обновена от Lex.bg.", "warning");
+        } else if (refresh.changed > 0) {
+          toast("Нормативната база е обновена от Lex.bg.", "success");
+        } else if (force) {
+          toast("Нормативната база е проверена. Няма промени.", "success");
+        }
+      } catch (error: unknown) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Не успях да проверя нормативната база в Lex.bg.";
+        setLegislationError(message);
+        toast("Не успях да проверя нормативната база в Lex.bg.", "error");
+      } finally {
+        setLegislationRefreshing(false);
+      }
+    },
+    [loadLegislationStatus, toast],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -68,8 +121,14 @@ export default function ProjectPage() {
 
         setProject(p);
         setEditData({ name: p.name, location: p.location ?? "", description: p.description ?? "", contracting_authority: p.contracting_authority ?? "", tender_date: p.tender_date ?? "" });
+        void loadLegislationStatus(p.id);
 
         if (window.localStorage.getItem(DISABLE_AUTO_LEX_REFRESH_KEY) === "1") {
+          return;
+        }
+
+        if (refreshLegislation) {
+          void refreshLegislation(p.id);
           return;
         }
 
@@ -98,7 +157,7 @@ export default function ProjectPage() {
     return () => {
       cancelled = true;
     };
-  }, [params.id, toast]);
+  }, [loadLegislationStatus, params.id, refreshLegislation, toast]);
 
   // Close edit/delete with Escape
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
@@ -334,7 +393,7 @@ export default function ProjectPage() {
                   }`}
                 >
                   <span>{m.icon}</span>
-                  <span>{m.label}</span>
+                  <span>{displayModuleLabel(m)}</span>
                 </button>
               ))}
             </div>
@@ -413,7 +472,16 @@ export default function ProjectPage() {
 
           {/* Active module upload panel */}
           {activeModule && (
-            <div className="p-3 flex-1">
+            <div className="p-3 flex-1 space-y-3">
+              {activeModule === "legislation" && (
+                <LegislationAutoPanel
+                  status={legislationStatus}
+                  loading={legislationStatusLoading}
+                  refreshing={legislationRefreshing}
+                  error={legislationError}
+                  onRefresh={() => void refreshLegislation(project.id, true)}
+                />
+              )}
               <FileUploadPanel
                 projectId={project.id}
                 module={activeModule}
@@ -462,5 +530,90 @@ export default function ProjectPage() {
         </div>
       </div>
     </main>
+  );
+}
+
+function LegislationAutoPanel({
+  status,
+  loading,
+  refreshing,
+  error,
+  onRefresh,
+}: {
+  status: LegislationStatusResponse | null;
+  loading: boolean;
+  refreshing: boolean;
+  error: string | null;
+  onRefresh: () => void;
+}) {
+  const loaded = status?.loaded_acts ?? 0;
+  const configured = status?.configured_acts ?? 0;
+  const isReady = status?.status === "ok";
+  const isPartial = status?.status === "partial";
+  const latest = status?.latest_fetched_at
+    ? new Date(status.latest_fetched_at).toLocaleString("bg-BG")
+    : "няма";
+
+  return (
+    <div
+      data-testid="legislation-auto-panel"
+      className={`rounded-lg border px-3 py-3 text-xs ${
+        isReady
+          ? "border-green-200 bg-green-50 text-green-800"
+          : isPartial
+            ? "border-amber-200 bg-amber-50 text-amber-800"
+            : "border-blue-200 bg-blue-50 text-blue-800"
+      }`}
+    >
+      <div className="mb-2 flex items-start justify-between gap-2">
+        <div>
+          <p className="font-semibold">Автоматично от Lex.bg</p>
+          <p className="mt-0.5 leading-relaxed opacity-80">
+            Оркестраторът проверява нормативната база при нужда и цитира само
+            запазени проверени пасажи.
+          </p>
+        </div>
+        <span className="shrink-0 rounded border border-current/20 px-1.5 py-0.5 font-medium">
+          {loading ? "..." : `${loaded}/${configured || "?"}`}
+        </span>
+      </div>
+
+      <dl className="space-y-1">
+        <div className="flex justify-between gap-2">
+          <dt className="opacity-70">Последна проверка</dt>
+          <dd className="text-right">{latest}</dd>
+        </div>
+        <div className="flex justify-between gap-2">
+          <dt className="opacity-70">Нормативни chunks</dt>
+          <dd>{status?.chunk_count ?? 0}</dd>
+        </div>
+      </dl>
+
+      {status?.missing_acts?.length ? (
+        <p
+          className="mt-2 truncate opacity-80"
+          title={status.missing_acts.join(", ")}
+        >
+          Липсват: {status.missing_acts.length} акта
+        </p>
+      ) : null}
+
+      {error && <p className="mt-2 text-red-600">{error}</p>}
+
+      <button
+        type="button"
+        onClick={onRefresh}
+        disabled={refreshing}
+        data-testid="legislation-refresh-button"
+        className="mt-3 w-full rounded-lg border bg-white px-3 py-2 text-blue-700 transition hover:bg-blue-50 disabled:opacity-50"
+      >
+        {refreshing ? "Обновява..." : "Обнови от Lex.bg"}
+      </button>
+
+      <p className="mt-2 leading-relaxed opacity-70">
+        Качването по-долу е само за специфични указания, стандарти или актове,
+        които не са част от стандартната Lex.bg база.
+      </p>
+    </div>
   );
 }

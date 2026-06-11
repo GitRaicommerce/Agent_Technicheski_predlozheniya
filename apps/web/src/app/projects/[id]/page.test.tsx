@@ -70,6 +70,7 @@ vi.mock("@/lib/api", async () => {
         get: vi.fn(),
         update: vi.fn(),
         refreshLegislation: vi.fn(),
+        legislationStatus: vi.fn(),
         delete: vi.fn(),
       },
     },
@@ -79,6 +80,7 @@ vi.mock("@/lib/api", async () => {
 const getMock = vi.mocked(api.projects.get);
 const updateMock = vi.mocked(api.projects.update);
 const refreshLegislationMock = vi.mocked(api.projects.refreshLegislation);
+const legislationStatusMock = vi.mocked(api.projects.legislationStatus);
 const deleteMock = vi.mocked(api.projects.delete);
 
 describe("ProjectPage", () => {
@@ -102,6 +104,15 @@ describe("ProjectPage", () => {
       refreshed: [],
       errors: [],
     });
+    legislationStatusMock.mockResolvedValue({
+      status: "ok",
+      automatic_source: "Lex.bg",
+      configured_acts: 9,
+      loaded_acts: 9,
+      missing_acts: [],
+      chunk_count: 90,
+      latest_fetched_at: "2026-04-20T10:00:00.000Z",
+    });
   });
 
   it("loads a project and saves edits", async () => {
@@ -120,7 +131,7 @@ describe("ProjectPage", () => {
 
     expect(await screen.findByText("Project Alpha")).toBeInTheDocument();
     await waitFor(() => {
-      expect(refreshLegislationMock).toHaveBeenCalledWith("project-1");
+      expect(refreshLegislationMock).toHaveBeenCalledWith("project-1", false);
     });
 
     const editButton = screen.getByRole("button", { name: "✎" });
@@ -174,5 +185,26 @@ describe("ProjectPage", () => {
 
     expect(screen.queryByTestId("module-toggle-schedule")).not.toBeInTheDocument();
     expect(screen.getByTestId("schedule-panel-toggle")).toBeInTheDocument();
+  });
+
+  it("shows automatic Lex.bg status and allows manual refresh", async () => {
+    render(<ProjectPage />);
+
+    expect(await screen.findByText("Project Alpha")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(legislationStatusMock).toHaveBeenCalledWith("project-1");
+    });
+
+    await userEvent.click(screen.getByTestId("module-toggle-legislation"));
+
+    expect(await screen.findByTestId("legislation-auto-panel")).toHaveTextContent(
+      "Lex.bg",
+    );
+
+    await userEvent.click(screen.getByTestId("legislation-refresh-button"));
+
+    await waitFor(() => {
+      expect(refreshLegislationMock).toHaveBeenCalledWith("project-1", true);
+    });
   });
 });

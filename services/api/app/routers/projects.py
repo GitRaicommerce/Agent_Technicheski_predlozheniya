@@ -52,6 +52,16 @@ class LegislationRefreshResponse(BaseModel):
     errors: list[dict[str, str]]
 
 
+class LegislationStatusResponse(BaseModel):
+    status: str
+    automatic_source: str
+    configured_acts: int
+    loaded_acts: int
+    missing_acts: list[str]
+    chunk_count: int
+    latest_fetched_at: Optional[datetime] = None
+
+
 @router.post("", response_model=ProjectResponse, status_code=status.HTTP_201_CREATED)
 async def create_project(data: ProjectCreate, db: AsyncSession = Depends(get_db)):
     project = Project(**data.model_dump())
@@ -156,6 +166,66 @@ async def refresh_project_legislation(
         db=db,
         trace_id=str(uuid.uuid4()),
         force=force,
+    )
+
+
+@router.get(
+    "/{project_id}/legislation/status",
+    response_model=LegislationStatusResponse,
+)
+async def get_project_legislation_status(
+    project_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    project = await db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    from app.core.models import LexChunk, LexSnapshot
+    from app.legislation.lex_bg import DEFAULT_LEX_BG_ACTS
+
+    configured_names = {act.act_name for act in DEFAULT_LEX_BG_ACTS}
+    snapshots_result = await db.execute(
+        select(LexSnapshot).where(LexSnapshot.project_id == project_id)
+    )
+    snapshots = snapshots_result.scalars().all()
+    latest_by_act = {}
+    for snapshot in snapshots:
+        current = latest_by_act.get(snapshot.act_name)
+        if not current:
+            latest_by_act[snapshot.act_name] = snapshot
+            continue
+        if snapshot.fetched_at and (
+            not current.fetched_at or snapshot.fetched_at > current.fetched_at
+        ):
+            latest_by_act[snapshot.act_name] = snapshot
+
+    chunk_result = await db.execute(
+        select(func.count(LexChunk.id)).where(LexChunk.project_id == project_id)
+    )
+    chunk_count = int(chunk_result.scalar() or 0)
+    loaded_configured = sorted(set(latest_by_act) & configured_names)
+    missing_acts = sorted(configured_names - set(latest_by_act))
+    latest_fetched_at = max(
+        (snapshot.fetched_at for snapshot in latest_by_act.values() if snapshot.fetched_at),
+        default=None,
+    )
+
+    if not loaded_configured:
+        status_value = "missing"
+    elif missing_acts:
+        status_value = "partial"
+    else:
+        status_value = "ok"
+
+    return LegislationStatusResponse(
+        status=status_value,
+        automatic_source="Lex.bg",
+        configured_acts=len(configured_names),
+        loaded_acts=len(loaded_configured),
+        missing_acts=missing_acts,
+        chunk_count=chunk_count,
+        latest_fetched_at=latest_fetched_at,
     )
 
 

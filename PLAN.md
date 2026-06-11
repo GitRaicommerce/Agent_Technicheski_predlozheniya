@@ -40,6 +40,7 @@
 - Made all-section background generation resilient to transient LLM connection failures by preserving successful sections and recording failed sections for retry.
 - Added an explicit retry/continue action for failed all-section generation jobs so users can resume after network interruptions.
 - Made drafting tolerant of temporary Lex.bg/legislation module failures by continuing generation without normative citations when the external source is unavailable.
+- Reframed the legislation module as an automatic Lex.bg-backed normative base with visible status and manual refresh, while keeping uploads only for project-specific supplemental acts.
 
 ## Active Goals
 

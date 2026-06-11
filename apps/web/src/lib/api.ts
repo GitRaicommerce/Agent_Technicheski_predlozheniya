@@ -129,6 +129,16 @@ export interface LegislationRefreshResponse {
   errors: Array<Record<string, string>>;
 }
 
+export interface LegislationStatusResponse {
+  status: "ok" | "partial" | "missing" | string;
+  automatic_source: string;
+  configured_acts: number;
+  loaded_acts: number;
+  missing_acts: string[];
+  chunk_count: number;
+  latest_fetched_at?: string | null;
+}
+
 export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
@@ -288,6 +298,10 @@ export const api = {
       apiFetch<LegislationRefreshResponse>(
         `/api/v1/projects/${id}/legislation/refresh?force=${String(force)}`,
         { method: "POST" },
+      ),
+    legislationStatus: (id: string) =>
+      apiFetch<LegislationStatusResponse>(
+        `/api/v1/projects/${id}/legislation/status`,
       ),
     delete: (id: string) =>
       apiNoContent(`/api/v1/projects/${id}`, { method: "DELETE" }),

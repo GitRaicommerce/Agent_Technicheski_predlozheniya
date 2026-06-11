@@ -143,6 +143,41 @@ async def test_refresh_project_legislation_not_found(client, mock_db):
     assert resp.status_code == 404
 
 
+@pytest.mark.asyncio
+async def test_get_project_legislation_status(client, mock_db):
+    from app.core.models import LexSnapshot
+    from app.legislation.lex_bg import DEFAULT_LEX_BG_ACTS
+
+    project = _make_project()
+    now = datetime.now(timezone.utc)
+    snapshot = LexSnapshot(
+        project_id=project.id,
+        act_name=DEFAULT_LEX_BG_ACTS[0].act_name,
+        lex_url=DEFAULT_LEX_BG_ACTS[0].url,
+        fetched_at=now,
+        snapshot_id=str(uuid.uuid4()),
+        content_hash="abc123",
+        parser_version="lex_bg_v1",
+    )
+    snapshots_result = MagicMock()
+    snapshots_result.scalars.return_value.all.return_value = [snapshot]
+    chunks_result = MagicMock()
+    chunks_result.scalar.return_value = 12
+
+    mock_db.get = AsyncMock(return_value=project)
+    mock_db.execute = AsyncMock(side_effect=[snapshots_result, chunks_result])
+
+    resp = await client.get(f"/api/v1/projects/{project.id}/legislation/status")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["automatic_source"] == "Lex.bg"
+    assert data["loaded_acts"] == 1
+    assert data["configured_acts"] == len(DEFAULT_LEX_BG_ACTS)
+    assert data["chunk_count"] == 12
+    assert data["status"] == "partial"
+
+
 # ---------------------------------------------------------------------------
 # PUT /api/v1/projects/{id}
 # ---------------------------------------------------------------------------
