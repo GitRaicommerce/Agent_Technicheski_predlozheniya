@@ -142,3 +142,66 @@ async def test_run_drafting_all_prefers_latest_outline_even_if_unlocked(mock_db)
     assert result["generated_count"] == 1
     assert result["sections"][0]["title"] == "Концепция и подход"
     assert run_examples.await_args_list[0].kwargs["query"] == "Концепция и подход"
+
+
+@pytest.mark.asyncio
+async def test_run_drafting_all_continues_when_legislation_fails(mock_db):
+    project = _make_project()
+    section_uid = str(uuid.uuid4())
+    outline = TpOutline(
+        id=str(uuid.uuid4()),
+        project_id=project.id,
+        outline_json={
+            "sections": [
+                {
+                    "uid": section_uid,
+                    "title": "РџСЂРѕРµРєС‚РёСЂР°РЅРµ",
+                    "requirements": [],
+                    "subsections": [],
+                }
+            ]
+        },
+        status_locked=True,
+        version=1,
+    )
+
+    async def execute_side_effect(statement):
+        sql = str(statement)
+        if "FROM tp_outlines" in sql:
+            return _outline_result(outline)
+        if "FROM generations" in sql:
+            return []
+        raise AssertionError(f"Unexpected statement: {sql}")
+
+    mock_db.execute = AsyncMock(side_effect=execute_side_effect)
+
+    with (
+        patch(
+            "app.agents.schedule.run_schedule",
+            new=AsyncMock(return_value={"status": "ok", "tp_section_text": "Р“СЂР°С„РёРє"}),
+        ),
+        patch(
+            "app.agents.examples.run_examples",
+            new=AsyncMock(return_value={"selected_snippets": [], "total_found": 0}),
+        ),
+        patch(
+            "app.agents.legislation.run_legislation",
+            new=AsyncMock(side_effect=RuntimeError("Lex.bg unavailable")),
+        ),
+        patch(
+            "app.agents.context.build_project_grounding_context",
+            new=AsyncMock(return_value={"schedule": {"tasks": []}, "tender_chunks": []}),
+        ),
+        patch(
+            "app.agents.drafting.run_drafting",
+            new=AsyncMock(return_value={"generation_ids": {"variant_1": str(uuid.uuid4())}}),
+        ) as run_drafting,
+    ):
+        result = await _run_drafting_all(
+            project=project,
+            db=mock_db,
+            trace_id=str(uuid.uuid4()),
+        )
+
+    assert result["generated_count"] == 1
+    assert run_drafting.await_args.kwargs["lex_citations"] == []

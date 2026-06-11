@@ -216,12 +216,34 @@ async def _run_drafting_all_job(job: GenerationJob, db) -> None:
                 max_snippets=5,
                 trace_id=job.trace_id,
             )
-            lex_result = await run_legislation(
-                project_id=project.id,
-                query=title,
-                db=db,
-                trace_id=job.trace_id,
-            )
+            try:
+                lex_result = await run_legislation(
+                    project_id=project.id,
+                    query=title,
+                    db=db,
+                    trace_id=job.trace_id,
+                )
+            except Exception as exc:
+                await db.rollback()
+                job = await db.get(GenerationJob, job.id)
+                if not job:
+                    raise
+                log.warning(
+                    "generation_job_legislation_failed",
+                    job_id=job.id,
+                    project_id=project.id,
+                    section=title,
+                    error=str(exc),
+                    trace_id=job.trace_id,
+                )
+                lex_result = {
+                    "citations": [],
+                    "total_found": 0,
+                    "warning": (
+                        "Legislation module failed; drafting continued "
+                        "without Lex.bg citations."
+                    ),
+                }
             project_grounding_context = await build_project_grounding_context(
                 project_id=project.id,
                 section_title=title,

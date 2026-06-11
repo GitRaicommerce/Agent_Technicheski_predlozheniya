@@ -169,3 +169,72 @@ async def test_generation_job_continues_when_schedule_summary_fails(mock_db):
     assert job.completed_sections == 1
     assert job.result_json["failed_sections"] == []
     assert run_drafting.await_args.kwargs["schedule_summary"] is None
+
+
+@pytest.mark.asyncio
+async def test_generation_job_continues_when_legislation_fails(mock_db):
+    project = _make_project()
+    section_uid = str(uuid.uuid4())
+    outline = TpOutline(
+        id=str(uuid.uuid4()),
+        project_id=project.id,
+        outline_json={
+            "sections": [
+                {
+                    "uid": section_uid,
+                    "title": "РџСЂРѕРµРєС‚РёСЂР°РЅРµ",
+                    "requirements": [],
+                    "subsections": [],
+                }
+            ]
+        },
+        status_locked=True,
+        version=1,
+    )
+    job = SimpleNamespace(
+        id=str(uuid.uuid4()),
+        project_id=project.id,
+        trace_id=str(uuid.uuid4()),
+        status="queued",
+        total_sections=0,
+        completed_sections=0,
+        skipped_sections=0,
+        current_section_uid=None,
+        current_section_title=None,
+        result_json=None,
+        error=None,
+        completed_at=None,
+        updated_at=None,
+    )
+
+    mock_db.get = AsyncMock(side_effect=[project, job])
+    mock_db.execute = AsyncMock(side_effect=[_outline_result(outline), []])
+
+    with (
+        patch(
+            "app.agents.schedule.run_schedule",
+            new=AsyncMock(return_value={"status": "ok", "tp_section_text": "Р“СЂР°С„РёРє"}),
+        ),
+        patch(
+            "app.agents.examples.run_examples",
+            new=AsyncMock(return_value={"selected_snippets": []}),
+        ),
+        patch(
+            "app.agents.legislation.run_legislation",
+            new=AsyncMock(side_effect=RuntimeError("Lex.bg unavailable")),
+        ),
+        patch(
+            "app.agents.context.build_project_grounding_context",
+            new=AsyncMock(return_value={"schedule": {"tasks": []}}),
+        ),
+        patch(
+            "app.agents.drafting.run_drafting",
+            new=AsyncMock(return_value={"generation_ids": {"variant_1": str(uuid.uuid4())}}),
+        ) as run_drafting,
+    ):
+        await _run_drafting_all_job(job, mock_db)
+
+    assert job.status == "done"
+    assert job.completed_sections == 1
+    assert job.result_json["failed_sections"] == []
+    assert run_drafting.await_args.kwargs["lex_citations"] == []

@@ -39,6 +39,7 @@
 - Added project grounding context for drafting and verification so generated sections use tender scope excerpts and schedule tasks, not only example snippets.
 - Made all-section background generation resilient to transient LLM connection failures by preserving successful sections and recording failed sections for retry.
 - Added an explicit retry/continue action for failed all-section generation jobs so users can resume after network interruptions.
+- Made drafting tolerant of temporary Lex.bg/legislation module failures by continuing generation without normative citations when the external source is unavailable.
 
 ## Active Goals
 

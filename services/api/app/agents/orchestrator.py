@@ -230,6 +230,42 @@ async def run_orchestrator(
     return result
 
 
+async def _safe_run_legislation(
+    *,
+    project_id: str,
+    query: str,
+    db: "AsyncSession",
+    trace_id: str,
+    section_title: str,
+) -> dict[str, Any]:
+    from app.agents.legislation import run_legislation
+
+    try:
+        return await run_legislation(
+            project_id=project_id,
+            query=query,
+            db=db,
+            trace_id=trace_id,
+        )
+    except Exception as exc:
+        await db.rollback()
+        log.warning(
+            "drafting_legislation_failed",
+            project_id=project_id,
+            section=section_title,
+            error=str(exc),
+            trace_id=trace_id,
+        )
+        return {
+            "citations": [],
+            "total_found": 0,
+            "warning": (
+                "Legislation module failed; drafting continued without "
+                "Lex.bg citations."
+            ),
+        }
+
+
 async def _run_drafting_all(
     project: "Project",
     db: "AsyncSession",
@@ -303,10 +339,14 @@ async def _run_drafting_all(
         )
         evidence_snippets = examples_result.get("selected_snippets", [])
 
-        # Fetch legislation
-        from app.agents.legislation import run_legislation
-        lex_result = await run_legislation(
-            project_id=project.id, query=title, db=db, trace_id=trace_id
+        # Fetch legislation. Lex.bg is an external dependency, so generation
+        # should continue with project evidence when it is temporarily down.
+        lex_result = await _safe_run_legislation(
+            project_id=project.id,
+            query=title,
+            db=db,
+            trace_id=trace_id,
+            section_title=title,
         )
         lex_citations = lex_result.get("citations", [])
 
@@ -398,16 +438,19 @@ async def _run_drafting_pipeline(
     pipeline_trace["schedule"] = {"status": schedule_result.get("status", "ok")}
 
     # 3. Gather legislation citations
-    from app.agents.legislation import run_legislation
-
-    lex_result = await run_legislation(
+    lex_result = await _safe_run_legislation(
         project_id=project_id,
         query=section_title,
         db=db,
         trace_id=trace_id,
+        section_title=section_title,
     )
     lex_citations = lex_result.get("citations", [])
-    pipeline_trace["legislation"] = {"total_found": lex_result.get("total_found", 0)}
+    pipeline_trace["legislation"] = {
+        "total_found": lex_result.get("total_found", 0),
+        "status": "warning" if lex_result.get("warning") else "ok",
+        "warning": lex_result.get("warning"),
+    }
 
     # 4. Run drafting agent with gathered evidence
     from app.agents.drafting import run_drafting
