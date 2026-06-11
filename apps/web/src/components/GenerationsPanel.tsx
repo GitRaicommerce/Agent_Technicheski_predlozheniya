@@ -18,6 +18,7 @@ export default function GenerationsPanel({
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [regenerating, setRegenerating] = useState<string | null>(null);
+  const [retryingJob, setRetryingJob] = useState(false);
   const [generationJob, setGenerationJob] = useState<GenerationJob | null>(null);
   const hasLoadedRef = useRef(false);
 
@@ -85,6 +86,17 @@ export default function GenerationsPanel({
     }
   };
 
+  const handleRetryGenerationJob = async () => {
+    setRetryingJob(true);
+    try {
+      const nextJob = await api.agents.retryGenerationJob(projectId);
+      setGenerationJob(nextJob);
+      await load();
+    } finally {
+      setRetryingJob(false);
+    }
+  };
+
   if (loading) {
     return (
       <p className="py-2 text-xs text-gray-400 animate-pulse">
@@ -110,7 +122,13 @@ export default function GenerationsPanel({
   if (sections.length === 0) {
     return (
       <div className="space-y-1">
-        {generationJob && <GenerationJobProgress job={generationJob} />}
+        {generationJob && (
+          <GenerationJobProgress
+            job={generationJob}
+            onRetry={handleRetryGenerationJob}
+            retrying={retryingJob}
+          />
+        )}
         <p className="text-xs leading-relaxed text-gray-400">
           Все още няма генерирани текстове. Използвайте TP AI, за да
           генерирате съдържание по одобрения outline.
@@ -127,7 +145,13 @@ export default function GenerationsPanel({
 
   return (
     <div className="space-y-1">
-      {generationJob && <GenerationJobProgress job={generationJob} />}
+      {generationJob && (
+        <GenerationJobProgress
+          job={generationJob}
+          onRetry={handleRetryGenerationJob}
+          retrying={retryingJob}
+        />
+      )}
       <div className="mb-1 flex items-center justify-between">
         <span className="text-xs text-gray-400">
           {sections.length} раздела
@@ -190,7 +214,15 @@ export default function GenerationsPanel({
   );
 }
 
-function GenerationJobProgress({ job }: { job: GenerationJob }) {
+function GenerationJobProgress({
+  job,
+  onRetry,
+  retrying = false,
+}: {
+  job: GenerationJob;
+  onRetry?: () => void;
+  retrying?: boolean;
+}) {
   const doneCount = job.completed_sections + job.skipped_sections;
   const percent =
     job.total_sections > 0
@@ -240,6 +272,17 @@ function GenerationJobProgress({ job }: { job: GenerationJob }) {
       )}
       {error && job.status === "error" && (
         <p className="mt-1 text-[11px] opacity-90">{error}</p>
+      )}
+      {job.status === "error" && onRetry && (
+        <button
+          type="button"
+          onClick={onRetry}
+          disabled={retrying}
+          data-testid="generation-job-retry-button"
+          className="mt-2 rounded border border-red-200 bg-white px-2 py-1 text-[11px] font-medium text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {retrying ? "..." : "Продължи"}
+        </button>
       )}
     </div>
   );

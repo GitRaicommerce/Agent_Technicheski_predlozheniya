@@ -363,6 +363,11 @@ export const api = {
       apiFetch<GenerationJob>(
         `/api/v1/agents/${projectId}/generation-jobs/${jobId}`,
       ),
+    retryGenerationJob: (projectId: string) =>
+      apiFetch<GenerationJob>(
+        `/api/v1/agents/${projectId}/generation-jobs/retry`,
+        { method: "POST" },
+      ),
     selectGeneration: (projectId: string, generationId: string) =>
       apiFetch<{ status: string; generation_id: string }>(
         `/api/v1/agents/${projectId}/generations/${generationId}/select`,

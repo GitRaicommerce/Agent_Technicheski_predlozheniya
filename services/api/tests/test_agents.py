@@ -314,6 +314,60 @@ async def test_get_latest_generation_job(client, mock_db):
 
 
 # ---------------------------------------------------------------------------
+# POST /api/v1/agents/{project_id}/generation-jobs/retry
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_retry_generation_job_not_found(client, mock_db):
+    """404 when the project does not exist."""
+    mock_db.get = AsyncMock(return_value=None)
+
+    resp = await client.post(
+        f"/api/v1/agents/{uuid.uuid4()}/generation-jobs/retry"
+    )
+
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_retry_generation_job_creates_background_job(client, mock_db):
+    """Starts a new all-sections job so the worker can continue missing sections."""
+    from datetime import datetime, timezone
+    from app.core.models import GenerationJob
+
+    project = _make_project()
+    now = datetime.now(timezone.utc)
+    job = GenerationJob(
+        id=str(uuid.uuid4()),
+        project_id=project.id,
+        job_type="drafting_all",
+        status="queued",
+        total_sections=0,
+        completed_sections=0,
+        skipped_sections=0,
+        trace_id=str(uuid.uuid4()),
+        created_at=now,
+        updated_at=now,
+    )
+    mock_db.get = AsyncMock(return_value=project)
+
+    with patch(
+        "app.agents.generation_jobs.create_drafting_all_job",
+        new=AsyncMock(return_value=job),
+    ) as create_job:
+        resp = await client.post(
+            f"/api/v1/agents/{project.id}/generation-jobs/retry"
+        )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["id"] == job.id
+    assert data["status"] == "queued"
+    create_job.assert_awaited_once_with(project=project, db=mock_db)
+
+
+# ---------------------------------------------------------------------------
 # POST /api/v1/agents/{project_id}/sections/{section_uid}/regenerate
 # ---------------------------------------------------------------------------
 

@@ -398,6 +398,23 @@ async def get_latest_generation_job(
     return _generation_job_response(job) if job else None
 
 
+@router.post(
+    "/{project_id}/generation-jobs/retry",
+    response_model=GenerationJobResponse,
+)
+async def retry_generation_job(
+    project_id: str, db: AsyncSession = Depends(get_db)
+):
+    project = await db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    from app.agents.generation_jobs import create_drafting_all_job
+
+    job = await create_drafting_all_job(project=project, db=db)
+    return _generation_job_response(job)
+
+
 @router.get(
     "/{project_id}/generation-jobs/{job_id}",
     response_model=GenerationJobResponse,

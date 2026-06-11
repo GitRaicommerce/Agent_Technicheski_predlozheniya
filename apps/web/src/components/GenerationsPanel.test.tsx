@@ -16,6 +16,7 @@ vi.mock("@/lib/api", async () => {
         ...actual.api.agents,
         listGenerations: vi.fn(),
         latestGenerationJob: vi.fn(),
+        retryGenerationJob: vi.fn(),
         regenerateSection: vi.fn(),
       },
     },
@@ -24,6 +25,7 @@ vi.mock("@/lib/api", async () => {
 
 const listGenerationsMock = vi.mocked(api.agents.listGenerations);
 const latestGenerationJobMock = vi.mocked(api.agents.latestGenerationJob);
+const retryGenerationJobMock = vi.mocked(api.agents.retryGenerationJob);
 const regenerateSectionMock = vi.mocked(api.agents.regenerateSection);
 
 describe("GenerationsPanel", () => {
@@ -150,5 +152,57 @@ describe("GenerationsPanel", () => {
       "2 / 4",
     );
     expect(screen.getByText("Section 2")).toBeInTheDocument();
+  });
+
+  it("retries a failed all-sections generation job", async () => {
+    listGenerationsMock.mockResolvedValue([]);
+    latestGenerationJobMock.mockResolvedValue({
+      id: "job-1",
+      project_id: "project-1",
+      job_type: "drafting_all",
+      status: "error",
+      total_sections: 4,
+      completed_sections: 2,
+      skipped_sections: 1,
+      current_section_uid: null,
+      current_section_title: null,
+      error: "Connection error.",
+      result_json: {
+        sections: [],
+        failed_sections: [{ section_uid: "sec-4", title: "Section 4" }],
+      },
+      trace_id: "trace-1",
+      created_at: "2026-04-20T10:00:00.000Z",
+      updated_at: "2026-04-20T10:01:00.000Z",
+      completed_at: "2026-04-20T10:01:00.000Z",
+    });
+    retryGenerationJobMock.mockResolvedValue({
+      id: "job-2",
+      project_id: "project-1",
+      job_type: "drafting_all",
+      status: "queued",
+      total_sections: 0,
+      completed_sections: 0,
+      skipped_sections: 0,
+      current_section_uid: null,
+      current_section_title: null,
+      error: null,
+      result_json: null,
+      trace_id: "trace-2",
+      created_at: "2026-04-20T10:02:00.000Z",
+      updated_at: "2026-04-20T10:02:00.000Z",
+      completed_at: null,
+    });
+
+    render(<GenerationsPanel projectId="project-1" />);
+
+    await userEvent.click(await screen.findByTestId("generation-job-retry-button"));
+
+    await waitFor(() => {
+      expect(retryGenerationJobMock).toHaveBeenCalledWith("project-1");
+    });
+    await waitFor(() => {
+      expect(listGenerationsMock).toHaveBeenCalledTimes(2);
+    });
   });
 });
