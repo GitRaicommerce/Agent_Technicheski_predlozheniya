@@ -366,7 +366,14 @@ export default function ProjectPage() {
                 ✎
               </button>
             </div>
-            <ExportButton projectId={project.id} projectName={project.name} />
+            <ExportButton
+              projectId={project.id}
+              projectName={project.name}
+              onOpenGenerations={() => {
+                setShowGenerations(true);
+                setGenerationsRefreshKey((value) => value + 1);
+              }}
+            />
           </div>
         )}
       </div>

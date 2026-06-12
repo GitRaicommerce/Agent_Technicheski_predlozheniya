@@ -319,10 +319,19 @@ test.describe("smoke", () => {
       await expect(page.getByText("Plovdiv")).toBeVisible();
 
       await page.getByTestId("project-delete-button").click();
+      if (!projectId) throw new Error("Project id was not captured after creation.");
+      const deleteResponsePromise = page.waitForResponse(
+        (response) =>
+          response.request().method() === "DELETE" &&
+          response.url().includes(`/api/v1/projects/${projectId}`),
+      );
       await page.getByTestId("project-delete-confirm").click();
-      await page.waitForURL("**/projects");
+      const deleteResponse = await deleteResponsePromise;
+      expect(deleteResponse.status()).toBe(204);
 
+      await page.goto("/projects");
       await expect(page.getByTestId("new-project-link")).toBeVisible();
+      await expect(page.getByText(projectName)).toHaveCount(0);
       projectId = null;
     } finally {
       if (projectId) {
@@ -408,7 +417,7 @@ test.describe("smoke", () => {
     }
   });
 
-  test("returns a stale export conflict for outdated seeded generations", async ({ page, request }) => {
+  test("shows stale export warning for outdated seeded generations", async ({ page, request }) => {
     const projectName = `Smoke Stale ${Date.now()}`;
     const createResponse = await request.post("/api/v1/projects", {
       data: {
@@ -420,15 +429,24 @@ test.describe("smoke", () => {
     expect(createResponse.ok()).toBeTruthy();
     const project = (await createResponse.json()) as { id: string };
     const projectId = project.id;
-    await seedProjectState(projectId, { staleGeneration: true, outlineLocked: true });
+    const { sectionUid } = await seedProjectState(projectId, {
+      staleGeneration: true,
+      outlineLocked: true,
+    });
 
     try {
       await page.goto(`/projects/${projectId}`);
       await waitForProjectPage(page, projectName);
 
-      await expect(page.getByRole("button", { name: /\.docx/i })).toBeVisible();
-      const exportResponse = await request.get(`/api/v1/export/${projectId}/docx`);
-      expect(exportResponse.status()).toBe(409);
+      await page.getByTestId("export-docx-button").click();
+
+      await expect(page.getByTestId("export-stale-warning")).toContainText(
+        "1 секция",
+      );
+      await page.getByRole("button", { name: "Отвори Генерации" }).click();
+      await expect(
+        page.getByTestId(`generation-section-${sectionUid}`),
+      ).toBeVisible();
     } finally {
       await request.delete(`/api/v1/projects/${projectId}`);
     }
