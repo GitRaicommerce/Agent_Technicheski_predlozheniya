@@ -36,3 +36,4 @@ minio_data/
 postgres_data/
 
 old/
+local_analysis/
