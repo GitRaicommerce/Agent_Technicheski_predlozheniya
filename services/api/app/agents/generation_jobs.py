@@ -50,6 +50,33 @@ def _set_job_result(
     }
 
 
+def _generation_statuses_by_section(
+    generation_rows: list[Any],
+) -> dict[str, set[str]]:
+    statuses: dict[str, set[str]] = {}
+    for row in generation_rows:
+        if not row.section_uid:
+            continue
+        statuses.setdefault(row.section_uid, set()).add(row.evidence_status or "ok")
+    return statuses
+
+
+def _has_fresh_generation(statuses: set[str] | None) -> bool:
+    return bool(statuses) and any(status != "stale" for status in statuses)
+
+
+def _sections_pending_generation(
+    all_sections: list[dict[str, Any]],
+    generation_statuses: dict[str, set[str]],
+) -> list[dict[str, Any]]:
+    return [
+        section
+        for section in all_sections
+        if section.get("uid")
+        and not _has_fresh_generation(generation_statuses.get(section.get("uid")))
+    ]
+
+
 async def create_drafting_all_job(project: Project, db) -> GenerationJob:
     trace_id = str(uuid.uuid4())
     job = GenerationJob(
@@ -137,19 +164,14 @@ async def _run_drafting_all_job(job: GenerationJob, db) -> None:
         return
 
     gen_result = await db.execute(
-        select(Generation.section_uid)
+        select(Generation.section_uid, Generation.evidence_status)
         .where(Generation.project_id == project.id)
-        .distinct()
     )
-    already_generated = {row.section_uid for row in gen_result}
+    generation_statuses = _generation_statuses_by_section(list(gen_result))
 
     all_sections: list[dict[str, Any]] = []
     _collect_sections(outline.outline_json.get("sections", []), all_sections)
-    pending_sections = [
-        section
-        for section in all_sections
-        if section.get("uid") and section.get("uid") not in already_generated
-    ]
+    pending_sections = _sections_pending_generation(all_sections, generation_statuses)
 
     job.status = "processing"
     job.total_sections = len(all_sections)

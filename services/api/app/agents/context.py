@@ -92,8 +92,8 @@ async def build_project_grounding_context(
     section_title: str,
     section_requirements: list[str],
     db: "AsyncSession",
-    max_tender_chunks: int = 8,
-    max_schedule_tasks: int = 18,
+    max_tender_chunks: int = 14,
+    max_schedule_tasks: int = 24,
 ) -> dict[str, Any]:
     """Build a compact evidence pack for drafting and verification.
 

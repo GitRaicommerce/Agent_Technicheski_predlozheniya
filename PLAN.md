@@ -44,20 +44,24 @@
 - Improved stale DOCX export handling with a visible regeneration path, section counts, and Playwright coverage for the real UI warning flow.
 - Hardened the create/edit/delete browser smoke test against local Next.js dev navigation hangs by waiting for the actual delete response before verifying the project list.
 - Added a local proposal gap analysis script to compare a winning/reference technical proposal against the app-generated proposal by section coverage, volume, missing key terms, and tender-source snippets.
+- Ran the first real reference comparison for the Pernik ODL PDF live-ingest project against a submitted winning technical proposal; the generated selected proposal was only about 14% of the reference volume and missed important work-program topics such as stakeholders, construction organization, communication/control/subordination, risk, fire safety, environmental measures, waste, dust, soil protection, and quality controls.
+- Updated all-section background generation so sections with only stale evidence are regenerated instead of being skipped as already complete.
+- Increased drafting depth expectations and default project grounding context so generation receives more tender excerpts and schedule tasks per section.
 
 ## Active Goals
 
-1. Keep documentation as a reliable source of truth tied to the real repository state.
-2. Reduce drift between code, documentation, and workflows.
-3. Continue stabilizing the codebase after the documentation foundation is in place.
-4. Add real regression protection so fixing one area does not silently break another.
+1. Turn the application into a reference-quality technical proposal generator that produces detailed, tender-specific Bulgarian proposals rather than short generic sections.
+2. Use the winning Pernik technical proposal comparison as the first calibration baseline for outline granularity, grounding coverage, drafting depth, and export readiness.
+3. Keep documentation as a reliable source of truth tied to the real repository state.
+4. Add regression protection around generation quality so improvements do not silently regress.
 
 ## Next Recommended Steps
 
-1. Expand generated documentation with more precise backend endpoint and workflow coverage.
-2. Run proposal gap analysis on a real winning technical proposal versus the app-generated proposal, then use the gaps to tune ingestion, outline extraction, grounding selection, and drafting prompts.
-3. Build broader regression coverage around the frontend so changes in one area are checked against breakage in other core flows.
-4. Improve engineering docs for architecture, runbooks, and testing strategy.
+1. Regenerate the stale Pernik sections after the current fixes and re-run the proposal gap analysis against the winning technical proposal.
+2. Make tender outline extraction more granular for work-program topics: stakeholders, construction organization, communication/control/subordination, risk, fire safety, environmental protection, waste/dust/soil measures, and quality controls.
+3. Add requirement-to-section coverage diagnostics so missing mandatory topics are visible before DOCX export.
+4. Expand generated documentation with more precise backend endpoint and workflow coverage.
+5. Build broader regression coverage around the frontend so changes in one area are checked against breakage in other core flows.
 
 ## Notes
 

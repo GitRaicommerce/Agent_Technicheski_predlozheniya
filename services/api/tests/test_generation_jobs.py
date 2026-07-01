@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.agents.generation_jobs import _run_drafting_all_job
+from app.agents.generation_jobs import _run_drafting_all_job, _sections_pending_generation
 from app.core.models import TpOutline
 from tests.conftest import _make_project
 
@@ -15,6 +15,24 @@ def _outline_result(outline: TpOutline) -> MagicMock:
     result = MagicMock()
     result.scalar_one_or_none = MagicMock(return_value=outline)
     return result
+
+
+def test_sections_pending_generation_retries_stale_sections():
+    sections = [
+        {"uid": "fresh", "title": "Fresh"},
+        {"uid": "stale", "title": "Stale"},
+        {"uid": "missing", "title": "Missing"},
+        {"uid": "mixed", "title": "Mixed"},
+    ]
+    generation_statuses = {
+        "fresh": {"ok"},
+        "stale": {"stale"},
+        "mixed": {"stale", "ok"},
+    }
+
+    pending = _sections_pending_generation(sections, generation_statuses)
+
+    assert [section["uid"] for section in pending] == ["stale", "missing"]
 
 
 @pytest.mark.asyncio
