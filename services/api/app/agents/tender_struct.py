@@ -401,10 +401,41 @@ def _build_domain_outline(chunks: list[ExtractedChunk]) -> list[dict[str, Any]]:
     construction_subchunks = [
         ("Организация на ресурсите", _find_chunk_by_phrases(chunks, "организация на ресурсите")),
         (
+            "Заинтересовани страни и участници в изпълнението",
+            _find_chunk_by_phrases(chunks, "заинтересовани страни", "участници в изпълнението"),
+        ),
+        (
             "Комуникация при строителството",
             _find_chunk_by_phrases(chunks, "4.3. комуникация", "екипа за изпълнение на строителството"),
         ),
+        (
+            "Вътрешнофирмена комуникация, координация, контрол и субординация",
+            _find_chunk_by_phrases(
+                chunks,
+                "вътрешнофирмена комуникация",
+                "координация, контрол и субординация",
+                "контрол и субординация",
+            ),
+        ),
+        (
+            "Комуникация с Възложителя, строителния надзор и институциите",
+            _find_chunk_by_phrases(
+                chunks,
+                "комуникация с възложителя",
+                "строителния надзор",
+                "компетентните институции",
+            ),
+        ),
         ("Организация за доставка на материали", _find_chunk_by_phrases(chunks, "организация за доставка на материали")),
+        (
+            "Пожарна безопасност и безопасност при изпълнение на СМР",
+            _find_chunk_by_phrases(
+                chunks,
+                "пожарна безопасност",
+                "безопасност при изпълнение",
+                "здравословни и безопасни условия",
+            ),
+        ),
     ]
     if any(chunk for _, chunk in construction_subchunks):
         construction_section = add_section(
@@ -418,8 +449,19 @@ def _build_domain_outline(chunks: list[ExtractedChunk]) -> list[dict[str, Any]]:
         "Линеен график",
         _find_chunk_by_phrases(chunks, "линеен график", "подробен линеен график", "срокът за изпълнение на смр"),
     )
-    add_section("Управление на риска", _find_chunk_by_phrases(chunks, "управление на риска"))
-    add_section(
+    risk_section = add_section("Управление на риска", _find_chunk_by_phrases(chunks, "управление на риска"))
+    add_subsection(
+        risk_section,
+        "Идентификация, оценка и мерки за конкретните рискове",
+        _find_chunk_by_phrases(chunks, "идентификация на риска", "конкретни рискове", "мерки за ограничаване на риска"),
+    )
+    add_subsection(
+        risk_section,
+        "Мониторинг, отговорности и ескалация при риск",
+        _find_chunk_by_phrases(chunks, "мониторинг на риска", "отговорности при риск", "ескалация"),
+    )
+
+    environment_section = add_section(
         "Ограничаване и предотвратяване на негативното въздействие върху околната среда",
         _find_chunk_by_phrases(
             chunks,
@@ -427,7 +469,33 @@ def _build_domain_outline(chunks: list[ExtractedChunk]) -> list[dict[str, Any]]:
             "опазване на околната среда",
         ),
     )
-    add_section("Мерки за осигуряване на качеството", _find_chunk_by_phrases(chunks, "мерки за осигуряване на качеството"))
+    add_subsection(
+        environment_section,
+        "Мерки срещу запрашаване и замърсяване на въздуха",
+        _find_chunk_by_phrases(chunks, "запрашаване", "прах", "замърсяване на въздуха"),
+    )
+    add_subsection(
+        environment_section,
+        "Опазване на почви, води и прилежащи терени",
+        _find_chunk_by_phrases(chunks, "опазване на почв", "замърсяване на почв", "води и прилежащи терени"),
+    )
+    add_subsection(
+        environment_section,
+        "Управление на строителните отпадъци",
+        _find_chunk_by_phrases(chunks, "строителни отпадъци", "управление на отпадъците", "пусо"),
+    )
+
+    quality_section = add_section("Мерки за осигуряване на качеството", _find_chunk_by_phrases(chunks, "мерки за осигуряване на качеството"))
+    add_subsection(
+        quality_section,
+        "Входящ, текущ и окончателен контрол на качеството",
+        _find_chunk_by_phrases(chunks, "входящ контрол", "текущ контрол", "окончателен контрол"),
+    )
+    add_subsection(
+        quality_section,
+        "Документиране, проверки и приемане на изпълнените работи",
+        _find_chunk_by_phrases(chunks, "документиране", "приемане на изпълнените работи", "протоколи"),
+    )
     add_section(
         "Организация на дейностите по отстраняване на гаранционни дефекти",
         _find_chunk_by_phrases(chunks, "гаранционни дефекти"),

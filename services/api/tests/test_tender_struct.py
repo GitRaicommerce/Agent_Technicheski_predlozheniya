@@ -241,3 +241,52 @@ def test_build_domain_outline_prefers_tp_domain_sections_over_document_noise():
         "Мерки за осигуряване на качеството",
         "Организация на дейностите по отстраняване на гаранционни дефекти",
     ]
+
+
+def test_build_domain_outline_adds_detailed_work_program_subtopics_when_present():
+    chunks = [
+        make_chunk("c1", "1.Концепция и подход."),
+        make_chunk("c2", "2.Разработване на инвестиционен проект."),
+        make_chunk("c3", "3. Осъществяване на авторски надзор по време на изпълнение на СМР"),
+        make_chunk("c4", "4.2. Организация на ресурсите"),
+        make_chunk("c5", "Заинтересовани страни и участници в изпълнението на поръчката."),
+        make_chunk("c6", "Вътрешнофирмена комуникация, координация, контрол и субординация."),
+        make_chunk("c7", "Комуникация с Възложителя, строителния надзор и компетентните институции."),
+        make_chunk("c8", "Пожарна безопасност и здравословни и безопасни условия при изпълнение."),
+        make_chunk("c9", "Линеен график за изпълнение."),
+        make_chunk("c10", "5. Управление на риска."),
+        make_chunk("c11", "Идентификация на риска, конкретни рискове и мерки за ограничаване на риска."),
+        make_chunk("c12", "Мониторинг на риска, отговорности при риск и ескалация."),
+        make_chunk("c13", "6. Опазване на околната среда."),
+        make_chunk("c14", "Мерки срещу запрашаване, прах и замърсяване на въздуха."),
+        make_chunk("c15", "Опазване на почвите, водите и прилежащи терени."),
+        make_chunk("c16", "Управление на строителни отпадъци и ПУСО."),
+        make_chunk("c17", "7. Мерки за осигуряване на качеството."),
+        make_chunk("c18", "Входящ контрол, текущ контрол и окончателен контрол."),
+        make_chunk("c19", "Документиране, протоколи и приемане на изпълнените работи."),
+        make_chunk("c20", "8. Организация на дейностите по отстраняване на гаранционни дефекти."),
+    ]
+
+    outline = _build_domain_outline(chunks)
+
+    construction = next(section for section in outline if section["title"].startswith("Организация при"))
+    risk = next(section for section in outline if section["title"] == "Управление на риска")
+    environment = next(section for section in outline if section["title"].startswith("Ограничаване"))
+    quality = next(section for section in outline if section["title"] == "Мерки за осигуряване на качеството")
+
+    construction_titles = [section["title"] for section in construction["subsections"]]
+    risk_titles = [section["title"] for section in risk["subsections"]]
+    environment_titles = [section["title"] for section in environment["subsections"]]
+    quality_titles = [section["title"] for section in quality["subsections"]]
+
+    assert "Заинтересовани страни и участници в изпълнението" in construction_titles
+    assert "Вътрешнофирмена комуникация, координация, контрол и субординация" in construction_titles
+    assert "Комуникация с Възложителя, строителния надзор и институциите" in construction_titles
+    assert "Пожарна безопасност и безопасност при изпълнение на СМР" in construction_titles
+    assert "Идентификация, оценка и мерки за конкретните рискове" in risk_titles
+    assert "Мониторинг, отговорности и ескалация при риск" in risk_titles
+    assert "Мерки срещу запрашаване и замърсяване на въздуха" in environment_titles
+    assert "Опазване на почви, води и прилежащи терени" in environment_titles
+    assert "Управление на строителните отпадъци" in environment_titles
+    assert "Входящ, текущ и окончателен контрол на качеството" in quality_titles
+    assert "Документиране, проверки и приемане на изпълнените работи" in quality_titles
