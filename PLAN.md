@@ -43,6 +43,7 @@
 - Reframed the legislation module as an automatic Lex.bg-backed normative base with visible status and manual refresh, while keeping uploads only for project-specific supplemental acts.
 - Improved stale DOCX export handling with a visible regeneration path, section counts, and Playwright coverage for the real UI warning flow.
 - Hardened the create/edit/delete browser smoke test against local Next.js dev navigation hangs by waiting for the actual delete response before verifying the project list.
+- Added a local proposal gap analysis script to compare a winning/reference technical proposal against the app-generated proposal by section coverage, volume, missing key terms, and tender-source snippets.
 
 ## Active Goals
 
@@ -54,7 +55,7 @@
 ## Next Recommended Steps
 
 1. Expand generated documentation with more precise backend endpoint and workflow coverage.
-2. Re-test live proposal generation quality on a real tender project and tune grounding selection if specific project parts or schedule tasks are still missed.
+2. Run proposal gap analysis on a real winning technical proposal versus the app-generated proposal, then use the gaps to tune ingestion, outline extraction, grounding selection, and drafting prompts.
 3. Build broader regression coverage around the frontend so changes in one area are checked against breakage in other core flows.
 4. Improve engineering docs for architecture, runbooks, and testing strategy.
 
