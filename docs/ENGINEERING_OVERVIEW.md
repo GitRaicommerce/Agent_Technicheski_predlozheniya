@@ -58,14 +58,12 @@ TP AI is a monorepo for an AI-assisted workflow that prepares technical proposal
 
 ## Repository Layout
 
-- `.agents/`
 - `.claude/`
 - `.devcontainer/`
 - `.githooks/`
 - `.github/`
 - `apps/`
 - `docs/`
-- `local_analysis/`
 - `packages/`
 - `scripts/`
 - `services/`
