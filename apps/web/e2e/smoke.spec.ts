@@ -54,6 +54,7 @@ async function seedProjectState(
   projectId: string,
   options?: {
     staleGeneration?: boolean;
+    missingRequirementCoverage?: boolean;
     outlineLocked?: boolean;
     includeAlternativeGeneration?: boolean;
     generationJob?: {
@@ -112,6 +113,29 @@ async function seedProjectState(
     ],
     resources: [{ id: "res-1", name: "Engineering Team" }],
   };
+  const generationFlags = options?.missingRequirementCoverage
+    ? {
+        requirement_coverage: {
+          total: 2,
+          covered: 1,
+          missing: 1,
+          missing_ids: ["req-general-2"],
+          items: [
+            {
+              id: "req-general-1",
+              text: "Cover the general execution requirements.",
+              status: "covered",
+            },
+            {
+              id: "req-general-2",
+              text: "Describe a specific missing tender requirement.",
+              status: "missing",
+              importance: "mandatory",
+            },
+          ],
+        },
+      }
+    : null;
 
   await client.connect();
   try {
@@ -156,9 +180,9 @@ async function seedProjectState(
     await client.query(
       `
         INSERT INTO generations (
-          id, project_id, section_uid, variant, text, evidence_status, selected, trace_id
+          id, project_id, section_uid, variant, text, evidence_status, selected, trace_id, flags_json
         )
-        VALUES ($1, $2, $3, '1', $4, $5, true, $6)
+        VALUES ($1, $2, $3, '1', $4, $5, true, $6, $7::jsonb)
       `,
       [
         generationId,
@@ -167,6 +191,7 @@ async function seedProjectState(
         "Seeded generated text for smoke export.",
         options?.staleGeneration ? "stale" : "ok",
         randomUUID(),
+        JSON.stringify(generationFlags),
       ],
     );
 
@@ -452,6 +477,45 @@ test.describe("smoke", () => {
       await expect(
         page.getByTestId(`generation-section-${sectionUid}`),
       ).toBeVisible();
+    } finally {
+      await request.delete(`/api/v1/projects/${projectId}`);
+    }
+  });
+
+  test("shows requirement coverage warning for incomplete selected generations", async ({
+    page,
+    request,
+  }) => {
+    const projectName = `Smoke Requirements ${Date.now()}`;
+    const createResponse = await request.post("/api/v1/projects", {
+      data: {
+        name: projectName,
+        location: "Sofia",
+      },
+    });
+
+    expect(createResponse.ok()).toBeTruthy();
+    const project = (await createResponse.json()) as { id: string };
+    const projectId = project.id;
+    const { sectionUid } = await seedProjectState(projectId, {
+      missingRequirementCoverage: true,
+      outlineLocked: true,
+    });
+
+    try {
+      await page.goto(`/projects/${projectId}`);
+      await waitForProjectPage(page, projectName);
+
+      await page.getByTestId("export-docx-button").click();
+
+      await expect(page.getByTestId("export-requirement-warning")).toContainText(
+        "1 изискване",
+      );
+      await page.getByTestId("export-requirement-warning").getByRole("button").click();
+      await page.getByTestId(`generation-section-${sectionUid}`).click();
+      await expect(
+        page.getByTestId(`generation-requirement-coverage-${sectionUid}`),
+      ).toContainText("1/2");
     } finally {
       await request.delete(`/api/v1/projects/${projectId}`);
     }
