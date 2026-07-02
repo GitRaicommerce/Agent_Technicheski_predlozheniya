@@ -70,6 +70,61 @@ describe("GenerationsPanel", () => {
     expect(await screen.findByText("Selected generation text")).toBeInTheDocument();
   });
 
+  it("shows requirement coverage for the selected generation", async () => {
+    listGenerationsMock.mockResolvedValue([
+      {
+        section_uid: "sec-coverage",
+        section_title: "Coverage Section",
+        variants: [
+          {
+            id: "gen-coverage",
+            section_uid: "sec-coverage",
+            variant: 1,
+            text: "Generated text",
+            evidence_status: "ok",
+            selected: true,
+            created_at: "2026-04-20T10:00:00.000Z",
+            flags_json: {
+              requirement_coverage: {
+                total: 2,
+                covered: 1,
+                missing: 1,
+                missing_ids: ["req-missing"],
+                items: [
+                  {
+                    id: "req-covered",
+                    text: "Covered requirement",
+                    status: "covered",
+                  },
+                  {
+                    id: "req-missing",
+                    text: "Missing requirement",
+                    status: "missing",
+                  },
+                ],
+              },
+            },
+          },
+        ],
+      },
+    ]);
+
+    render(<GenerationsPanel projectId="project-1" />);
+
+    expect(await screen.findByTestId("generation-requirement-coverage"))
+      .toHaveTextContent("1/2");
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Coverage Section/i }),
+    );
+
+    expect(
+      await screen.findByTestId("generation-requirement-coverage-sec-coverage"),
+    ).toHaveTextContent("1 липсват");
+    expect(screen.getByText(/req-missing/)).toBeInTheDocument();
+    expect(screen.getByText(/Missing requirement/)).toBeInTheDocument();
+  });
+
   it("regenerates a section and reloads the list", async () => {
     listGenerationsMock
       .mockResolvedValueOnce([

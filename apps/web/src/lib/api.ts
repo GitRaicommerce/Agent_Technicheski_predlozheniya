@@ -262,6 +262,26 @@ export interface RequirementChecklist {
   items: RequirementChecklistItem[];
 }
 
+export interface RequirementCoverageItem {
+  id: string;
+  text?: string | null;
+  importance?: string | null;
+  status?: "covered" | "missing" | string;
+  matched_terms?: string[];
+  missing_terms?: string[];
+  required_match_count?: number;
+}
+
+export interface RequirementCoverage {
+  total?: number;
+  covered?: number;
+  missing?: number;
+  covered_ids?: string[];
+  missing_ids?: string[];
+  critical_missing_ids?: string[];
+  items?: RequirementCoverageItem[];
+}
+
 export interface Generation {
   id: string;
   section_uid: string;
@@ -269,7 +289,9 @@ export interface Generation {
   text: string;
   evidence_map_json?: Record<string, unknown> | null;
   used_sources_json?: Record<string, unknown> | null;
-  flags_json?: Record<string, unknown> | null;
+  flags_json?: (Record<string, unknown> & {
+    requirement_coverage?: RequirementCoverage;
+  }) | null;
   evidence_status: string;
   selected: boolean;
   created_at: string;

@@ -1,7 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { api, Generation, GenerationJob, SectionGenerations } from "@/lib/api";
+import {
+  api,
+  Generation,
+  GenerationJob,
+  RequirementCoverage,
+  RequirementCoverageItem,
+  SectionGenerations,
+} from "@/lib/api";
 import { repairLikelyMojibake } from "@/lib/text";
 
 interface Props {
@@ -171,6 +178,7 @@ export default function GenerationsPanel({
         const displayVariant =
           section.variants.find((variant) => variant.selected) ??
           section.variants[0];
+        const requirementCoverage = getRequirementCoverage(displayVariant);
 
         return (
           <div
@@ -189,6 +197,7 @@ export default function GenerationsPanel({
                 </p>
               </button>
               <div className="flex shrink-0 items-center gap-1">
+                <RequirementCoverageBadge coverage={requirementCoverage} />
                 <button
                   onClick={() => handleRegenerate(section.section_uid)}
                   disabled={regenerating === section.section_uid}
@@ -205,7 +214,10 @@ export default function GenerationsPanel({
             </div>
 
             {isOpen && displayVariant && (
-              <SectionText variant={displayVariant} />
+              <SectionText
+                variant={displayVariant}
+                requirementCoverage={requirementCoverage}
+              />
             )}
           </div>
         );
@@ -288,7 +300,13 @@ function GenerationJobProgress({
   );
 }
 
-function SectionText({ variant }: { variant: Generation }) {
+function SectionText({
+  variant,
+  requirementCoverage,
+}: {
+  variant: Generation;
+  requirementCoverage: RequirementCoverage | null;
+}) {
   const [expanded, setExpanded] = useState(false);
   const previewLen = 400;
   const text = repairLikelyMojibake(variant.text);
@@ -296,6 +314,10 @@ function SectionText({ variant }: { variant: Generation }) {
 
   return (
     <div className="bg-white px-3 py-3">
+      <RequirementCoverageDetails
+        sectionUid={variant.section_uid}
+        coverage={requirementCoverage}
+      />
       <p className="whitespace-pre-wrap text-xs leading-relaxed text-gray-700">
         {expanded || !isLong ? text : `${text.slice(0, previewLen)}...`}
       </p>
@@ -306,6 +328,101 @@ function SectionText({ variant }: { variant: Generation }) {
         >
           {expanded ? "Покажи по-малко" : "Покажи целия текст"}
         </button>
+      )}
+    </div>
+  );
+}
+
+function getRequirementCoverage(
+  variant: Generation | undefined,
+): RequirementCoverage | null {
+  const coverage = variant?.flags_json?.requirement_coverage;
+  if (!coverage || typeof coverage !== "object") return null;
+  return coverage;
+}
+
+function coverageCounts(coverage: RequirementCoverage | null) {
+  const total = coverage?.total ?? coverage?.items?.length ?? 0;
+  const missing =
+    coverage?.missing ??
+    coverage?.missing_ids?.length ??
+    coverage?.items?.filter((item) => item.status === "missing").length ??
+    0;
+  const covered = coverage?.covered ?? Math.max(0, total - missing);
+  return { total, covered, missing };
+}
+
+function missingCoverageItems(
+  coverage: RequirementCoverage | null,
+): RequirementCoverageItem[] {
+  if (!coverage?.items?.length) return [];
+  const missingIds = new Set((coverage.missing_ids ?? []).map(String));
+  return coverage.items.filter(
+    (item) => item.status === "missing" || missingIds.has(String(item.id)),
+  );
+}
+
+function RequirementCoverageBadge({
+  coverage,
+}: {
+  coverage: RequirementCoverage | null;
+}) {
+  const { total, covered, missing } = coverageCounts(coverage);
+  if (!coverage || total === 0) return null;
+
+  const className =
+    missing > 0
+      ? "bg-amber-100 text-amber-800"
+      : "bg-green-100 text-green-700";
+
+  return (
+    <span
+      data-testid="generation-requirement-coverage"
+      className={`rounded px-1.5 py-0.5 text-[11px] font-medium ${className}`}
+      title="Покритие на изискванията"
+    >
+      {covered}/{total}
+    </span>
+  );
+}
+
+function RequirementCoverageDetails({
+  sectionUid,
+  coverage,
+}: {
+  sectionUid: string;
+  coverage: RequirementCoverage | null;
+}) {
+  const { total, covered, missing } = coverageCounts(coverage);
+  if (!coverage || total === 0) return null;
+
+  const missingItems = missingCoverageItems(coverage);
+
+  return (
+    <div
+      data-testid={`generation-requirement-coverage-${sectionUid}`}
+      className={`mb-3 rounded border px-2.5 py-2 text-xs ${
+        missing > 0
+          ? "border-amber-200 bg-amber-50 text-amber-900"
+          : "border-green-200 bg-green-50 text-green-800"
+      }`}
+    >
+      <p className="font-medium">
+        Изисквания: {covered}/{total} покрити
+        {missing > 0 ? `, ${missing} липсват` : ""}
+      </p>
+      {missingItems.length > 0 && (
+        <ul className="mt-1 space-y-1">
+          {missingItems.slice(0, 5).map((item) => (
+            <li key={item.id}>
+              <span className="font-medium">{item.id}</span>
+              {item.text ? `: ${repairLikelyMojibake(item.text)}` : ""}
+            </li>
+          ))}
+        </ul>
+      )}
+      {missingItems.length > 5 && (
+        <p className="mt-1 opacity-80">Още {missingItems.length - 5} липсващи точки.</p>
       )}
     </div>
   );
