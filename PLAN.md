@@ -50,6 +50,7 @@
 - Expanded deterministic tender outline extraction to preserve detailed work-program subtopics when present in the tender documentation: stakeholders, internal communication/coordination/control/subordination, communication with the contracting authority/supervision/institutions, fire safety, concrete risk controls, environmental dust/soil/waste measures, and quality control/documentation.
 - Added a universal requirement-checklist extractor that converts tender documentation chunks into atomic requirements with category, importance, source reference, suggested proposal section, and coverage question; the checklist is now included in tender outline extraction prompts and can be rendered as Markdown for diagnostics.
 - Exposed the requirement checklist in the application through a backend API endpoint and a project sidebar panel with summary counts, category/importance filters, source references, and local check-off state.
+- Added a universal fallback for tender-specific requirements that do not fit predefined categories, and connected requirement checklist items to outline sections through `requirement_ids`, missing-section creation, and outline coverage summaries.
 
 ## Active Goals
 
@@ -61,7 +62,7 @@
 ## Next Recommended Steps
 
 1. Improve logical sentence reconstruction in requirement extraction so PDF line breaks and table-cell fragments do not produce truncated checklist items.
-2. Connect requirement checklist items to generated outline sections and generated text so coverage can be checked automatically before DOCX export.
+2. Extend requirement coverage from outline sections into generated text verification so missing checklist items can be flagged automatically before DOCX export.
 3. Regenerate the stale Pernik sections after the current fixes and re-run the proposal gap analysis against the winning technical proposal.
 4. Expand generated documentation with more precise backend endpoint and workflow coverage.
 5. Build broader regression coverage around the frontend so changes in one area are checked against breakage in other core flows.

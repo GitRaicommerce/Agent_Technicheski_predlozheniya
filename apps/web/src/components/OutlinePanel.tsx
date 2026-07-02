@@ -197,6 +197,7 @@ function SectionItem({
 }) {
   const [expanded, setExpanded] = useState(false);
   const children = section.subsections ?? [];
+  const requirementCount = section.requirement_ids?.length ?? 0;
 
   return (
     <li>
@@ -214,6 +215,19 @@ function SectionItem({
           <span className="w-3 shrink-0" />
         )}
         <span className="flex-1 text-gray-700">{section.title}</span>
+        {requirementCount > 0 && (
+          <span
+            data-testid={
+              section.uid
+                ? `outline-section-${section.uid}-requirement-count`
+                : undefined
+            }
+            title="Покрити изисквания от чеклиста"
+            className="shrink-0 rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-blue-700"
+          >
+            {requirementCount}
+          </span>
+        )}
         {section.required && (
           <span className="text-red-400 shrink-0 ml-1">*</span>
         )}

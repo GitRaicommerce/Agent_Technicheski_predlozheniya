@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 
 from app.agents.requirements import (
+    SPECIFIC_REQUIREMENTS_CATEGORY,
     extract_requirement_checklist,
     format_requirements_for_prompt,
     render_requirements_markdown,
@@ -67,6 +68,25 @@ def test_extract_requirement_checklist_ignores_clear_admin_noise_without_tp_cont
     ]
 
     assert extract_requirement_checklist(chunks) == []
+
+
+def test_extract_requirement_checklist_keeps_unmapped_specific_requirements():
+    chunks = [
+        make_chunk(
+            "c-specific",
+            (
+                "Техническото предложение следва да съдържа:\n"
+                "1. описание на специалния ред за достъп до помещенията и предаване на ключове."
+            ),
+            page=31,
+        )
+    ]
+
+    items = extract_requirement_checklist(chunks)
+
+    assert len(items) == 1
+    assert items[0].category == SPECIFIC_REQUIREMENTS_CATEGORY
+    assert "специфични изисквания" in items[0].category_label.lower()
 
 
 def test_requirement_checklist_renderers_include_actionable_fields():

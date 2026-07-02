@@ -84,6 +84,8 @@ async function seedProjectState(
         title: "General Requirements",
         display_numbering: "1",
         required: true,
+        requirements: ["Cover the general execution requirements."],
+        requirement_ids: ["req-general-1", "req-general-2"],
         subsections: [
           {
             uid: subsectionUid,
@@ -395,7 +397,7 @@ test.describe("smoke", () => {
     expect(createResponse.ok()).toBeTruthy();
     const project = (await createResponse.json()) as { id: string };
     const projectId = project.id;
-    await seedProjectState(projectId, { outlineLocked: true });
+    const { sectionUid } = await seedProjectState(projectId, { outlineLocked: true });
 
     try {
       await page.goto(`/projects/${projectId}`);
@@ -403,6 +405,9 @@ test.describe("smoke", () => {
 
       await page.getByTestId("outline-panel-toggle").click();
       await expect(page.getByText("General Requirements")).toBeVisible();
+      await expect(
+        page.getByTestId(`outline-section-${sectionUid}-requirement-count`),
+      ).toHaveText("2");
 
       await page.getByTestId("generations-panel-toggle").click();
       await expect(page.getByTestId("generations-panel-toggle")).toBeVisible();

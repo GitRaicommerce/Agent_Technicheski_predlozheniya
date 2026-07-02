@@ -13,6 +13,7 @@ import structlog
 from sqlalchemy import select
 
 from app.agents.requirements import (
+    RequirementItem,
     extract_requirement_checklist,
     format_requirements_for_prompt,
 )
@@ -117,6 +118,7 @@ SYSTEM_PROMPT = """Ти си агент за анализ на тръжна до
         "title": "<раздел>",
         "required": true,
         "requirements": ["<конкретно изискване>"],
+        "requirement_ids": ["<requirement_id>"],
         "source_refs": ["<chunk_id>"],
         "subsections": []
       }
@@ -314,7 +316,7 @@ def _dedupe_outline_sections(sections: list[dict[str, Any]]) -> list[dict[str, A
 
     for section in sections:
         normalized_title = _normalize_title_for_compare(section.get("title"))
-        section["subsections"] = _dedupe_outline_sections(section.get("subsections", []))
+        section["subsections"] = _dedupe_outline_sections(section.get("subsections") or [])
 
         if normalized_title not in index_by_title:
             index_by_title[normalized_title] = len(deduped)
@@ -323,14 +325,20 @@ def _dedupe_outline_sections(sections: list[dict[str, Any]]) -> list[dict[str, A
 
         existing = deduped[index_by_title[normalized_title]]
 
-        existing_requirements = existing.get("requirements", [])
-        for requirement in section.get("requirements", []):
+        existing_requirements = existing.get("requirements") or []
+        for requirement in section.get("requirements") or []:
             if requirement not in existing_requirements:
                 existing_requirements.append(requirement)
         existing["requirements"] = existing_requirements
 
-        existing_refs = existing.get("source_refs", [])
-        for source_ref in section.get("source_refs", []):
+        existing_requirement_ids = existing.get("requirement_ids") or []
+        for requirement_id in section.get("requirement_ids") or []:
+            if requirement_id not in existing_requirement_ids:
+                existing_requirement_ids.append(requirement_id)
+        existing["requirement_ids"] = existing_requirement_ids
+
+        existing_refs = existing.get("source_refs") or []
+        for source_ref in section.get("source_refs") or []:
             if source_ref not in existing_refs:
                 existing_refs.append(source_ref)
         existing["source_refs"] = existing_refs
@@ -340,6 +348,184 @@ def _dedupe_outline_sections(sections: list[dict[str, Any]]) -> list[dict[str, A
         )
 
     return deduped
+
+
+def _append_unique(values: list[Any], value: Any) -> list[Any]:
+    if value and value not in values:
+        values.append(value)
+    return values
+
+
+def _meaningful_tokens(value: str | None) -> set[str]:
+    normalized = _normalize_title_for_compare(value)
+    stop_words = {
+        "the",
+        "and",
+        "for",
+        "with",
+        "без",
+        "във",
+        "или",
+        "към",
+        "над",
+        "под",
+        "при",
+        "със",
+        "това",
+        "тези",
+    }
+    return {
+        token
+        for token in re.findall(r"\w+", normalized, flags=re.UNICODE)
+        if len(token) >= 4 and token not in stop_words
+    }
+
+
+def _walk_outline_sections(sections: list[dict[str, Any]]):
+    for section in sections:
+        yield section
+        yield from _walk_outline_sections(section.get("subsections") or [])
+
+
+def _section_score_for_requirement(section: dict[str, Any], item: RequirementItem) -> int:
+    title = _normalize_title_for_compare(section.get("title"))
+    if not title:
+        return 0
+
+    suggested = _normalize_title_for_compare(item.suggested_section)
+    category = _normalize_title_for_compare(item.category_label)
+    topic = _normalize_title_for_compare(item.topic)
+    score = 0
+
+    if suggested and (suggested in title or title in suggested):
+        score = max(score, 100)
+    if category and (category in title or title in category):
+        score = max(score, 80)
+    if topic and topic in title:
+        score = max(score, 65)
+
+    title_tokens = _meaningful_tokens(title)
+    target_tokens = _meaningful_tokens(
+        f"{item.suggested_section} {item.category_label} {item.topic}"
+    )
+    requirement_tokens = _meaningful_tokens(item.text)
+
+    target_overlap = title_tokens & target_tokens
+    if target_overlap:
+        score = max(score, min(75, 40 + len(target_overlap) * 10))
+
+    requirement_overlap = title_tokens & requirement_tokens
+    if requirement_overlap:
+        score = max(score, min(65, 25 + len(requirement_overlap) * 6))
+
+    if item.source_chunk_id in section.get("source_refs", []):
+        score += 10
+
+    return min(score, 100)
+
+
+def _attach_requirement_to_section(section: dict[str, Any], item: RequirementItem) -> None:
+    section["requirement_ids"] = _append_unique(
+        list(section.get("requirement_ids") or []),
+        item.id,
+    )
+    section["requirements"] = _append_unique(
+        list(section.get("requirements") or []),
+        item.text,
+    )
+    section["source_refs"] = _append_unique(
+        list(section.get("source_refs") or []),
+        item.source_chunk_id,
+    )
+
+
+def _missing_requirement_sections(items: list[RequirementItem]) -> list[dict[str, Any]]:
+    grouped: dict[str, dict[str, Any]] = {}
+    for item in items:
+        title = item.suggested_section or item.category_label or item.topic
+        section = grouped.setdefault(
+            title,
+            {
+                "uid": str(uuid.uuid4()),
+                "title": title,
+                "required": True,
+                "requirements": [],
+                "requirement_ids": [],
+                "source_refs": [],
+                "subsections": [],
+            },
+        )
+        _attach_requirement_to_section(section, item)
+    return list(grouped.values())
+
+
+def _attach_requirement_checklist_to_outline_sections(
+    sections: list[dict[str, Any]],
+    requirement_checklist: list[RequirementItem],
+    *,
+    min_score: int = 45,
+) -> list[dict[str, Any]]:
+    if not requirement_checklist:
+        return sections
+
+    enriched_sections = _dedupe_outline_sections(sections)
+    unmatched: list[RequirementItem] = []
+
+    for item in requirement_checklist:
+        best_section: dict[str, Any] | None = None
+        best_score = 0
+        for section in _walk_outline_sections(enriched_sections):
+            score = _section_score_for_requirement(section, item)
+            if score > best_score:
+                best_section = section
+                best_score = score
+
+        if best_section is not None and best_score >= min_score:
+            _attach_requirement_to_section(best_section, item)
+        else:
+            unmatched.append(item)
+
+    if unmatched:
+        enriched_sections = [
+            *enriched_sections,
+            *_missing_requirement_sections(unmatched),
+        ]
+
+    return _dedupe_outline_sections(enriched_sections)
+
+
+def _build_outline_coverage_summary(
+    sections: list[dict[str, Any]],
+    requirement_checklist: list[RequirementItem],
+) -> dict[str, Any]:
+    requirement_ids = {item.id for item in requirement_checklist}
+    covered_ids: set[str] = set()
+    section_requirement_counts: list[dict[str, Any]] = []
+
+    for section in _walk_outline_sections(sections):
+        ids = [
+            requirement_id
+            for requirement_id in section.get("requirement_ids", [])
+            if requirement_id in requirement_ids
+        ]
+        if not ids:
+            continue
+        covered_ids.update(ids)
+        section_requirement_counts.append(
+            {
+                "uid": section.get("uid"),
+                "title": section.get("title"),
+                "requirement_count": len(ids),
+            }
+        )
+
+    missing_ids = [item.id for item in requirement_checklist if item.id not in covered_ids]
+    return {
+        "total_requirements": len(requirement_checklist),
+        "covered_requirements": len(covered_ids),
+        "missing_requirement_ids": missing_ids,
+        "section_requirement_counts": section_requirement_counts,
+    }
 
 
 def _build_domain_outline(chunks: list[ExtractedChunk]) -> list[dict[str, Any]]:
@@ -654,6 +840,7 @@ def _build_deterministic_outline(
     explicit_numbered_sections: list[dict[str, Any]],
     domain_outline_sections: list[dict[str, Any]],
     mandatory_sections: list[dict[str, Any]],
+    requirement_checklist: list[RequirementItem] | None = None,
 ) -> dict[str, Any] | None:
     if len(domain_outline_sections) >= 6:
         sections = domain_outline_sections
@@ -664,10 +851,21 @@ def _build_deterministic_outline(
 
     sections = _ensure_mandatory_sections(sections, mandatory_sections)
     sections = _dedupe_outline_sections(sections)
+    if requirement_checklist:
+        sections = _attach_requirement_checklist_to_outline_sections(
+            sections,
+            requirement_checklist,
+        )
     if not sections:
         return None
 
-    return {"sections": sections}
+    outline: dict[str, Any] = {"sections": sections}
+    if requirement_checklist is not None:
+        outline["coverage_summary"] = _build_outline_coverage_summary(
+            sections,
+            requirement_checklist,
+        )
+    return outline
 
 
 async def run_tender_struct(
@@ -823,6 +1021,7 @@ async def run_tender_struct(
             explicit_numbered_sections=explicit_numbered_sections,
             domain_outline_sections=domain_outline_sections,
             mandatory_sections=mandatory_sections,
+            requirement_checklist=requirement_checklist,
         )
         if deterministic_outline:
             llm_result["outline"] = deterministic_outline
@@ -843,6 +1042,10 @@ async def run_tender_struct(
         llm_result["outline"]["sections"] = _dedupe_outline_sections(
             llm_result["outline"].get("sections", [])
         )
+        llm_result["outline"]["sections"] = _attach_requirement_checklist_to_outline_sections(
+            llm_result["outline"].get("sections", []),
+            requirement_checklist,
+        )
 
         def _fix_uids(sections: list[dict[str, Any]]) -> None:
             for section in sections:
@@ -854,6 +1057,10 @@ async def run_tender_struct(
                 _fix_uids(section.get("subsections", []))
 
         _fix_uids(llm_result["outline"].get("sections", []))
+        llm_result["outline"]["coverage_summary"] = _build_outline_coverage_summary(
+            llm_result["outline"].get("sections", []),
+            requirement_checklist,
+        )
 
         from sqlalchemy import func
 

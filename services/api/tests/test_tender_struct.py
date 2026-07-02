@@ -1,8 +1,16 @@
 from types import SimpleNamespace
 
+from app.agents.requirements import (
+    SPECIFIC_REQUIREMENTS_CATEGORY,
+    SPECIFIC_REQUIREMENTS_LABEL,
+    SUGGESTED_SECTIONS,
+    RequirementItem,
+)
 from app.agents.tender_struct import (
+    _attach_requirement_checklist_to_outline_sections,
     _build_domain_outline,
     _build_deterministic_outline,
+    _build_outline_coverage_summary,
     _ensure_mandatory_sections,
     _extract_explicit_numbered_outline,
     _extract_mandatory_sections,
@@ -26,6 +34,32 @@ def make_chunk(
         page=page,
         section_path=section_path,
         chunk_type=chunk_type,
+    )
+
+
+def make_requirement(
+    requirement_id: str,
+    text: str,
+    *,
+    category: str = "schedule",
+    category_label: str = "График и срокове",
+    suggested_section: str | None = None,
+):
+    return RequirementItem(
+        id=requirement_id,
+        text=text,
+        category=category,
+        category_label=category_label,
+        topic=text,
+        importance="mandatory",
+        suggested_section=suggested_section or SUGGESTED_SECTIONS[category],
+        coverage_question=f"Покрито ли е: {text}?",
+        source_chunk_id=f"chunk-{requirement_id}",
+        source_page=1,
+        source_section_path="Изисквания към техническото предложение",
+        source_file="docs.pdf",
+        source_excerpt=text,
+        evidence_cues=[],
     )
 
 
@@ -149,6 +183,74 @@ def test_build_deterministic_outline_uses_extracted_sections_when_llm_omits_outl
     assert [section["title"] for section in outline["sections"]] == [
         section["title"] for section in explicit_sections
     ]
+
+
+def test_requirement_checklist_is_attached_to_matching_outline_sections():
+    sections = [
+        {
+            "uid": "schedule-section",
+            "title": SUGGESTED_SECTIONS["schedule"],
+            "required": True,
+            "requirements": [],
+            "source_refs": [],
+            "subsections": [],
+        }
+    ]
+    schedule_requirement = make_requirement(
+        "req-schedule",
+        "Следва да се представи подробен линеен график за изпълнение.",
+    )
+    specific_requirement = make_requirement(
+        "req-specific",
+        "Следва да се опише специален ред за достъп до помещенията.",
+        category=SPECIFIC_REQUIREMENTS_CATEGORY,
+        category_label=SPECIFIC_REQUIREMENTS_LABEL,
+        suggested_section=SUGGESTED_SECTIONS[SPECIFIC_REQUIREMENTS_CATEGORY],
+    )
+
+    enriched = _attach_requirement_checklist_to_outline_sections(
+        sections,
+        [schedule_requirement, specific_requirement],
+    )
+    summary = _build_outline_coverage_summary(
+        enriched,
+        [schedule_requirement, specific_requirement],
+    )
+
+    schedule_section = next(section for section in enriched if section["uid"] == "schedule-section")
+    specific_section = next(
+        section
+        for section in enriched
+        if section["title"] == SUGGESTED_SECTIONS[SPECIFIC_REQUIREMENTS_CATEGORY]
+    )
+
+    assert schedule_section["requirement_ids"] == ["req-schedule"]
+    assert specific_section["requirement_ids"] == ["req-specific"]
+    assert summary["total_requirements"] == 2
+    assert summary["covered_requirements"] == 2
+    assert summary["missing_requirement_ids"] == []
+
+
+def test_build_deterministic_outline_can_start_from_requirement_checklist():
+    requirement = make_requirement(
+        "req-specific-only",
+        "Следва да се опише специален ред за достъп до помещенията.",
+        category=SPECIFIC_REQUIREMENTS_CATEGORY,
+        category_label=SPECIFIC_REQUIREMENTS_LABEL,
+        suggested_section=SUGGESTED_SECTIONS[SPECIFIC_REQUIREMENTS_CATEGORY],
+    )
+
+    outline = _build_deterministic_outline(
+        explicit_numbered_sections=[],
+        domain_outline_sections=[],
+        mandatory_sections=[],
+        requirement_checklist=[requirement],
+    )
+
+    assert outline is not None
+    assert outline["sections"][0]["title"] == SUGGESTED_SECTIONS[SPECIFIC_REQUIREMENTS_CATEGORY]
+    assert outline["sections"][0]["requirement_ids"] == ["req-specific-only"]
+    assert outline["coverage_summary"]["covered_requirements"] == 1
 
 
 def test_extract_mandatory_sections_ignores_numbered_lines_without_tp_context():

@@ -118,6 +118,9 @@ EXECUTION_RELEVANCE_CUES = (
     "авторски надзор",
 )
 
+SPECIFIC_REQUIREMENTS_CATEGORY = "specific"
+SPECIFIC_REQUIREMENTS_LABEL = "Други специфични изисквания"
+
 CATEGORY_RULES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ("communication", "Комуникация и координация", ("комуникация", "координация", "възложител", "институц", "надзор", "субординация")),
     ("quality", "Качество и контрол", ("качество", "контрол", "провер", "приемане", "протокол", "изпитван")),
@@ -148,7 +151,8 @@ SUGGESTED_SECTIONS = {
     "documentation": "Документиране, отчетност и приемане",
     "warranty": "Гаранционни дейности",
     "compliance": "Нормативно съответствие",
-    "other": "Други специфични изисквания",
+    SPECIFIC_REQUIREMENTS_CATEGORY: SPECIFIC_REQUIREMENTS_LABEL,
+    "other": SPECIFIC_REQUIREMENTS_LABEL,
 }
 
 
@@ -263,8 +267,8 @@ def _is_relevant_to_technical_proposal(text: str, context: str) -> bool:
         return False
 
     category, _, _ = _classify(text)
-    if category == "other":
-        return False
+    if category in {SPECIFIC_REQUIREMENTS_CATEGORY, "other"}:
+        return _has_tp_context(combined) and _contains_requirement_cue(text)
 
     return any(cue in combined for cue in EXECUTION_RELEVANCE_CUES)
 
@@ -357,8 +361,8 @@ def _importance(text: str) -> str:
 
 def _classify(text: str) -> tuple[str, str, str]:
     normalized = _normalize_for_match(text)
-    best_category = "other"
-    best_label = "Други специфични изисквания"
+    best_category = SPECIFIC_REQUIREMENTS_CATEGORY
+    best_label = SPECIFIC_REQUIREMENTS_LABEL
     best_score = 0
     best_topic = ""
 
@@ -428,7 +432,10 @@ def extract_requirement_checklist(chunks: Iterable[Any], *, limit: int | None = 
                     category_label=category_label,
                     topic=topic,
                     importance=_importance(requirement_text),
-                    suggested_section=SUGGESTED_SECTIONS.get(category, SUGGESTED_SECTIONS["other"]),
+                    suggested_section=SUGGESTED_SECTIONS.get(
+                        category,
+                        SUGGESTED_SECTIONS[SPECIFIC_REQUIREMENTS_CATEGORY],
+                    ),
                     coverage_question=_coverage_question(requirement_text),
                     source_chunk_id=source_chunk_id,
                     source_page=getattr(chunk, "page", None),
@@ -452,6 +459,7 @@ def format_requirements_for_prompt(items: list[RequirementItem], *, limit: int =
     lines = [
         "=== УНИВЕРСАЛЕН ЧЕКЛИСТ НА ИЗИСКВАНИЯТА ОТ ДОКУМЕНТАЦИЯТА ===",
         "Използвай тези точки като задължителни контролни въпроси при структурата на техническото предложение.",
+        "Ако изискване не попада ясно в стандартна категория, запази го като специфично изискване по поръчката.",
     ]
     for index, item in enumerate(items[:limit], start=1):
         page = f", стр. {item.source_page}" if item.source_page else ""

@@ -195,6 +195,7 @@ export interface TpOutlineSection {
   title: string;
   required?: boolean;
   requirements?: string[];
+  requirement_ids?: string[];
   subsections?: TpOutlineSection[];
   children?: TpOutlineSection[];
 }
