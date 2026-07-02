@@ -52,6 +52,7 @@
 - Exposed the requirement checklist in the application through a backend API endpoint and a project sidebar panel with summary counts, category/importance filters, source references, and local check-off state.
 - Added a universal fallback for tender-specific requirements that do not fit predefined categories, and connected requirement checklist items to outline sections through `requirement_ids`, missing-section creation, and outline coverage summaries.
 - Added requirement-aware drafting and verification: outline sections now preserve structured checklist items, drafting prompts include a per-section checklist, generated variants store deterministic requirement coverage metadata, and verifier marks missing checklist items as review gaps.
+- Surfaced generated-text requirement coverage in the Generations panel and added a DOCX pre-export check that blocks export when selected sections still miss tender checklist requirements.
 
 ## Active Goals
 
@@ -63,10 +64,10 @@
 ## Next Recommended Steps
 
 1. Improve logical sentence reconstruction in requirement extraction so PDF line breaks and table-cell fragments do not produce truncated checklist items.
-2. Surface generated-text requirement coverage in the UI and pre-export flow so users can see missing checklist items before DOCX export.
-3. Regenerate the stale Pernik sections after the current fixes and re-run the proposal gap analysis against the winning technical proposal.
-4. Expand generated documentation with more precise backend endpoint and workflow coverage.
-5. Build broader regression coverage around common tender scenarios, including explicit outline, no outline, specific requirements, quality/risk/environment-heavy tenders, and noisy PDF extraction.
+2. Regenerate the stale Pernik sections after the current fixes and re-run the proposal gap analysis against the winning technical proposal.
+3. Expand generated documentation with more precise backend endpoint and workflow coverage.
+4. Build broader regression coverage around common tender scenarios, including explicit outline, no outline, specific requirements, quality/risk/environment-heavy tenders, and noisy PDF extraction.
+5. Improve logical sentence reconstruction in requirement extraction where real PDF line breaks and table-cell fragments still create truncated checklist items.
 
 ## Notes
 
