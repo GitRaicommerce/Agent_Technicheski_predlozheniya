@@ -12,6 +12,11 @@ from typing import Any, TYPE_CHECKING
 import structlog
 from sqlalchemy import select
 
+from app.agents.requirements import (
+    RequirementItem,
+    extract_requirement_checklist,
+    format_requirements_for_prompt,
+)
 from app.core.llm_gateway import llm_gateway
 from app.core.models import ExtractedChunk, ExampleSnippet, TpOutline
 
@@ -113,6 +118,7 @@ SYSTEM_PROMPT = """Ти си агент за анализ на тръжна до
         "title": "<раздел>",
         "required": true,
         "requirements": ["<конкретно изискване>"],
+        "requirement_ids": ["<requirement_id>"],
         "source_refs": ["<chunk_id>"],
         "subsections": []
       }
@@ -310,7 +316,7 @@ def _dedupe_outline_sections(sections: list[dict[str, Any]]) -> list[dict[str, A
 
     for section in sections:
         normalized_title = _normalize_title_for_compare(section.get("title"))
-        section["subsections"] = _dedupe_outline_sections(section.get("subsections", []))
+        section["subsections"] = _dedupe_outline_sections(section.get("subsections") or [])
 
         if normalized_title not in index_by_title:
             index_by_title[normalized_title] = len(deduped)
@@ -319,14 +325,35 @@ def _dedupe_outline_sections(sections: list[dict[str, Any]]) -> list[dict[str, A
 
         existing = deduped[index_by_title[normalized_title]]
 
-        existing_requirements = existing.get("requirements", [])
-        for requirement in section.get("requirements", []):
+        existing_requirements = existing.get("requirements") or []
+        for requirement in section.get("requirements") or []:
             if requirement not in existing_requirements:
                 existing_requirements.append(requirement)
         existing["requirements"] = existing_requirements
 
-        existing_refs = existing.get("source_refs", [])
-        for source_ref in section.get("source_refs", []):
+        existing_requirement_ids = existing.get("requirement_ids") or []
+        for requirement_id in section.get("requirement_ids") or []:
+            if requirement_id not in existing_requirement_ids:
+                existing_requirement_ids.append(requirement_id)
+        existing["requirement_ids"] = existing_requirement_ids
+
+        existing_checklist_items = existing.get("requirement_checklist_items") or []
+        existing_checklist_ids = {
+            str(item.get("id"))
+            for item in existing_checklist_items
+            if isinstance(item, dict) and item.get("id")
+        }
+        for item in section.get("requirement_checklist_items") or []:
+            if not isinstance(item, dict):
+                continue
+            item_id = str(item.get("id") or "")
+            if item_id and item_id not in existing_checklist_ids:
+                existing_checklist_ids.add(item_id)
+                existing_checklist_items.append(item)
+        existing["requirement_checklist_items"] = existing_checklist_items
+
+        existing_refs = existing.get("source_refs") or []
+        for source_ref in section.get("source_refs") or []:
             if source_ref not in existing_refs:
                 existing_refs.append(source_ref)
         existing["source_refs"] = existing_refs
@@ -336,6 +363,205 @@ def _dedupe_outline_sections(sections: list[dict[str, Any]]) -> list[dict[str, A
         )
 
     return deduped
+
+
+def _append_unique(values: list[Any], value: Any) -> list[Any]:
+    if value and value not in values:
+        values.append(value)
+    return values
+
+
+def _meaningful_tokens(value: str | None) -> set[str]:
+    normalized = _normalize_title_for_compare(value)
+    stop_words = {
+        "the",
+        "and",
+        "for",
+        "with",
+        "без",
+        "във",
+        "или",
+        "към",
+        "над",
+        "под",
+        "при",
+        "със",
+        "това",
+        "тези",
+    }
+    return {
+        token
+        for token in re.findall(r"\w+", normalized, flags=re.UNICODE)
+        if len(token) >= 4 and token not in stop_words
+    }
+
+
+def _walk_outline_sections(sections: list[dict[str, Any]]):
+    for section in sections:
+        yield section
+        yield from _walk_outline_sections(section.get("subsections") or [])
+
+
+def _section_score_for_requirement(section: dict[str, Any], item: RequirementItem) -> int:
+    title = _normalize_title_for_compare(section.get("title"))
+    if not title:
+        return 0
+
+    suggested = _normalize_title_for_compare(item.suggested_section)
+    category = _normalize_title_for_compare(item.category_label)
+    topic = _normalize_title_for_compare(item.topic)
+    score = 0
+
+    if suggested and (suggested in title or title in suggested):
+        score = max(score, 100)
+    if category and (category in title or title in category):
+        score = max(score, 80)
+    if topic and topic in title:
+        score = max(score, 65)
+
+    title_tokens = _meaningful_tokens(title)
+    target_tokens = _meaningful_tokens(
+        f"{item.suggested_section} {item.category_label} {item.topic}"
+    )
+    requirement_tokens = _meaningful_tokens(item.text)
+
+    target_overlap = title_tokens & target_tokens
+    if target_overlap:
+        score = max(score, min(75, 40 + len(target_overlap) * 10))
+
+    requirement_overlap = title_tokens & requirement_tokens
+    if requirement_overlap:
+        score = max(score, min(65, 25 + len(requirement_overlap) * 6))
+
+    if item.source_chunk_id in section.get("source_refs", []):
+        score += 10
+
+    return min(score, 100)
+
+
+def _attach_requirement_to_section(section: dict[str, Any], item: RequirementItem) -> None:
+    section["requirement_ids"] = _append_unique(
+        list(section.get("requirement_ids") or []),
+        item.id,
+    )
+    section["requirements"] = _append_unique(
+        list(section.get("requirements") or []),
+        item.text,
+    )
+    section["source_refs"] = _append_unique(
+        list(section.get("source_refs") or []),
+        item.source_chunk_id,
+    )
+    checklist_items = list(section.get("requirement_checklist_items") or [])
+    if not any(
+        existing.get("id") == item.id
+        for existing in checklist_items
+        if isinstance(existing, dict)
+    ):
+        checklist_items.append(
+            {
+                "id": item.id,
+                "text": item.text,
+                "importance": item.importance,
+                "category": item.category,
+                "category_label": item.category_label,
+                "coverage_question": item.coverage_question,
+                "source_chunk_id": item.source_chunk_id,
+                "source_page": item.source_page,
+                "source_section_path": item.source_section_path,
+                "source_file": item.source_file,
+            }
+        )
+    section["requirement_checklist_items"] = checklist_items
+
+
+def _missing_requirement_sections(items: list[RequirementItem]) -> list[dict[str, Any]]:
+    grouped: dict[str, dict[str, Any]] = {}
+    for item in items:
+        title = item.suggested_section or item.category_label or item.topic
+        section = grouped.setdefault(
+            title,
+            {
+                "uid": str(uuid.uuid4()),
+                "title": title,
+                "required": True,
+                "requirements": [],
+                "requirement_ids": [],
+                "source_refs": [],
+                "subsections": [],
+            },
+        )
+        _attach_requirement_to_section(section, item)
+    return list(grouped.values())
+
+
+def _attach_requirement_checklist_to_outline_sections(
+    sections: list[dict[str, Any]],
+    requirement_checklist: list[RequirementItem],
+    *,
+    min_score: int = 45,
+) -> list[dict[str, Any]]:
+    if not requirement_checklist:
+        return sections
+
+    enriched_sections = _dedupe_outline_sections(sections)
+    unmatched: list[RequirementItem] = []
+
+    for item in requirement_checklist:
+        best_section: dict[str, Any] | None = None
+        best_score = 0
+        for section in _walk_outline_sections(enriched_sections):
+            score = _section_score_for_requirement(section, item)
+            if score > best_score:
+                best_section = section
+                best_score = score
+
+        if best_section is not None and best_score >= min_score:
+            _attach_requirement_to_section(best_section, item)
+        else:
+            unmatched.append(item)
+
+    if unmatched:
+        enriched_sections = [
+            *enriched_sections,
+            *_missing_requirement_sections(unmatched),
+        ]
+
+    return _dedupe_outline_sections(enriched_sections)
+
+
+def _build_outline_coverage_summary(
+    sections: list[dict[str, Any]],
+    requirement_checklist: list[RequirementItem],
+) -> dict[str, Any]:
+    requirement_ids = {item.id for item in requirement_checklist}
+    covered_ids: set[str] = set()
+    section_requirement_counts: list[dict[str, Any]] = []
+
+    for section in _walk_outline_sections(sections):
+        ids = [
+            requirement_id
+            for requirement_id in section.get("requirement_ids", [])
+            if requirement_id in requirement_ids
+        ]
+        if not ids:
+            continue
+        covered_ids.update(ids)
+        section_requirement_counts.append(
+            {
+                "uid": section.get("uid"),
+                "title": section.get("title"),
+                "requirement_count": len(ids),
+            }
+        )
+
+    missing_ids = [item.id for item in requirement_checklist if item.id not in covered_ids]
+    return {
+        "total_requirements": len(requirement_checklist),
+        "covered_requirements": len(covered_ids),
+        "missing_requirement_ids": missing_ids,
+        "section_requirement_counts": section_requirement_counts,
+    }
 
 
 def _build_domain_outline(chunks: list[ExtractedChunk]) -> list[dict[str, Any]]:
@@ -401,10 +627,41 @@ def _build_domain_outline(chunks: list[ExtractedChunk]) -> list[dict[str, Any]]:
     construction_subchunks = [
         ("Организация на ресурсите", _find_chunk_by_phrases(chunks, "организация на ресурсите")),
         (
+            "Заинтересовани страни и участници в изпълнението",
+            _find_chunk_by_phrases(chunks, "заинтересовани страни", "участници в изпълнението"),
+        ),
+        (
             "Комуникация при строителството",
             _find_chunk_by_phrases(chunks, "4.3. комуникация", "екипа за изпълнение на строителството"),
         ),
+        (
+            "Вътрешнофирмена комуникация, координация, контрол и субординация",
+            _find_chunk_by_phrases(
+                chunks,
+                "вътрешнофирмена комуникация",
+                "координация, контрол и субординация",
+                "контрол и субординация",
+            ),
+        ),
+        (
+            "Комуникация с Възложителя, строителния надзор и институциите",
+            _find_chunk_by_phrases(
+                chunks,
+                "комуникация с възложителя",
+                "строителния надзор",
+                "компетентните институции",
+            ),
+        ),
         ("Организация за доставка на материали", _find_chunk_by_phrases(chunks, "организация за доставка на материали")),
+        (
+            "Пожарна безопасност и безопасност при изпълнение на СМР",
+            _find_chunk_by_phrases(
+                chunks,
+                "пожарна безопасност",
+                "безопасност при изпълнение",
+                "здравословни и безопасни условия",
+            ),
+        ),
     ]
     if any(chunk for _, chunk in construction_subchunks):
         construction_section = add_section(
@@ -418,8 +675,19 @@ def _build_domain_outline(chunks: list[ExtractedChunk]) -> list[dict[str, Any]]:
         "Линеен график",
         _find_chunk_by_phrases(chunks, "линеен график", "подробен линеен график", "срокът за изпълнение на смр"),
     )
-    add_section("Управление на риска", _find_chunk_by_phrases(chunks, "управление на риска"))
-    add_section(
+    risk_section = add_section("Управление на риска", _find_chunk_by_phrases(chunks, "управление на риска"))
+    add_subsection(
+        risk_section,
+        "Идентификация, оценка и мерки за конкретните рискове",
+        _find_chunk_by_phrases(chunks, "идентификация на риска", "конкретни рискове", "мерки за ограничаване на риска"),
+    )
+    add_subsection(
+        risk_section,
+        "Мониторинг, отговорности и ескалация при риск",
+        _find_chunk_by_phrases(chunks, "мониторинг на риска", "отговорности при риск", "ескалация"),
+    )
+
+    environment_section = add_section(
         "Ограничаване и предотвратяване на негативното въздействие върху околната среда",
         _find_chunk_by_phrases(
             chunks,
@@ -427,7 +695,33 @@ def _build_domain_outline(chunks: list[ExtractedChunk]) -> list[dict[str, Any]]:
             "опазване на околната среда",
         ),
     )
-    add_section("Мерки за осигуряване на качеството", _find_chunk_by_phrases(chunks, "мерки за осигуряване на качеството"))
+    add_subsection(
+        environment_section,
+        "Мерки срещу запрашаване и замърсяване на въздуха",
+        _find_chunk_by_phrases(chunks, "запрашаване", "прах", "замърсяване на въздуха"),
+    )
+    add_subsection(
+        environment_section,
+        "Опазване на почви, води и прилежащи терени",
+        _find_chunk_by_phrases(chunks, "опазване на почв", "замърсяване на почв", "води и прилежащи терени"),
+    )
+    add_subsection(
+        environment_section,
+        "Управление на строителните отпадъци",
+        _find_chunk_by_phrases(chunks, "строителни отпадъци", "управление на отпадъците", "пусо"),
+    )
+
+    quality_section = add_section("Мерки за осигуряване на качеството", _find_chunk_by_phrases(chunks, "мерки за осигуряване на качеството"))
+    add_subsection(
+        quality_section,
+        "Входящ, текущ и окончателен контрол на качеството",
+        _find_chunk_by_phrases(chunks, "входящ контрол", "текущ контрол", "окончателен контрол"),
+    )
+    add_subsection(
+        quality_section,
+        "Документиране, проверки и приемане на изпълнените работи",
+        _find_chunk_by_phrases(chunks, "документиране", "приемане на изпълнените работи", "протоколи"),
+    )
     add_section(
         "Организация на дейностите по отстраняване на гаранционни дефекти",
         _find_chunk_by_phrases(chunks, "гаранционни дефекти"),
@@ -578,6 +872,38 @@ def _ensure_mandatory_sections(
     return [*missing_sections, *outline_sections]
 
 
+def _build_deterministic_outline(
+    explicit_numbered_sections: list[dict[str, Any]],
+    domain_outline_sections: list[dict[str, Any]],
+    mandatory_sections: list[dict[str, Any]],
+    requirement_checklist: list[RequirementItem] | None = None,
+) -> dict[str, Any] | None:
+    if len(domain_outline_sections) >= 6:
+        sections = domain_outline_sections
+    elif len(explicit_numbered_sections) >= 5:
+        sections = explicit_numbered_sections
+    else:
+        sections = []
+
+    sections = _ensure_mandatory_sections(sections, mandatory_sections)
+    sections = _dedupe_outline_sections(sections)
+    if requirement_checklist:
+        sections = _attach_requirement_checklist_to_outline_sections(
+            sections,
+            requirement_checklist,
+        )
+    if not sections:
+        return None
+
+    outline: dict[str, Any] = {"sections": sections}
+    if requirement_checklist is not None:
+        outline["coverage_summary"] = _build_outline_coverage_summary(
+            sections,
+            requirement_checklist,
+        )
+    return outline
+
+
 async def run_tender_struct(
     project_id: str,
     db: "AsyncSession",
@@ -625,6 +951,10 @@ async def run_tender_struct(
     mandatory_sections = _extract_mandatory_sections(tp_requirement_chunks)
     explicit_numbered_sections = _extract_explicit_numbered_outline(tp_requirement_chunks)
     domain_outline_sections = _build_domain_outline(all_chunks)
+    requirement_checklist = extract_requirement_checklist(all_chunks)
+    requirement_checklist_text = format_requirements_for_prompt(requirement_checklist)
+    if requirement_checklist_text:
+        requirement_checklist_text = f"\n\n{requirement_checklist_text}"
 
     chunks_text = "\n\n".join(
         f"[CHUNK id={c.id} page={c.page} section={c.section_path or 'n/a'}]\n"
@@ -703,6 +1033,7 @@ async def run_tender_struct(
     user_message = (
         f"ТРЪЖНА ДОКУМЕНТАЦИЯ за проект {project_id} ({len(chunks)} подбрани чанка от {len(all_chunks)} общо):\n\n"
         f"{priority_requirements_text}"
+        f"{requirement_checklist_text}"
         f"{mandatory_sections_text}"
         f"{explicit_outline_text}"
         f"{domain_outline_text}"
@@ -717,6 +1048,23 @@ async def run_tender_struct(
         trace_id=trace_id,
     )
 
+    outline_payload = llm_result.get("outline")
+    outline_sections = (
+        outline_payload.get("sections", []) if isinstance(outline_payload, dict) else []
+    )
+    if not outline_sections:
+        deterministic_outline = _build_deterministic_outline(
+            explicit_numbered_sections=explicit_numbered_sections,
+            domain_outline_sections=domain_outline_sections,
+            mandatory_sections=mandatory_sections,
+            requirement_checklist=requirement_checklist,
+        )
+        if deterministic_outline:
+            llm_result["outline"] = deterministic_outline
+            warnings = llm_result.setdefault("warnings", [])
+            if isinstance(warnings, list):
+                warnings.append("llm_outline_missing_used_deterministic_fallback")
+
     if "outline" in llm_result:
         if len(domain_outline_sections) >= 6:
             llm_result["outline"]["sections"] = domain_outline_sections
@@ -730,6 +1078,10 @@ async def run_tender_struct(
         llm_result["outline"]["sections"] = _dedupe_outline_sections(
             llm_result["outline"].get("sections", [])
         )
+        llm_result["outline"]["sections"] = _attach_requirement_checklist_to_outline_sections(
+            llm_result["outline"].get("sections", []),
+            requirement_checklist,
+        )
 
         def _fix_uids(sections: list[dict[str, Any]]) -> None:
             for section in sections:
@@ -741,6 +1093,10 @@ async def run_tender_struct(
                 _fix_uids(section.get("subsections", []))
 
         _fix_uids(llm_result["outline"].get("sections", []))
+        llm_result["outline"]["coverage_summary"] = _build_outline_coverage_summary(
+            llm_result["outline"].get("sections", []),
+            requirement_checklist,
+        )
 
         from sqlalchemy import func
 

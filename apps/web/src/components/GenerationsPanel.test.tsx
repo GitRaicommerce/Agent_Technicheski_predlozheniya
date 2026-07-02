@@ -15,6 +15,8 @@ vi.mock("@/lib/api", async () => {
       agents: {
         ...actual.api.agents,
         listGenerations: vi.fn(),
+        latestGenerationJob: vi.fn(),
+        retryGenerationJob: vi.fn(),
         regenerateSection: vi.fn(),
       },
     },
@@ -22,11 +24,14 @@ vi.mock("@/lib/api", async () => {
 });
 
 const listGenerationsMock = vi.mocked(api.agents.listGenerations);
+const latestGenerationJobMock = vi.mocked(api.agents.latestGenerationJob);
+const retryGenerationJobMock = vi.mocked(api.agents.retryGenerationJob);
 const regenerateSectionMock = vi.mocked(api.agents.regenerateSection);
 
 describe("GenerationsPanel", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    latestGenerationJobMock.mockResolvedValue(null);
   });
 
   it("renders empty state when there are no generations", async () => {
@@ -63,6 +68,61 @@ describe("GenerationsPanel", () => {
     await userEvent.click(sectionButton);
 
     expect(await screen.findByText("Selected generation text")).toBeInTheDocument();
+  });
+
+  it("shows requirement coverage for the selected generation", async () => {
+    listGenerationsMock.mockResolvedValue([
+      {
+        section_uid: "sec-coverage",
+        section_title: "Coverage Section",
+        variants: [
+          {
+            id: "gen-coverage",
+            section_uid: "sec-coverage",
+            variant: 1,
+            text: "Generated text",
+            evidence_status: "ok",
+            selected: true,
+            created_at: "2026-04-20T10:00:00.000Z",
+            flags_json: {
+              requirement_coverage: {
+                total: 2,
+                covered: 1,
+                missing: 1,
+                missing_ids: ["req-missing"],
+                items: [
+                  {
+                    id: "req-covered",
+                    text: "Covered requirement",
+                    status: "covered",
+                  },
+                  {
+                    id: "req-missing",
+                    text: "Missing requirement",
+                    status: "missing",
+                  },
+                ],
+              },
+            },
+          },
+        ],
+      },
+    ]);
+
+    render(<GenerationsPanel projectId="project-1" />);
+
+    expect(await screen.findByTestId("generation-requirement-coverage"))
+      .toHaveTextContent("1/2");
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Coverage Section/i }),
+    );
+
+    expect(
+      await screen.findByTestId("generation-requirement-coverage-sec-coverage"),
+    ).toHaveTextContent("1 липсват");
+    expect(screen.getByText(/req-missing/)).toBeInTheDocument();
+    expect(screen.getByText(/Missing requirement/)).toBeInTheDocument();
   });
 
   it("regenerates a section and reloads the list", async () => {
@@ -115,6 +175,86 @@ describe("GenerationsPanel", () => {
 
     await waitFor(() => {
       expect(regenerateSectionMock).toHaveBeenCalledWith("project-1", "sec-1");
+    });
+    await waitFor(() => {
+      expect(listGenerationsMock).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it("shows progress for an active all-sections generation job", async () => {
+    listGenerationsMock.mockResolvedValue([]);
+    latestGenerationJobMock.mockResolvedValue({
+      id: "job-1",
+      project_id: "project-1",
+      job_type: "drafting_all",
+      status: "processing",
+      total_sections: 4,
+      completed_sections: 1,
+      skipped_sections: 1,
+      current_section_uid: "sec-2",
+      current_section_title: "Section 2",
+      error: null,
+      result_json: null,
+      trace_id: "trace-1",
+      created_at: "2026-04-20T10:00:00.000Z",
+      updated_at: "2026-04-20T10:01:00.000Z",
+      completed_at: null,
+    });
+
+    render(<GenerationsPanel projectId="project-1" />);
+
+    expect(await screen.findByTestId("generation-job-progress")).toHaveTextContent(
+      "2 / 4",
+    );
+    expect(screen.getByText("Section 2")).toBeInTheDocument();
+  });
+
+  it("retries a failed all-sections generation job", async () => {
+    listGenerationsMock.mockResolvedValue([]);
+    latestGenerationJobMock.mockResolvedValue({
+      id: "job-1",
+      project_id: "project-1",
+      job_type: "drafting_all",
+      status: "error",
+      total_sections: 4,
+      completed_sections: 2,
+      skipped_sections: 1,
+      current_section_uid: null,
+      current_section_title: null,
+      error: "Connection error.",
+      result_json: {
+        sections: [],
+        failed_sections: [{ section_uid: "sec-4", title: "Section 4" }],
+      },
+      trace_id: "trace-1",
+      created_at: "2026-04-20T10:00:00.000Z",
+      updated_at: "2026-04-20T10:01:00.000Z",
+      completed_at: "2026-04-20T10:01:00.000Z",
+    });
+    retryGenerationJobMock.mockResolvedValue({
+      id: "job-2",
+      project_id: "project-1",
+      job_type: "drafting_all",
+      status: "queued",
+      total_sections: 0,
+      completed_sections: 0,
+      skipped_sections: 0,
+      current_section_uid: null,
+      current_section_title: null,
+      error: null,
+      result_json: null,
+      trace_id: "trace-2",
+      created_at: "2026-04-20T10:02:00.000Z",
+      updated_at: "2026-04-20T10:02:00.000Z",
+      completed_at: null,
+    });
+
+    render(<GenerationsPanel projectId="project-1" />);
+
+    await userEvent.click(await screen.findByTestId("generation-job-retry-button"));
+
+    await waitFor(() => {
+      expect(retryGenerationJobMock).toHaveBeenCalledWith("project-1");
     });
     await waitFor(() => {
       expect(listGenerationsMock).toHaveBeenCalledTimes(2);

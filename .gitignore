@@ -14,6 +14,7 @@ build/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.playwright-results/
 
 # Node
 apps/web/node_modules/
@@ -35,3 +36,4 @@ minio_data/
 postgres_data/
 
 old/
+local_analysis/

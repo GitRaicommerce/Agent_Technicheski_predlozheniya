@@ -43,6 +43,7 @@ def test_parse_lex_bg_html_extracts_title_and_articles():
 async def test_ensure_project_legislation_current_creates_snapshot_and_chunks(monkeypatch):
     project_id = str(uuid.uuid4())
     db = AsyncMock()
+    db.get = AsyncMock(return_value=object())
     db.execute = AsyncMock(side_effect=[_result(scalar=None), _result(items=[])])
     db.flush = AsyncMock()
     db.add = MagicMock()
@@ -76,6 +77,40 @@ async def test_ensure_project_legislation_current_creates_snapshot_and_chunks(mo
     assert db.add.call_count == 3
     added_types = [type(call.args[0]).__name__ for call in db.add.call_args_list]
     assert added_types == ["LexSnapshot", "LexChunk", "LexChunk"]
+
+
+@pytest.mark.asyncio
+async def test_ensure_project_legislation_current_skips_when_project_is_deleted(monkeypatch):
+    project_id = str(uuid.uuid4())
+    db = AsyncMock()
+    db.get = AsyncMock(side_effect=[object(), None])
+    db.execute = AsyncMock(return_value=_result(scalar=None))
+    db.flush = AsyncMock()
+    db.add = MagicMock()
+
+    parsed = lex_bg.ParsedLexBgAct(
+        act_name="Р—Р°РєРѕРЅ Р·Р° СѓСЃС‚СЂРѕР№СЃС‚РІРѕ РЅР° С‚РµСЂРёС‚РѕСЂРёСЏС‚Р°",
+        url="https://lex.bg/bg/laws/ldoc/test",
+        title="Р—РђРљРћРќ Р—Рђ РЈРЎРўР РћР™РЎРўР’Рћ РќРђ РўР•Р РРўРћР РРЇРўРђ",
+        text="Р§Р». 1. РўРµРєСЃС‚.",
+        content_hash="abc123",
+        articles=[
+            {"article_ref": "Р§Р». 1.", "text": "Р§Р». 1. РџСЉСЂРІРё С‚РµРєСЃС‚."}
+        ],
+    )
+    monkeypatch.setattr(lex_bg, "fetch_lex_bg_act", AsyncMock(return_value=parsed))
+
+    result = await lex_bg.ensure_project_legislation_current(
+        project_id,
+        db,
+        acts=(lex_bg.LexBgAct(parsed.act_name, parsed.url),),
+        force=True,
+    )
+
+    assert result["status"] == "skipped"
+    assert result["checked"] == 1
+    assert result["changed"] == 0
+    db.add.assert_not_called()
 
 
 @pytest.mark.asyncio

@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Any
+from types import SimpleNamespace
 import uuid
 import structlog
 from slowapi import Limiter
@@ -250,6 +251,85 @@ async def get_schedule(project_id: str, db: AsyncSession = Depends(get_db)):
     return schedule
 
 
+class RequirementChecklistItemResponse(BaseModel):
+    id: str
+    text: str
+    category: str
+    category_label: str
+    topic: str
+    importance: str
+    suggested_section: str
+    coverage_question: str
+    source_chunk_id: str
+    source_page: int | None = None
+    source_section_path: str | None = None
+    source_file: str | None = None
+    source_excerpt: str
+    evidence_cues: list[str]
+
+
+class RequirementChecklistResponse(BaseModel):
+    project_id: str
+    total: int
+    importance_counts: dict[str, int]
+    category_counts: dict[str, int]
+    items: list[RequirementChecklistItemResponse]
+
+
+@router.get(
+    "/{project_id}/requirements-checklist",
+    response_model=RequirementChecklistResponse,
+)
+async def get_requirements_checklist(
+    project_id: str,
+    db: AsyncSession = Depends(get_db),
+) -> RequirementChecklistResponse:
+    project = await db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    from app.agents.requirements import extract_requirement_checklist
+    from app.core.models import ExtractedChunk, ProjectFile
+    from sqlalchemy import select
+
+    result = await db.execute(
+        select(ExtractedChunk, ProjectFile.filename)
+        .join(ProjectFile, ExtractedChunk.file_id == ProjectFile.id)
+        .where(ExtractedChunk.project_id == project_id)
+        .where(ProjectFile.project_id == project_id)
+        .where(ProjectFile.module == "tender_docs")
+        .order_by(ProjectFile.filename, ExtractedChunk.page, ExtractedChunk.id)
+    )
+    chunks = [
+        SimpleNamespace(
+            id=chunk.id,
+            text=chunk.text,
+            page=chunk.page,
+            section_path=chunk.section_path,
+            source_file=filename,
+        )
+        for chunk, filename in result.all()
+    ]
+    items = extract_requirement_checklist(chunks)
+
+    importance_counts: dict[str, int] = {}
+    category_counts: dict[str, int] = {}
+    for item in items:
+        importance_counts[item.importance] = importance_counts.get(item.importance, 0) + 1
+        category_counts[item.category_label] = category_counts.get(item.category_label, 0) + 1
+
+    return RequirementChecklistResponse(
+        project_id=project_id,
+        total=len(items),
+        importance_counts=importance_counts,
+        category_counts=category_counts,
+        items=[
+            RequirementChecklistItemResponse(**item.as_dict())
+            for item in items
+        ],
+    )
+
+
 # ---------------------------------------------------------------------------
 # GET /api/v1/agents/{project_id}/generations
 # ---------------------------------------------------------------------------
@@ -274,6 +354,24 @@ class SectionGenerations(BaseModel):
     section_uid: str
     section_title: str | None = None
     variants: list[GenerationResponse]
+
+
+class GenerationJobResponse(BaseModel):
+    id: str
+    project_id: str
+    job_type: str
+    status: str
+    total_sections: int
+    completed_sections: int
+    skipped_sections: int
+    current_section_uid: str | None = None
+    current_section_title: str | None = None
+    error: str | None = None
+    result_json: dict | None = None
+    trace_id: str | None = None
+    created_at: str
+    updated_at: str
+    completed_at: str | None = None
 
 
 @router.get("/{project_id}/generations", response_model=list[SectionGenerations])
@@ -360,6 +458,78 @@ async def list_generations(project_id: str, db: AsyncSession = Depends(get_db)):
     return result
 
 
+@router.get(
+    "/{project_id}/generation-jobs/latest",
+    response_model=GenerationJobResponse | None,
+)
+async def get_latest_generation_job(
+    project_id: str, db: AsyncSession = Depends(get_db)
+):
+    from app.core.models import GenerationJob
+    from sqlalchemy import select
+
+    result = await db.execute(
+        select(GenerationJob)
+        .where(GenerationJob.project_id == project_id)
+        .order_by(GenerationJob.created_at.desc())
+        .limit(1)
+    )
+    job = result.scalar_one_or_none()
+    return _generation_job_response(job) if job else None
+
+
+@router.post(
+    "/{project_id}/generation-jobs/retry",
+    response_model=GenerationJobResponse,
+)
+async def retry_generation_job(
+    project_id: str, db: AsyncSession = Depends(get_db)
+):
+    project = await db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    from app.agents.generation_jobs import create_drafting_all_job
+
+    job = await create_drafting_all_job(project=project, db=db)
+    return _generation_job_response(job)
+
+
+@router.get(
+    "/{project_id}/generation-jobs/{job_id}",
+    response_model=GenerationJobResponse,
+)
+async def get_generation_job(
+    project_id: str, job_id: str, db: AsyncSession = Depends(get_db)
+):
+    from app.core.models import GenerationJob
+
+    job = await db.get(GenerationJob, job_id)
+    if not job or job.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Generation job not found")
+    return _generation_job_response(job)
+
+
+def _generation_job_response(job) -> GenerationJobResponse:
+    return GenerationJobResponse(
+        id=job.id,
+        project_id=job.project_id,
+        job_type=job.job_type,
+        status=job.status,
+        total_sections=job.total_sections,
+        completed_sections=job.completed_sections,
+        skipped_sections=job.skipped_sections,
+        current_section_uid=job.current_section_uid,
+        current_section_title=job.current_section_title,
+        error=job.error,
+        result_json=job.result_json,
+        trace_id=job.trace_id,
+        created_at=job.created_at.isoformat(),
+        updated_at=job.updated_at.isoformat(),
+        completed_at=job.completed_at.isoformat() if job.completed_at else None,
+    )
+
+
 # ---------------------------------------------------------------------------
 # POST /{project_id}/sections/{section_uid}/regenerate
 # ---------------------------------------------------------------------------
@@ -401,15 +571,17 @@ async def regenerate_section(
 
     section_title = section_uid
     section_requirements: list[str] = []
+    section_requirement_items: list[dict] = []
 
     if outline:
         def _find(secs: list) -> bool:
             for s in secs:
                 uid = s.get("uid") or s.get("section_uid", "")
                 if uid == section_uid:
-                    nonlocal section_title, section_requirements
+                    nonlocal section_title, section_requirements, section_requirement_items
                     section_title = s.get("title", section_uid)
                     section_requirements = s.get("requirements", [])
+                    section_requirement_items = s.get("requirement_checklist_items", [])
                     return True
                 if _find(s.get("subsections", s.get("children", []))):
                     return True
@@ -429,6 +601,7 @@ async def regenerate_section(
             "section_uid": section_uid,
             "section_title": section_title,
             "section_requirements": section_requirements,
+            "section_requirement_items": section_requirement_items,
         },
         db=db,
         trace_id=trace_id,

@@ -129,6 +129,16 @@ export interface LegislationRefreshResponse {
   errors: Array<Record<string, string>>;
 }
 
+export interface LegislationStatusResponse {
+  status: "ok" | "partial" | "missing" | string;
+  automatic_source: string;
+  configured_acts: number;
+  loaded_acts: number;
+  missing_acts: string[];
+  chunk_count: number;
+  latest_fetched_at?: string | null;
+}
+
 export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
@@ -152,6 +162,8 @@ export interface OrchestratorAgentResult {
   variant_1?: GenerationVariant;
   variant_2?: GenerationVariant;
   generation_ids?: Record<string, string>;
+  job_id?: string;
+  job_status?: string;
   verification?: VerificationResult;
 }
 
@@ -183,6 +195,8 @@ export interface TpOutlineSection {
   title: string;
   required?: boolean;
   requirements?: string[];
+  requirement_ids?: string[];
+  requirement_checklist_items?: RequirementChecklistItem[];
   subsections?: TpOutlineSection[];
   children?: TpOutlineSection[];
 }
@@ -223,6 +237,51 @@ export interface ScheduleInfo {
   version: number;
 }
 
+export interface RequirementChecklistItem {
+  id: string;
+  text: string;
+  category: string;
+  category_label: string;
+  topic: string;
+  importance: "mandatory" | "scored" | "optional" | "scope" | string;
+  suggested_section: string;
+  coverage_question: string;
+  source_chunk_id: string;
+  source_page?: number | null;
+  source_section_path?: string | null;
+  source_file?: string | null;
+  source_excerpt: string;
+  evidence_cues: string[];
+}
+
+export interface RequirementChecklist {
+  project_id: string;
+  total: number;
+  importance_counts: Record<string, number>;
+  category_counts: Record<string, number>;
+  items: RequirementChecklistItem[];
+}
+
+export interface RequirementCoverageItem {
+  id: string;
+  text?: string | null;
+  importance?: string | null;
+  status?: "covered" | "missing" | string;
+  matched_terms?: string[];
+  missing_terms?: string[];
+  required_match_count?: number;
+}
+
+export interface RequirementCoverage {
+  total?: number;
+  covered?: number;
+  missing?: number;
+  covered_ids?: string[];
+  missing_ids?: string[];
+  critical_missing_ids?: string[];
+  items?: RequirementCoverageItem[];
+}
+
 export interface Generation {
   id: string;
   section_uid: string;
@@ -230,7 +289,9 @@ export interface Generation {
   text: string;
   evidence_map_json?: Record<string, unknown> | null;
   used_sources_json?: Record<string, unknown> | null;
-  flags_json?: Record<string, unknown> | null;
+  flags_json?: (Record<string, unknown> & {
+    requirement_coverage?: RequirementCoverage;
+  }) | null;
   evidence_status: string;
   selected: boolean;
   created_at: string;
@@ -246,6 +307,24 @@ export interface SectionGenerations {
 export interface RegenerateResponse {
   generation_ids: Record<string, string>;
   trace_id: string;
+}
+
+export interface GenerationJob {
+  id: string;
+  project_id: string;
+  job_type: string;
+  status: "queued" | "processing" | "done" | "error" | string;
+  total_sections: number;
+  completed_sections: number;
+  skipped_sections: number;
+  current_section_uid?: string | null;
+  current_section_title?: string | null;
+  error?: string | null;
+  result_json?: Record<string, unknown> | null;
+  trace_id?: string | null;
+  created_at: string;
+  updated_at: string;
+  completed_at?: string | null;
 }
 
 export const api = {
@@ -268,6 +347,10 @@ export const api = {
       apiFetch<LegislationRefreshResponse>(
         `/api/v1/projects/${id}/legislation/refresh?force=${String(force)}`,
         { method: "POST" },
+      ),
+    legislationStatus: (id: string) =>
+      apiFetch<LegislationStatusResponse>(
+        `/api/v1/projects/${id}/legislation/status`,
       ),
     delete: (id: string) =>
       apiNoContent(`/api/v1/projects/${id}`, { method: "DELETE" }),
@@ -323,6 +406,10 @@ export const api = {
       apiNoContent(`/api/v1/agents/${projectId}/outline`, { method: "DELETE" }),
     getSchedule: (projectId: string) =>
       apiFetch<ScheduleInfo | null>(`/api/v1/agents/${projectId}/schedule`),
+    getRequirementChecklist: (projectId: string) =>
+      apiFetch<RequirementChecklist>(
+        `/api/v1/agents/${projectId}/requirements-checklist`,
+      ),
     lockSchedule: (projectId: string, scheduleId: string) =>
       apiFetch<{ status: string; schedule_id: string }>(
         `/api/v1/agents/${projectId}/schedule/lock?schedule_id=${encodeURIComponent(scheduleId)}`,
@@ -335,6 +422,19 @@ export const api = {
       ),
     listGenerations: (projectId: string) =>
       apiFetch<SectionGenerations[]>(`/api/v1/agents/${projectId}/generations`),
+    latestGenerationJob: (projectId: string) =>
+      apiFetch<GenerationJob | null>(
+        `/api/v1/agents/${projectId}/generation-jobs/latest`,
+      ),
+    getGenerationJob: (projectId: string, jobId: string) =>
+      apiFetch<GenerationJob>(
+        `/api/v1/agents/${projectId}/generation-jobs/${jobId}`,
+      ),
+    retryGenerationJob: (projectId: string) =>
+      apiFetch<GenerationJob>(
+        `/api/v1/agents/${projectId}/generation-jobs/retry`,
+        { method: "POST" },
+      ),
     selectGeneration: (projectId: string, generationId: string) =>
       apiFetch<{ status: string; generation_id: string }>(
         `/api/v1/agents/${projectId}/generations/${generationId}/select`,

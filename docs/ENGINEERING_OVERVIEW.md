@@ -104,6 +104,8 @@ TP AI is a monorepo for an AI-assisted workflow that prepares technical proposal
   - `apps/web/src/components/GenerationsPanel.tsx`
   - `apps/web/src/components/OutlinePanel.test.tsx`
   - `apps/web/src/components/OutlinePanel.tsx`
+  - `apps/web/src/components/RequirementChecklistPanel.test.tsx`
+  - `apps/web/src/components/RequirementChecklistPanel.tsx`
   - `apps/web/src/components/SchedulePanel.test.tsx`
   - `apps/web/src/components/SchedulePanel.tsx`
   - `apps/web/src/components/ToastProvider.tsx`
@@ -114,10 +116,14 @@ TP AI is a monorepo for an AI-assisted workflow that prepares technical proposal
   - `apps/web/src/test/setup.ts`
 - `services/api/app/agents/`
   - `services/api/app/agents/__init__.py`
+  - `services/api/app/agents/context.py`
   - `services/api/app/agents/drafting.py`
   - `services/api/app/agents/examples.py`
+  - `services/api/app/agents/generation_jobs.py`
   - `services/api/app/agents/legislation.py`
   - `services/api/app/agents/orchestrator.py`
+  - `services/api/app/agents/requirement_coverage.py`
+  - `services/api/app/agents/requirements.py`
   - `services/api/app/agents/schedule.py`
   - `services/api/app/agents/tender_struct.py`
   - `services/api/app/agents/verifier.py`
@@ -158,17 +164,23 @@ TP AI is a monorepo for an AI-assisted workflow that prepares technical proposal
 
 ## Test Inventory
 
-- Total backend tests discovered: `69`
-- `test_agents.py`: `21`
-- `test_export.py`: `3`
+- Total backend tests discovered: `101`
+- `test_agents.py`: `26`
+- `test_export.py`: `4`
 - `test_files.py`: `10`
+- `test_generation_jobs.py`: `4`
+- `test_grounding_context.py`: `3`
 - `test_health.py`: `3`
 - `test_legislation.py`: `1`
-- `test_lex_bg.py`: `3`
-- `test_orchestrator.py`: `1`
+- `test_lex_bg.py`: `4`
+- `test_llm_gateway.py`: `3`
+- `test_orchestrator.py`: `3`
 - `test_parsers.py`: `4`
-- `test_projects.py`: `14`
-- `test_tender_struct.py`: `8`
+- `test_projects.py`: `15`
+- `test_requirement_checklist.py`: `5`
+- `test_requirement_coverage.py`: `2`
+- `test_tender_struct.py`: `12`
+- `test_verifier.py`: `1`
 - `test_worker.py`: `1`
 
 ## Automation

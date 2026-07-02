@@ -49,6 +49,45 @@ async def test_export_docx_stale_returns_409(client, mock_db):
 
 
 @pytest.mark.asyncio
+async def test_export_docx_missing_requirement_coverage_returns_409(client, mock_db):
+    project = _make_project()
+    mock_db.get = AsyncMock(return_value=project)
+
+    clean_stale_result = MagicMock()
+    clean_stale_result.scalars.return_value.all.return_value = []
+
+    generation = MagicMock()
+    generation.id = "gen-1"
+    generation.section_uid = "sec-1"
+    generation.flags_json = {
+        "requirement_coverage": {
+            "missing_ids": ["req-1"],
+            "items": [
+                {
+                    "id": "req-1",
+                    "text": "Следва да се представи подробен линеен график.",
+                    "importance": "mandatory",
+                    "status": "missing",
+                }
+            ],
+        }
+    }
+    coverage_result = MagicMock()
+    coverage_result.scalars.return_value.all.return_value = [generation]
+    mock_db.execute = AsyncMock(side_effect=[clean_stale_result, coverage_result])
+
+    resp = await client.get(f"/api/v1/export/{project.id}/docx")
+
+    assert resp.status_code == 409
+    detail = resp.json()["detail"]
+    assert detail["missing_requirement_count"] == 1
+    assert detail["missing_requirement_sections"][0]["section_uid"] == "sec-1"
+    assert detail["missing_requirement_sections"][0]["missing_requirement_ids"] == [
+        "req-1"
+    ]
+
+
+@pytest.mark.asyncio
 async def test_export_docx_ok(client, mock_db):
     """200 с DOCX bytes при успешен export."""
     project = _make_project(name="Test Project")

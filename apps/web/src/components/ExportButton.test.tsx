@@ -66,13 +66,97 @@ describe("ExportButton", () => {
   });
 
   it("shows stale warning for stale export conflicts", async () => {
-    exportMock.mockRejectedValue(new ApiError("stale evidence", 409));
+    const openGenerationsMock = vi.fn();
+    exportMock.mockRejectedValue(
+      new ApiError("Pre-export check failed", 409, {
+        detail: {
+          stale_sections: ["s1", "s2"],
+        },
+      }),
+    );
 
-    render(<ExportButton projectId="project-1" projectName="Project Alpha" />);
+    render(
+      <ExportButton
+        projectId="project-1"
+        projectName="Project Alpha"
+        onOpenGenerations={openGenerationsMock}
+      />,
+    );
 
-    await userEvent.click(screen.getByRole("button"));
+    await userEvent.click(screen.getByRole("button", { name: "Експорт .docx" }));
 
-    expect(await screen.findByText(/актуализирани/i)).toBeInTheDocument();
+    expect(await screen.findByTestId("export-stale-warning")).toHaveTextContent(
+      "2 секции",
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Отвори Генерации" }));
+
+    expect(openGenerationsMock).toHaveBeenCalled();
+  });
+
+  it("shows requirement coverage warning for missing requirement conflicts", async () => {
+    const openGenerationsMock = vi.fn();
+    exportMock.mockRejectedValue(
+      new ApiError("Pre-export check failed", 409, {
+        detail: {
+          missing_requirement_count: 2,
+          missing_requirement_sections: [
+            { section_uid: "s1", missing_count: 2 },
+          ],
+        },
+      }),
+    );
+
+    render(
+      <ExportButton
+        projectId="project-1"
+        projectName="Project Alpha"
+        onOpenGenerations={openGenerationsMock}
+      />,
+    );
+
+    await userEvent.click(screen.getByTestId("export-docx-button"));
+
+    expect(await screen.findByTestId("export-requirement-warning"))
+      .toHaveTextContent("2");
+
+    await userEvent.click(screen.getByRole("button", { name: "Отвори Генерации" }));
+
+    expect(openGenerationsMock).toHaveBeenCalled();
+  });
+
+  it("shows requirement warning for missing requirement coverage", async () => {
+    const openGenerationsMock = vi.fn();
+    exportMock.mockRejectedValue(
+      new ApiError("Pre-export check failed", 409, {
+        detail: {
+          missing_requirement_count: 2,
+          missing_requirement_sections: [
+            {
+              section_uid: "s1",
+              missing_requirement_ids: ["req-1", "req-2"],
+            },
+          ],
+        },
+      }),
+    );
+
+    render(
+      <ExportButton
+        projectId="project-1"
+        projectName="Project Alpha"
+        onOpenGenerations={openGenerationsMock}
+      />,
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Експорт .docx" }));
+
+    expect(await screen.findByTestId("export-requirement-warning"))
+      .toHaveTextContent("2 изисквания");
+
+    await userEvent.click(screen.getByRole("button", { name: "Отвори Генерации" }));
+
+    expect(openGenerationsMock).toHaveBeenCalled();
   });
 
   it("shows generic export errors", async () => {
@@ -80,7 +164,7 @@ describe("ExportButton", () => {
 
     render(<ExportButton projectId="project-1" projectName="Project Alpha" />);
 
-    await userEvent.click(screen.getByRole("button"));
+    await userEvent.click(screen.getByRole("button", { name: "Експорт .docx" }));
 
     expect(await screen.findByText("Export failed")).toBeInTheDocument();
   });

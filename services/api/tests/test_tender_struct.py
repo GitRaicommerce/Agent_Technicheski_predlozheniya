@@ -1,7 +1,16 @@
 from types import SimpleNamespace
 
+from app.agents.requirements import (
+    SPECIFIC_REQUIREMENTS_CATEGORY,
+    SPECIFIC_REQUIREMENTS_LABEL,
+    SUGGESTED_SECTIONS,
+    RequirementItem,
+)
 from app.agents.tender_struct import (
+    _attach_requirement_checklist_to_outline_sections,
     _build_domain_outline,
+    _build_deterministic_outline,
+    _build_outline_coverage_summary,
     _ensure_mandatory_sections,
     _extract_explicit_numbered_outline,
     _extract_mandatory_sections,
@@ -25,6 +34,32 @@ def make_chunk(
         page=page,
         section_path=section_path,
         chunk_type=chunk_type,
+    )
+
+
+def make_requirement(
+    requirement_id: str,
+    text: str,
+    *,
+    category: str = "schedule",
+    category_label: str = "График и срокове",
+    suggested_section: str | None = None,
+):
+    return RequirementItem(
+        id=requirement_id,
+        text=text,
+        category=category,
+        category_label=category_label,
+        topic=text,
+        importance="mandatory",
+        suggested_section=suggested_section or SUGGESTED_SECTIONS[category],
+        coverage_question=f"Покрито ли е: {text}?",
+        source_chunk_id=f"chunk-{requirement_id}",
+        source_page=1,
+        source_section_path="Изисквания към техническото предложение",
+        source_file="docs.pdf",
+        source_excerpt=text,
+        evidence_cues=[],
     )
 
 
@@ -117,6 +152,110 @@ def test_ensure_mandatory_sections_inserts_missing_explicit_titles():
     assert result[1]["title"] == "Организация на изпълнението"
 
 
+def test_build_deterministic_outline_uses_extracted_sections_when_llm_omits_outline():
+    explicit_sections = [
+        {
+            "uid": f"section-{index}",
+            "title": title,
+            "required": True,
+            "requirements": [f"РР·РёСЃРєРІР°РЅРµ Р·Р° {title}"],
+            "source_refs": [f"chunk-{index}"],
+            "subsections": [],
+        }
+        for index, title in enumerate(
+            [
+                "РљРѕРЅС†РµРїС†РёСЏ Рё РїРѕРґС…РѕРґ",
+                "Р Р°Р·СЂР°Р±РѕС‚РІР°РЅРµ РЅР° РёРЅРІРµСЃС‚РёС†РёРѕРЅРµРЅ РїСЂРѕРµРєС‚",
+                "Р›РёРЅРµРµРЅ РіСЂР°С„РёРє",
+                "РњРµСЂРєРё Р·Р° РѕСЃРёРіСѓСЂСЏРІР°РЅРµ РЅР° РєР°С‡РµСЃС‚РІРѕС‚Рѕ",
+                "РћСЂРіР°РЅРёР·Р°С†РёСЏ РЅР° РєРѕРјСѓРЅРёРєР°С†РёСЏС‚Р°",
+            ]
+        )
+    ]
+
+    outline = _build_deterministic_outline(
+        explicit_numbered_sections=explicit_sections,
+        domain_outline_sections=[],
+        mandatory_sections=[],
+    )
+
+    assert outline is not None
+    assert [section["title"] for section in outline["sections"]] == [
+        section["title"] for section in explicit_sections
+    ]
+
+
+def test_requirement_checklist_is_attached_to_matching_outline_sections():
+    sections = [
+        {
+            "uid": "schedule-section",
+            "title": SUGGESTED_SECTIONS["schedule"],
+            "required": True,
+            "requirements": [],
+            "source_refs": [],
+            "subsections": [],
+        }
+    ]
+    schedule_requirement = make_requirement(
+        "req-schedule",
+        "Следва да се представи подробен линеен график за изпълнение.",
+    )
+    specific_requirement = make_requirement(
+        "req-specific",
+        "Следва да се опише специален ред за достъп до помещенията.",
+        category=SPECIFIC_REQUIREMENTS_CATEGORY,
+        category_label=SPECIFIC_REQUIREMENTS_LABEL,
+        suggested_section=SUGGESTED_SECTIONS[SPECIFIC_REQUIREMENTS_CATEGORY],
+    )
+
+    enriched = _attach_requirement_checklist_to_outline_sections(
+        sections,
+        [schedule_requirement, specific_requirement],
+    )
+    summary = _build_outline_coverage_summary(
+        enriched,
+        [schedule_requirement, specific_requirement],
+    )
+
+    schedule_section = next(section for section in enriched if section["uid"] == "schedule-section")
+    specific_section = next(
+        section
+        for section in enriched
+        if section["title"] == SUGGESTED_SECTIONS[SPECIFIC_REQUIREMENTS_CATEGORY]
+    )
+
+    assert schedule_section["requirement_ids"] == ["req-schedule"]
+    assert schedule_section["requirement_checklist_items"][0]["id"] == "req-schedule"
+    assert specific_section["requirement_ids"] == ["req-specific"]
+    assert specific_section["requirement_checklist_items"][0]["id"] == "req-specific"
+    assert summary["total_requirements"] == 2
+    assert summary["covered_requirements"] == 2
+    assert summary["missing_requirement_ids"] == []
+
+
+def test_build_deterministic_outline_can_start_from_requirement_checklist():
+    requirement = make_requirement(
+        "req-specific-only",
+        "Следва да се опише специален ред за достъп до помещенията.",
+        category=SPECIFIC_REQUIREMENTS_CATEGORY,
+        category_label=SPECIFIC_REQUIREMENTS_LABEL,
+        suggested_section=SUGGESTED_SECTIONS[SPECIFIC_REQUIREMENTS_CATEGORY],
+    )
+
+    outline = _build_deterministic_outline(
+        explicit_numbered_sections=[],
+        domain_outline_sections=[],
+        mandatory_sections=[],
+        requirement_checklist=[requirement],
+    )
+
+    assert outline is not None
+    assert outline["sections"][0]["title"] == SUGGESTED_SECTIONS[SPECIFIC_REQUIREMENTS_CATEGORY]
+    assert outline["sections"][0]["requirement_ids"] == ["req-specific-only"]
+    assert outline["sections"][0]["requirement_checklist_items"][0]["id"] == "req-specific-only"
+    assert outline["coverage_summary"]["covered_requirements"] == 1
+
+
 def test_extract_mandatory_sections_ignores_numbered_lines_without_tp_context():
     chunks = [
         make_chunk(
@@ -207,3 +346,52 @@ def test_build_domain_outline_prefers_tp_domain_sections_over_document_noise():
         "Мерки за осигуряване на качеството",
         "Организация на дейностите по отстраняване на гаранционни дефекти",
     ]
+
+
+def test_build_domain_outline_adds_detailed_work_program_subtopics_when_present():
+    chunks = [
+        make_chunk("c1", "1.Концепция и подход."),
+        make_chunk("c2", "2.Разработване на инвестиционен проект."),
+        make_chunk("c3", "3. Осъществяване на авторски надзор по време на изпълнение на СМР"),
+        make_chunk("c4", "4.2. Организация на ресурсите"),
+        make_chunk("c5", "Заинтересовани страни и участници в изпълнението на поръчката."),
+        make_chunk("c6", "Вътрешнофирмена комуникация, координация, контрол и субординация."),
+        make_chunk("c7", "Комуникация с Възложителя, строителния надзор и компетентните институции."),
+        make_chunk("c8", "Пожарна безопасност и здравословни и безопасни условия при изпълнение."),
+        make_chunk("c9", "Линеен график за изпълнение."),
+        make_chunk("c10", "5. Управление на риска."),
+        make_chunk("c11", "Идентификация на риска, конкретни рискове и мерки за ограничаване на риска."),
+        make_chunk("c12", "Мониторинг на риска, отговорности при риск и ескалация."),
+        make_chunk("c13", "6. Опазване на околната среда."),
+        make_chunk("c14", "Мерки срещу запрашаване, прах и замърсяване на въздуха."),
+        make_chunk("c15", "Опазване на почвите, водите и прилежащи терени."),
+        make_chunk("c16", "Управление на строителни отпадъци и ПУСО."),
+        make_chunk("c17", "7. Мерки за осигуряване на качеството."),
+        make_chunk("c18", "Входящ контрол, текущ контрол и окончателен контрол."),
+        make_chunk("c19", "Документиране, протоколи и приемане на изпълнените работи."),
+        make_chunk("c20", "8. Организация на дейностите по отстраняване на гаранционни дефекти."),
+    ]
+
+    outline = _build_domain_outline(chunks)
+
+    construction = next(section for section in outline if section["title"].startswith("Организация при"))
+    risk = next(section for section in outline if section["title"] == "Управление на риска")
+    environment = next(section for section in outline if section["title"].startswith("Ограничаване"))
+    quality = next(section for section in outline if section["title"] == "Мерки за осигуряване на качеството")
+
+    construction_titles = [section["title"] for section in construction["subsections"]]
+    risk_titles = [section["title"] for section in risk["subsections"]]
+    environment_titles = [section["title"] for section in environment["subsections"]]
+    quality_titles = [section["title"] for section in quality["subsections"]]
+
+    assert "Заинтересовани страни и участници в изпълнението" in construction_titles
+    assert "Вътрешнофирмена комуникация, координация, контрол и субординация" in construction_titles
+    assert "Комуникация с Възложителя, строителния надзор и институциите" in construction_titles
+    assert "Пожарна безопасност и безопасност при изпълнение на СМР" in construction_titles
+    assert "Идентификация, оценка и мерки за конкретните рискове" in risk_titles
+    assert "Мониторинг, отговорности и ескалация при риск" in risk_titles
+    assert "Мерки срещу запрашаване и замърсяване на въздуха" in environment_titles
+    assert "Опазване на почви, води и прилежащи терени" in environment_titles
+    assert "Управление на строителните отпадъци" in environment_titles
+    assert "Входящ, текущ и окончателен контрол на качеството" in quality_titles
+    assert "Документиране, проверки и приемане на изпълнените работи" in quality_titles

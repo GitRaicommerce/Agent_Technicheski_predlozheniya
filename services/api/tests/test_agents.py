@@ -145,6 +145,50 @@ async def test_get_schedule_found(client, mock_db):
 
 
 # ---------------------------------------------------------------------------
+# GET /api/v1/agents/{project_id}/requirements-checklist
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_get_requirements_checklist_project_not_found(client, mock_db):
+    mock_db.get = AsyncMock(return_value=None)
+
+    resp = await client.get(f"/api/v1/agents/{uuid.uuid4()}/requirements-checklist")
+
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_get_requirements_checklist_extracts_items(client, mock_db):
+    project = _make_project()
+    mock_db.get = AsyncMock(return_value=project)
+    chunk = MagicMock()
+    chunk.id = str(uuid.uuid4())
+    chunk.text = (
+        "Техническото предложение следва да съдържа:\n"
+        "1. линеен график с последователност на дейностите;\n"
+        "2. мерки за контрол на качеството."
+    )
+    chunk.page = 25
+    chunk.section_path = "Методика"
+    result = MagicMock()
+    result.all = MagicMock(return_value=[(chunk, "Документация.pdf")])
+    mock_db.execute = AsyncMock(return_value=result)
+
+    resp = await client.get(f"/api/v1/agents/{project.id}/requirements-checklist")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["project_id"] == project.id
+    assert data["total"] == 2
+    assert data["importance_counts"]["mandatory"] == 2
+    assert data["category_counts"]["График и срокове"] == 1
+    assert data["category_counts"]["Качество и контрол"] == 1
+    assert data["items"][0]["source_file"] == "Документация.pdf"
+    assert data["items"][0]["source_page"] == 25
+
+
+# ---------------------------------------------------------------------------
 # GET /api/v1/agents/{project_id}/generations
 # ---------------------------------------------------------------------------
 
@@ -269,6 +313,102 @@ async def test_get_generations_filters_out_stale_sections_not_in_latest_outline(
     assert len(data) == 1
     assert data[0]["section_uid"] == current_sec_uid
     assert data[0]["section_title"] == "Концепция и подход"
+
+
+# ---------------------------------------------------------------------------
+# GET /api/v1/agents/{project_id}/generation-jobs/latest
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_get_latest_generation_job(client, mock_db):
+    """Returns the latest background generation job."""
+    from datetime import datetime, timezone
+    from app.core.models import GenerationJob
+
+    pid = str(uuid.uuid4())
+    now = datetime.now(timezone.utc)
+    job = GenerationJob(
+        id=str(uuid.uuid4()),
+        project_id=pid,
+        job_type="drafting_all",
+        status="processing",
+        total_sections=5,
+        completed_sections=2,
+        skipped_sections=1,
+        current_section_uid="s3",
+        current_section_title="Методология",
+        trace_id=str(uuid.uuid4()),
+        created_at=now,
+        updated_at=now,
+    )
+
+    result_mock = MagicMock()
+    result_mock.scalar_one_or_none = MagicMock(return_value=job)
+    mock_db.execute = AsyncMock(return_value=result_mock)
+
+    resp = await client.get(f"/api/v1/agents/{pid}/generation-jobs/latest")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["id"] == job.id
+    assert data["status"] == "processing"
+    assert data["completed_sections"] == 2
+    assert data["skipped_sections"] == 1
+
+
+# ---------------------------------------------------------------------------
+# POST /api/v1/agents/{project_id}/generation-jobs/retry
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_retry_generation_job_not_found(client, mock_db):
+    """404 when the project does not exist."""
+    mock_db.get = AsyncMock(return_value=None)
+
+    resp = await client.post(
+        f"/api/v1/agents/{uuid.uuid4()}/generation-jobs/retry"
+    )
+
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_retry_generation_job_creates_background_job(client, mock_db):
+    """Starts a new all-sections job so the worker can continue missing sections."""
+    from datetime import datetime, timezone
+    from app.core.models import GenerationJob
+
+    project = _make_project()
+    now = datetime.now(timezone.utc)
+    job = GenerationJob(
+        id=str(uuid.uuid4()),
+        project_id=project.id,
+        job_type="drafting_all",
+        status="queued",
+        total_sections=0,
+        completed_sections=0,
+        skipped_sections=0,
+        trace_id=str(uuid.uuid4()),
+        created_at=now,
+        updated_at=now,
+    )
+    mock_db.get = AsyncMock(return_value=project)
+
+    with patch(
+        "app.agents.generation_jobs.create_drafting_all_job",
+        new=AsyncMock(return_value=job),
+    ) as create_job:
+        resp = await client.post(
+            f"/api/v1/agents/{project.id}/generation-jobs/retry"
+        )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["id"] == job.id
+    assert data["status"] == "queued"
+    create_job.assert_awaited_once_with(project=project, db=mock_db)
 
 
 # ---------------------------------------------------------------------------

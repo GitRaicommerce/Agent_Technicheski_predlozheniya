@@ -33,6 +33,12 @@ const MODULE_LABELS: Record<
   },
 };
 
+MODULE_LABELS.legislation = {
+  ...MODULE_LABELS.legislation,
+  label: "Нормативна база",
+  hint: "Lex.bg се проверява автоматично. Качвайте само специфични указания, стандарти или актове извън стандартната база.",
+};
+
 interface UploadedFile {
   id: string;
   filename: string;

@@ -34,20 +34,40 @@
 - Expanded browser smoke coverage with deterministic seeded checks for outline visibility, generations panel opening, export readiness, and stale export conflicts.
 - Added deterministic browser smoke coverage for chat-driven opening of outline and generations panels without relying on a live LLM response.
 - Stabilized local startup by moving the Dockerized web dev server away from Turbopack on Windows mounts, adding a web healthcheck, and adding a startup script that waits for readiness before opening the app.
+- Moved all-sections proposal generation to a persisted background job with progress polling in the Generations panel.
+- Expanded deterministic browser smoke coverage for background generation progress, section regeneration reloads, and chat-driven variant pinning.
+- Added project grounding context for drafting and verification so generated sections use tender scope excerpts and schedule tasks, not only example snippets.
+- Made all-section background generation resilient to transient LLM connection failures by preserving successful sections and recording failed sections for retry.
+- Added an explicit retry/continue action for failed all-section generation jobs so users can resume after network interruptions.
+- Made drafting tolerant of temporary Lex.bg/legislation module failures by continuing generation without normative citations when the external source is unavailable.
+- Reframed the legislation module as an automatic Lex.bg-backed normative base with visible status and manual refresh, while keeping uploads only for project-specific supplemental acts.
+- Improved stale DOCX export handling with a visible regeneration path, section counts, and Playwright coverage for the real UI warning flow.
+- Hardened the create/edit/delete browser smoke test against local Next.js dev navigation hangs by waiting for the actual delete response before verifying the project list.
+- Added a local proposal gap analysis script to compare a winning/reference technical proposal against the app-generated proposal by section coverage, volume, missing key terms, and tender-source snippets.
+- Ran the first real reference comparison for the Pernik ODL PDF live-ingest project against a submitted winning technical proposal; the generated selected proposal was only about 14% of the reference volume and missed important work-program topics such as stakeholders, construction organization, communication/control/subordination, risk, fire safety, environmental measures, waste, dust, soil protection, and quality controls.
+- Updated all-section background generation so sections with only stale evidence are regenerated instead of being skipped as already complete.
+- Increased drafting depth expectations and default project grounding context so generation receives more tender excerpts and schedule tasks per section.
+- Expanded deterministic tender outline extraction to preserve detailed work-program subtopics when present in the tender documentation: stakeholders, internal communication/coordination/control/subordination, communication with the contracting authority/supervision/institutions, fire safety, concrete risk controls, environmental dust/soil/waste measures, and quality control/documentation.
+- Added a universal requirement-checklist extractor that converts tender documentation chunks into atomic requirements with category, importance, source reference, suggested proposal section, and coverage question; the checklist is now included in tender outline extraction prompts and can be rendered as Markdown for diagnostics.
+- Exposed the requirement checklist in the application through a backend API endpoint and a project sidebar panel with summary counts, category/importance filters, source references, and local check-off state.
+- Added a universal fallback for tender-specific requirements that do not fit predefined categories, and connected requirement checklist items to outline sections through `requirement_ids`, missing-section creation, and outline coverage summaries.
+- Added requirement-aware drafting and verification: outline sections now preserve structured checklist items, drafting prompts include a per-section checklist, generated variants store deterministic requirement coverage metadata, and verifier marks missing checklist items as review gaps.
+- Surfaced generated-text requirement coverage in the Generations panel and added a DOCX pre-export check that blocks export when selected sections still miss tender checklist requirements.
 
 ## Active Goals
 
-1. Keep documentation as a reliable source of truth tied to the real repository state.
-2. Reduce drift between code, documentation, and workflows.
-3. Continue stabilizing the codebase after the documentation foundation is in place.
-4. Add real regression protection so fixing one area does not silently break another.
+1. Turn the application into a reference-quality technical proposal generator that produces detailed, tender-specific Bulgarian proposals rather than short generic sections.
+2. Use the winning Pernik technical proposal comparison as the first calibration baseline for outline granularity, grounding coverage, drafting depth, and export readiness.
+3. Keep documentation as a reliable source of truth tied to the real repository state.
+4. Add regression protection around generation quality so improvements do not silently regress.
 
 ## Next Recommended Steps
 
-1. Expand generated documentation with more precise backend endpoint and workflow coverage.
-2. Extend browser smoke coverage further around chat-to-generation flows, regeneration behavior, and selection/pinning actions now that deterministic orchestrator stubbing is in place.
-3. Build broader regression coverage around the frontend so changes in one area are checked against breakage in other core flows.
-4. Improve engineering docs for architecture, runbooks, and testing strategy.
+1. Improve logical sentence reconstruction in requirement extraction so PDF line breaks and table-cell fragments do not produce truncated checklist items.
+2. Regenerate the stale Pernik sections after the current fixes and re-run the proposal gap analysis against the winning technical proposal.
+3. Expand generated documentation with more precise backend endpoint and workflow coverage.
+4. Build broader regression coverage around common tender scenarios, including explicit outline, no outline, specific requirements, quality/risk/environment-heavy tenders, and noisy PDF extraction.
+5. Improve logical sentence reconstruction in requirement extraction where real PDF line breaks and table-cell fragments still create truncated checklist items.
 
 ## Notes
 

@@ -166,6 +166,19 @@ async def run_orchestrator(
         log.info("orchestrator_dispatch", agent=agent_name, trace_id=trace_id)
 
         if agent_name == "drafting_all":
+            from app.agents.generation_jobs import create_drafting_all_job
+
+            job = await create_drafting_all_job(project=project, db=db)
+            result["agent_result"] = {
+                "_agent": "drafting_all",
+                "job_id": job.id,
+                "job_status": job.status,
+            }
+            result["assistant_message"] = (
+                "Стартирах генериране на всички раздели във фонов режим. "
+                "Следете напредъка в секция **Генерации**."
+            )
+        elif False and agent_name == "drafting_all":
             # Generate ALL ungeneated sections in sequence
             sub_result = await _run_drafting_all(
                 project=project,
@@ -215,6 +228,42 @@ async def run_orchestrator(
     result.setdefault("agent_called", None)
 
     return result
+
+
+async def _safe_run_legislation(
+    *,
+    project_id: str,
+    query: str,
+    db: "AsyncSession",
+    trace_id: str,
+    section_title: str,
+) -> dict[str, Any]:
+    from app.agents.legislation import run_legislation
+
+    try:
+        return await run_legislation(
+            project_id=project_id,
+            query=query,
+            db=db,
+            trace_id=trace_id,
+        )
+    except Exception as exc:
+        await db.rollback()
+        log.warning(
+            "drafting_legislation_failed",
+            project_id=project_id,
+            section=section_title,
+            error=str(exc),
+            trace_id=trace_id,
+        )
+        return {
+            "citations": [],
+            "total_found": 0,
+            "warning": (
+                "Legislation module failed; drafting continued without "
+                "Lex.bg citations."
+            ),
+        }
 
 
 async def _run_drafting_all(
@@ -280,6 +329,7 @@ async def _run_drafting_all(
 
         title = section.get("title", "")
         requirements = section.get("requirements", [])
+        requirement_items = section.get("requirement_checklist_items", [])
 
         log.info("drafting_all_section", project_id=project.id, section=title, trace_id=trace_id)
 
@@ -290,15 +340,27 @@ async def _run_drafting_all(
         )
         evidence_snippets = examples_result.get("selected_snippets", [])
 
-        # Fetch legislation
-        from app.agents.legislation import run_legislation
-        lex_result = await run_legislation(
-            project_id=project.id, query=title, db=db, trace_id=trace_id
+        # Fetch legislation. Lex.bg is an external dependency, so generation
+        # should continue with project evidence when it is temporarily down.
+        lex_result = await _safe_run_legislation(
+            project_id=project.id,
+            query=title,
+            db=db,
+            trace_id=trace_id,
+            section_title=title,
         )
         lex_citations = lex_result.get("citations", [])
 
         # Generate text
         from app.agents.drafting import run_drafting
+        from app.agents.context import build_project_grounding_context
+
+        project_grounding_context = await build_project_grounding_context(
+            project_id=project.id,
+            section_title=title,
+            section_requirements=requirements,
+            db=db,
+        )
         drafting_result = await run_drafting(
             project_id=project.id,
             section_uid=uid,
@@ -309,6 +371,8 @@ async def _run_drafting_all(
             lex_citations=lex_citations,
             db=db,
             trace_id=trace_id,
+            project_grounding_context=project_grounding_context,
+            section_requirement_items=requirement_items,
         )
         results.append({"section_uid": uid, "title": title, "generation_ids": drafting_result.get("generation_ids")})
         generated_count += 1
@@ -337,6 +401,7 @@ async def _run_drafting_pipeline(
     section_title = params.get("section_title", "")
     section_uid = params.get("section_uid", str(uuid.uuid4()))
     section_requirements = params.get("section_requirements", [])
+    section_requirement_items = params.get("section_requirement_items", [])
 
     log.info(
         "drafting_pipeline_start",
@@ -376,19 +441,30 @@ async def _run_drafting_pipeline(
     pipeline_trace["schedule"] = {"status": schedule_result.get("status", "ok")}
 
     # 3. Gather legislation citations
-    from app.agents.legislation import run_legislation
-
-    lex_result = await run_legislation(
+    lex_result = await _safe_run_legislation(
         project_id=project_id,
         query=section_title,
         db=db,
         trace_id=trace_id,
+        section_title=section_title,
     )
     lex_citations = lex_result.get("citations", [])
-    pipeline_trace["legislation"] = {"total_found": lex_result.get("total_found", 0)}
+    pipeline_trace["legislation"] = {
+        "total_found": lex_result.get("total_found", 0),
+        "status": "warning" if lex_result.get("warning") else "ok",
+        "warning": lex_result.get("warning"),
+    }
 
     # 4. Run drafting agent with gathered evidence
     from app.agents.drafting import run_drafting
+    from app.agents.context import build_project_grounding_context
+
+    project_grounding_context = await build_project_grounding_context(
+        project_id=project_id,
+        section_title=section_title,
+        section_requirements=section_requirements,
+        db=db,
+    )
 
     drafting_result = await run_drafting(
         project_id=project_id,
@@ -400,6 +476,8 @@ async def _run_drafting_pipeline(
         lex_citations=lex_citations,
         db=db,
         trace_id=trace_id,
+        project_grounding_context=project_grounding_context,
+        section_requirement_items=section_requirement_items,
     )
     pipeline_trace["drafting"] = {
         "status": "ok" if "error" not in drafting_result else "error"
@@ -479,17 +557,30 @@ async def _dispatch_agent(
 
         elif agent_name == "drafting":
             from app.agents.drafting import run_drafting
+            from app.agents.context import build_project_grounding_context
+
+            section_title = params.get("section_title", "")
+            section_requirements = params.get("section_requirements", [])
+            section_requirement_items = params.get("section_requirement_items", [])
+            project_grounding_context = await build_project_grounding_context(
+                project_id=project_id,
+                section_title=section_title,
+                section_requirements=section_requirements,
+                db=db,
+            )
 
             return await run_drafting(
                 project_id=project_id,
                 section_uid=params.get("section_uid", str(uuid.uuid4())),
-                section_title=params.get("section_title", ""),
-                section_requirements=params.get("section_requirements", []),
+                section_title=section_title,
+                section_requirements=section_requirements,
                 evidence_snippets=params.get("evidence_snippets", []),
                 schedule_summary=params.get("schedule_summary"),
                 lex_citations=params.get("lex_citations", []),
                 db=db,
                 trace_id=trace_id,
+                project_grounding_context=project_grounding_context,
+                section_requirement_items=section_requirement_items,
             )
 
         elif agent_name == "verifier":

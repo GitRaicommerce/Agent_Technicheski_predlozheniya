@@ -12,9 +12,10 @@ from typing import TYPE_CHECKING, Any
 import httpx
 import structlog
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 from app.core.config import settings
-from app.core.models import LexChunk, LexSnapshot
+from app.core.models import LexChunk, LexSnapshot, Project
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -118,6 +119,11 @@ async def ensure_project_legislation_current(
     refreshed: list[dict[str, str]] = []
 
     for act in acts:
+        if not await _project_exists(db, project_id):
+            return _deleted_project_result(
+                checked, changed, unchanged, skipped, refreshed, errors
+            )
+
         latest = await _latest_snapshot(db, project_id, act.act_name)
         if latest and not force and _is_snapshot_fresh(latest.fetched_at):
             skipped += 1
@@ -143,7 +149,25 @@ async def ensure_project_legislation_current(
             unchanged += 1
             continue
 
-        await _replace_project_act_snapshot(db, project_id, parsed)
+        if not await _project_exists(db, project_id):
+            return _deleted_project_result(
+                checked, changed, unchanged, skipped, refreshed, errors
+            )
+
+        try:
+            await _replace_project_act_snapshot(db, project_id, parsed)
+        except IntegrityError as exc:
+            await db.rollback()
+            log.info(
+                "lex_bg_refresh_project_deleted",
+                project_id=project_id,
+                act_name=parsed.act_name,
+                error=str(exc),
+                trace_id=trace_id,
+            )
+            return _deleted_project_result(
+                checked, changed, unchanged, skipped, refreshed, errors
+            )
         changed += 1
         refreshed.append(
             {
@@ -156,6 +180,29 @@ async def ensure_project_legislation_current(
     await db.flush()
     return {
         "status": "ok" if not errors else "warning",
+        "checked": checked,
+        "changed": changed,
+        "unchanged": unchanged,
+        "skipped_fresh": skipped,
+        "refreshed": refreshed,
+        "errors": errors,
+    }
+
+
+async def _project_exists(db: "AsyncSession", project_id: str) -> bool:
+    return await db.get(Project, project_id) is not None
+
+
+def _deleted_project_result(
+    checked: int,
+    changed: int,
+    unchanged: int,
+    skipped: int,
+    refreshed: list[dict[str, str]],
+    errors: list[dict[str, str]],
+) -> dict[str, Any]:
+    return {
+        "status": "skipped",
         "checked": checked,
         "changed": changed,
         "unchanged": unchanged,

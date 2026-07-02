@@ -47,7 +47,13 @@ describe("OutlinePanel", () => {
     getOutlineMock.mockResolvedValue({
       id: "outline-1",
       outline_json: {
-        sections: [{ uid: "sec-1", title: "Section 1" }],
+        sections: [
+          {
+            uid: "sec-1",
+            title: "Section 1",
+            requirement_ids: ["req-1", "req-2"],
+          },
+        ],
       },
       status_locked: false,
       version: 1,
@@ -57,6 +63,9 @@ describe("OutlinePanel", () => {
     render(<OutlinePanel projectId="project-1" />);
 
     expect(await screen.findByText("Section 1")).toBeInTheDocument();
+    expect(
+      await screen.findByTestId("outline-section-sec-1-requirement-count"),
+    ).toHaveTextContent("2");
     await userEvent.click(screen.getByRole("button", { name: /Одобри/i }));
 
     await waitFor(() => {
