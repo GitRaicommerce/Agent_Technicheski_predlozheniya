@@ -212,13 +212,24 @@ Never silently swallow parser failures when they affect document understanding. 
 
 Never replace a working deterministic path with an LLM-only path for parsing, extraction, or validation.
 
+## Autonomous Execution
+
+Agents should work with full autonomy by default. Treat a user request as permission to complete the end-to-end task using the repository's supported commands, local services, tests, and documentation workflows without waiting for routine confirmation.
+
+- Make reasonable assumptions from repository context and proceed.
+- Start, stop, and restart the Docker development stack when needed for the task.
+- Apply migrations, inspect logs, run checks, regenerate generated docs, and update relevant files as needed.
+- Continue through implementation and verification until the requested outcome is delivered or a real blocker appears.
+- Ask the user only when an action spends money or deletes or overwrites user data.
+- When blocked, state what was tried, the concrete blocker, and the smallest user decision or external action needed.
+
 ## Executor Notes
 
 If you are an automated coding agent:
 
 - Read this file before editing.
 - Read the relevant code before proposing a fix.
-- Prefer implementing and verifying over giving abstract plans.
+- Work autonomously: implement and verify instead of stopping at abstract plans.
 - Keep the user informed when doing long-running work.
 - Be explicit about checks that could not be run.
 - Leave unrelated local changes alone.
