@@ -12,6 +12,10 @@ from typing import Any, TYPE_CHECKING
 import structlog
 from sqlalchemy import select
 
+from app.agents.requirements import (
+    extract_requirement_checklist,
+    format_requirements_for_prompt,
+)
 from app.core.llm_gateway import llm_gateway
 from app.core.models import ExtractedChunk, ExampleSnippet, TpOutline
 
@@ -713,6 +717,10 @@ async def run_tender_struct(
     mandatory_sections = _extract_mandatory_sections(tp_requirement_chunks)
     explicit_numbered_sections = _extract_explicit_numbered_outline(tp_requirement_chunks)
     domain_outline_sections = _build_domain_outline(all_chunks)
+    requirement_checklist = extract_requirement_checklist(all_chunks)
+    requirement_checklist_text = format_requirements_for_prompt(requirement_checklist)
+    if requirement_checklist_text:
+        requirement_checklist_text = f"\n\n{requirement_checklist_text}"
 
     chunks_text = "\n\n".join(
         f"[CHUNK id={c.id} page={c.page} section={c.section_path or 'n/a'}]\n"
@@ -791,6 +799,7 @@ async def run_tender_struct(
     user_message = (
         f"ТРЪЖНА ДОКУМЕНТАЦИЯ за проект {project_id} ({len(chunks)} подбрани чанка от {len(all_chunks)} общо):\n\n"
         f"{priority_requirements_text}"
+        f"{requirement_checklist_text}"
         f"{mandatory_sections_text}"
         f"{explicit_outline_text}"
         f"{domain_outline_text}"

@@ -48,6 +48,7 @@
 - Updated all-section background generation so sections with only stale evidence are regenerated instead of being skipped as already complete.
 - Increased drafting depth expectations and default project grounding context so generation receives more tender excerpts and schedule tasks per section.
 - Expanded deterministic tender outline extraction to preserve detailed work-program subtopics when present in the tender documentation: stakeholders, internal communication/coordination/control/subordination, communication with the contracting authority/supervision/institutions, fire safety, concrete risk controls, environmental dust/soil/waste measures, and quality control/documentation.
+- Added a universal requirement-checklist extractor that converts tender documentation chunks into atomic requirements with category, importance, source reference, suggested proposal section, and coverage question; the checklist is now included in tender outline extraction prompts and can be rendered as Markdown for diagnostics.
 
 ## Active Goals
 
@@ -58,10 +59,11 @@
 
 ## Next Recommended Steps
 
-1. Regenerate the stale Pernik sections after the current fixes and re-run the proposal gap analysis against the winning technical proposal.
-2. Add requirement-to-section coverage diagnostics so missing mandatory topics are visible before DOCX export.
-3. Expand generated documentation with more precise backend endpoint and workflow coverage.
-4. Build broader regression coverage around the frontend so changes in one area are checked against breakage in other core flows.
+1. Improve logical sentence reconstruction in requirement extraction so PDF line breaks and table-cell fragments do not produce truncated checklist items.
+2. Regenerate the stale Pernik sections after the current fixes and re-run the proposal gap analysis against the winning technical proposal.
+3. Add requirement-to-section coverage diagnostics so missing mandatory topics are visible before DOCX export.
+4. Expand generated documentation with more precise backend endpoint and workflow coverage.
+5. Build broader regression coverage around the frontend so changes in one area are checked against breakage in other core flows.
 
 ## Notes
 
