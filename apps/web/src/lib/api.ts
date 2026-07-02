@@ -235,6 +235,31 @@ export interface ScheduleInfo {
   version: number;
 }
 
+export interface RequirementChecklistItem {
+  id: string;
+  text: string;
+  category: string;
+  category_label: string;
+  topic: string;
+  importance: "mandatory" | "scored" | "optional" | "scope" | string;
+  suggested_section: string;
+  coverage_question: string;
+  source_chunk_id: string;
+  source_page?: number | null;
+  source_section_path?: string | null;
+  source_file?: string | null;
+  source_excerpt: string;
+  evidence_cues: string[];
+}
+
+export interface RequirementChecklist {
+  project_id: string;
+  total: number;
+  importance_counts: Record<string, number>;
+  category_counts: Record<string, number>;
+  items: RequirementChecklistItem[];
+}
+
 export interface Generation {
   id: string;
   section_uid: string;
@@ -357,6 +382,10 @@ export const api = {
       apiNoContent(`/api/v1/agents/${projectId}/outline`, { method: "DELETE" }),
     getSchedule: (projectId: string) =>
       apiFetch<ScheduleInfo | null>(`/api/v1/agents/${projectId}/schedule`),
+    getRequirementChecklist: (projectId: string) =>
+      apiFetch<RequirementChecklist>(
+        `/api/v1/agents/${projectId}/requirements-checklist`,
+      ),
     lockSchedule: (projectId: string, scheduleId: string) =>
       apiFetch<{ status: string; schedule_id: string }>(
         `/api/v1/agents/${projectId}/schedule/lock?schedule_id=${encodeURIComponent(scheduleId)}`,

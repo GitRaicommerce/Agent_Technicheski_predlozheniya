@@ -9,6 +9,7 @@ import ChatPanel from "@/components/ChatPanel";
 import ExportButton from "@/components/ExportButton";
 import FileUploadPanel from "@/components/FileUploadPanel";
 import OutlinePanel from "@/components/OutlinePanel";
+import RequirementChecklistPanel from "@/components/RequirementChecklistPanel";
 import SchedulePanel from "@/components/SchedulePanel";
 import GenerationsPanel from "@/components/GenerationsPanel";
 
@@ -41,9 +42,11 @@ export default function ProjectPage() {
   const [project, setProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeModule, setActiveModule] = useState<Module | null>(null);
+  const [showRequirements, setShowRequirements] = useState(false);
   const [showOutline, setShowOutline] = useState(false);
   const [showSchedule, setShowSchedule] = useState(false);
   const [showGenerations, setShowGenerations] = useState(false);
+  const [requirementsRefreshKey, setRequirementsRefreshKey] = useState(0);
   const [outlineRefreshKey, setOutlineRefreshKey] = useState(0);
   const [scheduleRefreshKey, setScheduleRefreshKey] = useState(0);
   const [generationsRefreshKey, setGenerationsRefreshKey] = useState(0);
@@ -186,6 +189,8 @@ export default function ProjectPage() {
       }
 
       if (module === "tender_docs") {
+        setShowRequirements(true);
+        setRequirementsRefreshKey((value) => value + 1);
         setShowOutline(true);
         setOutlineRefreshKey((value) => value + 1);
       }
@@ -404,6 +409,28 @@ export default function ProjectPage() {
                 </button>
               ))}
             </div>
+          </div>
+
+          {/* Чеклист на изискванията */}
+          <div className="border-b">
+            <button
+              onClick={() => setShowRequirements((v) => !v)}
+              data-testid="requirements-panel-toggle"
+              className="w-full px-3 py-2.5 text-left text-sm font-semibold text-gray-700 flex justify-between items-center hover:bg-gray-50 transition"
+            >
+              <span>☑ Чеклист изисквания</span>
+              <span className="text-gray-400 text-xs">
+                {showRequirements ? "▾" : "▸"}
+              </span>
+            </button>
+            {showRequirements && (
+              <div className="px-3 pb-3">
+                <RequirementChecklistPanel
+                  projectId={project.id}
+                  refreshKey={requirementsRefreshKey}
+                />
+              </div>
+            )}
           </div>
 
           {/* Съдържание на ТП */}

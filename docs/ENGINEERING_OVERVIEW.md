@@ -106,6 +106,8 @@ TP AI is a monorepo for an AI-assisted workflow that prepares technical proposal
   - `apps/web/src/components/GenerationsPanel.tsx`
   - `apps/web/src/components/OutlinePanel.test.tsx`
   - `apps/web/src/components/OutlinePanel.tsx`
+  - `apps/web/src/components/RequirementChecklistPanel.test.tsx`
+  - `apps/web/src/components/RequirementChecklistPanel.tsx`
   - `apps/web/src/components/SchedulePanel.test.tsx`
   - `apps/web/src/components/SchedulePanel.tsx`
   - `apps/web/src/components/ToastProvider.tsx`
@@ -163,8 +165,8 @@ TP AI is a monorepo for an AI-assisted workflow that prepares technical proposal
 
 ## Test Inventory
 
-- Total backend tests discovered: `91`
-- `test_agents.py`: `24`
+- Total backend tests discovered: `93`
+- `test_agents.py`: `26`
 - `test_export.py`: `3`
 - `test_files.py`: `10`
 - `test_generation_jobs.py`: `4`

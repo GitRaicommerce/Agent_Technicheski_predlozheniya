@@ -50,6 +50,10 @@ vi.mock("@/components/OutlinePanel", () => ({
   default: () => <div>Outline Panel</div>,
 }));
 
+vi.mock("@/components/RequirementChecklistPanel", () => ({
+  default: () => <div>Requirement Checklist Panel</div>,
+}));
+
 vi.mock("@/components/SchedulePanel", () => ({
   default: () => <div>Schedule Panel</div>,
 }));
@@ -185,6 +189,15 @@ describe("ProjectPage", () => {
 
     expect(screen.queryByTestId("module-toggle-schedule")).not.toBeInTheDocument();
     expect(screen.getByTestId("schedule-panel-toggle")).toBeInTheDocument();
+  });
+
+  it("shows the requirements checklist as a dedicated project panel", async () => {
+    render(<ProjectPage />);
+
+    expect(await screen.findByText("Project Alpha")).toBeInTheDocument();
+    await userEvent.click(screen.getByTestId("requirements-panel-toggle"));
+
+    expect(screen.getByText("Requirement Checklist Panel")).toBeInTheDocument();
   });
 
   it("shows automatic Lex.bg status and allows manual refresh", async () => {

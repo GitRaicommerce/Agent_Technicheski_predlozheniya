@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Any
+from types import SimpleNamespace
 import uuid
 import structlog
 from slowapi import Limiter
@@ -248,6 +249,85 @@ async def get_schedule(project_id: str, db: AsyncSession = Depends(get_db)):
     )
     schedule = result.scalar_one_or_none()
     return schedule
+
+
+class RequirementChecklistItemResponse(BaseModel):
+    id: str
+    text: str
+    category: str
+    category_label: str
+    topic: str
+    importance: str
+    suggested_section: str
+    coverage_question: str
+    source_chunk_id: str
+    source_page: int | None = None
+    source_section_path: str | None = None
+    source_file: str | None = None
+    source_excerpt: str
+    evidence_cues: list[str]
+
+
+class RequirementChecklistResponse(BaseModel):
+    project_id: str
+    total: int
+    importance_counts: dict[str, int]
+    category_counts: dict[str, int]
+    items: list[RequirementChecklistItemResponse]
+
+
+@router.get(
+    "/{project_id}/requirements-checklist",
+    response_model=RequirementChecklistResponse,
+)
+async def get_requirements_checklist(
+    project_id: str,
+    db: AsyncSession = Depends(get_db),
+) -> RequirementChecklistResponse:
+    project = await db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    from app.agents.requirements import extract_requirement_checklist
+    from app.core.models import ExtractedChunk, ProjectFile
+    from sqlalchemy import select
+
+    result = await db.execute(
+        select(ExtractedChunk, ProjectFile.filename)
+        .join(ProjectFile, ExtractedChunk.file_id == ProjectFile.id)
+        .where(ExtractedChunk.project_id == project_id)
+        .where(ProjectFile.project_id == project_id)
+        .where(ProjectFile.module == "tender_docs")
+        .order_by(ProjectFile.filename, ExtractedChunk.page, ExtractedChunk.id)
+    )
+    chunks = [
+        SimpleNamespace(
+            id=chunk.id,
+            text=chunk.text,
+            page=chunk.page,
+            section_path=chunk.section_path,
+            source_file=filename,
+        )
+        for chunk, filename in result.all()
+    ]
+    items = extract_requirement_checklist(chunks)
+
+    importance_counts: dict[str, int] = {}
+    category_counts: dict[str, int] = {}
+    for item in items:
+        importance_counts[item.importance] = importance_counts.get(item.importance, 0) + 1
+        category_counts[item.category_label] = category_counts.get(item.category_label, 0) + 1
+
+    return RequirementChecklistResponse(
+        project_id=project_id,
+        total=len(items),
+        importance_counts=importance_counts,
+        category_counts=category_counts,
+        items=[
+            RequirementChecklistItemResponse(**item.as_dict())
+            for item in items
+        ],
+    )
 
 
 # ---------------------------------------------------------------------------

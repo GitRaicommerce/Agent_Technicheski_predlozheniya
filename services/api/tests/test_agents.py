@@ -145,6 +145,50 @@ async def test_get_schedule_found(client, mock_db):
 
 
 # ---------------------------------------------------------------------------
+# GET /api/v1/agents/{project_id}/requirements-checklist
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_get_requirements_checklist_project_not_found(client, mock_db):
+    mock_db.get = AsyncMock(return_value=None)
+
+    resp = await client.get(f"/api/v1/agents/{uuid.uuid4()}/requirements-checklist")
+
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_get_requirements_checklist_extracts_items(client, mock_db):
+    project = _make_project()
+    mock_db.get = AsyncMock(return_value=project)
+    chunk = MagicMock()
+    chunk.id = str(uuid.uuid4())
+    chunk.text = (
+        "Техническото предложение следва да съдържа:\n"
+        "1. линеен график с последователност на дейностите;\n"
+        "2. мерки за контрол на качеството."
+    )
+    chunk.page = 25
+    chunk.section_path = "Методика"
+    result = MagicMock()
+    result.all = MagicMock(return_value=[(chunk, "Документация.pdf")])
+    mock_db.execute = AsyncMock(return_value=result)
+
+    resp = await client.get(f"/api/v1/agents/{project.id}/requirements-checklist")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["project_id"] == project.id
+    assert data["total"] == 2
+    assert data["importance_counts"]["mandatory"] == 2
+    assert data["category_counts"]["График и срокове"] == 1
+    assert data["category_counts"]["Качество и контрол"] == 1
+    assert data["items"][0]["source_file"] == "Документация.pdf"
+    assert data["items"][0]["source_page"] == 25
+
+
+# ---------------------------------------------------------------------------
 # GET /api/v1/agents/{project_id}/generations
 # ---------------------------------------------------------------------------
 
