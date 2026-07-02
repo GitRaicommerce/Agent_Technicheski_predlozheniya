@@ -14,6 +14,11 @@ from sqlalchemy import select
 from app.core.llm_gateway import llm_gateway
 from app.core.models import Generation, ExampleSnippet, LexChunk, TpOutline
 from app.agents.context import build_project_grounding_context, format_grounding_context
+from app.agents.requirement_coverage import (
+    assess_requirement_coverage,
+    format_requirement_items_for_prompt,
+    normalize_requirement_items,
+)
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -50,6 +55,8 @@ GROUNDING_VERIFIER_APPENDIX = """
 Additional verification rules:
 - Check the generated text against PROJECT GROUNDING CONTEXT as a mandatory
   source, especially tender scope excerpts and schedule tasks.
+- Check the generated text against SECTION REQUIREMENT CHECKLIST and mark gaps
+  for checklist item ids that are not covered.
 - Mark gaps when required project parts, design disciplines, deliverables,
   schedule activities, review/approval steps, or timing are missing.
 - For investment/design project sections, return needs_review or reject if the
@@ -88,6 +95,8 @@ async def run_verifier(
     evidence_map = generation.evidence_map_json or {}
     section_title = str(generation.section_uid)
     section_requirements: list[str] = []
+    section_requirement_items: list[dict[str, Any]] = []
+    section: dict[str, Any] | None = None
 
     outline_result = await db.execute(
         select(TpOutline)
@@ -101,15 +110,16 @@ async def run_verifier(
             for section in sections:
                 if str(section.get("uid")) == str(generation.section_uid):
                     return section
-                found = _find_section(section.get("subsections", []))
+                found = _find_section(section.get("subsections") or [])
                 if found:
                     return found
             return None
 
-        section = _find_section(outline.outline_json.get("sections", []))
+        section = _find_section(outline.outline_json.get("sections") or [])
         if section:
             section_title = section.get("title", section_title)
             section_requirements = section.get("requirements", [])
+            section_requirement_items = section.get("requirement_checklist_items", [])
 
     import uuid as _uuid
 
@@ -167,6 +177,14 @@ async def run_verifier(
             db=db,
         )
     grounding_context_block = format_grounding_context(project_grounding_context)
+    normalized_requirement_items = normalize_requirement_items(
+        section_requirement_items,
+        fallback_requirements=section_requirements,
+        fallback_ids=section.get("requirement_ids", []) if section else None,
+    )
+    requirement_checklist_block = format_requirement_items_for_prompt(
+        normalized_requirement_items
+    )
 
     user_message = (
         f"ГЕНЕРИРАН ТЕКСТ:\n"
@@ -174,6 +192,9 @@ async def run_verifier(
         f"КАРТА НА ДОКАЗАТЕЛСТВАТА: {evidence_map}\n\n"
         f"ИЗХОДНИ ДАННИ:\n{evidence_block}"
     )
+
+    if requirement_checklist_block:
+        user_message += f"\n\n{requirement_checklist_block}"
 
     user_message += (
         "\n\nPROJECT GROUNDING CONTEXT:\n"
@@ -187,12 +208,34 @@ async def run_verifier(
         trace_id=trace_id,
     )
 
+    requirement_coverage = assess_requirement_coverage(
+        generation.text,
+        normalized_requirement_items,
+    )
+    llm_result["requirement_coverage"] = requirement_coverage
+    if requirement_coverage["missing_ids"]:
+        llm_result.setdefault("gaps", [])
+        for missing_item in requirement_coverage["items"]:
+            if missing_item["status"] != "missing":
+                continue
+            llm_result["gaps"].append(
+                {
+                    "description": (
+                        "Липсва покритие на изискване "
+                        f"{missing_item['id']}: {missing_item['text']}"
+                    )
+                }
+            )
+        if llm_result.get("verdict") == "ok":
+            llm_result["verdict"] = "needs_review"
+
     # Update generation flags if issues are found
     if llm_result.get("verdict") in ("needs_review", "reject"):
         generation.evidence_status = "stale"
         generation.flags_json = {
             **(generation.flags_json or {}),
             "verification": llm_result,
+            "requirement_coverage": requirement_coverage,
         }
         await db.flush()  # get_db dependency commits at request end
 

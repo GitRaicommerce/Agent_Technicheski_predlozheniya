@@ -225,7 +225,9 @@ def test_requirement_checklist_is_attached_to_matching_outline_sections():
     )
 
     assert schedule_section["requirement_ids"] == ["req-schedule"]
+    assert schedule_section["requirement_checklist_items"][0]["id"] == "req-schedule"
     assert specific_section["requirement_ids"] == ["req-specific"]
+    assert specific_section["requirement_checklist_items"][0]["id"] == "req-specific"
     assert summary["total_requirements"] == 2
     assert summary["covered_requirements"] == 2
     assert summary["missing_requirement_ids"] == []
@@ -250,6 +252,7 @@ def test_build_deterministic_outline_can_start_from_requirement_checklist():
     assert outline is not None
     assert outline["sections"][0]["title"] == SUGGESTED_SECTIONS[SPECIFIC_REQUIREMENTS_CATEGORY]
     assert outline["sections"][0]["requirement_ids"] == ["req-specific-only"]
+    assert outline["sections"][0]["requirement_checklist_items"][0]["id"] == "req-specific-only"
     assert outline["coverage_summary"]["covered_requirements"] == 1
 
 

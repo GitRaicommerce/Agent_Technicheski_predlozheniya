@@ -329,6 +329,7 @@ async def _run_drafting_all(
 
         title = section.get("title", "")
         requirements = section.get("requirements", [])
+        requirement_items = section.get("requirement_checklist_items", [])
 
         log.info("drafting_all_section", project_id=project.id, section=title, trace_id=trace_id)
 
@@ -371,6 +372,7 @@ async def _run_drafting_all(
             db=db,
             trace_id=trace_id,
             project_grounding_context=project_grounding_context,
+            section_requirement_items=requirement_items,
         )
         results.append({"section_uid": uid, "title": title, "generation_ids": drafting_result.get("generation_ids")})
         generated_count += 1
@@ -399,6 +401,7 @@ async def _run_drafting_pipeline(
     section_title = params.get("section_title", "")
     section_uid = params.get("section_uid", str(uuid.uuid4()))
     section_requirements = params.get("section_requirements", [])
+    section_requirement_items = params.get("section_requirement_items", [])
 
     log.info(
         "drafting_pipeline_start",
@@ -474,6 +477,7 @@ async def _run_drafting_pipeline(
         db=db,
         trace_id=trace_id,
         project_grounding_context=project_grounding_context,
+        section_requirement_items=section_requirement_items,
     )
     pipeline_trace["drafting"] = {
         "status": "ok" if "error" not in drafting_result else "error"
@@ -557,6 +561,7 @@ async def _dispatch_agent(
 
             section_title = params.get("section_title", "")
             section_requirements = params.get("section_requirements", [])
+            section_requirement_items = params.get("section_requirement_items", [])
             project_grounding_context = await build_project_grounding_context(
                 project_id=project_id,
                 section_title=section_title,
@@ -575,6 +580,7 @@ async def _dispatch_agent(
                 db=db,
                 trace_id=trace_id,
                 project_grounding_context=project_grounding_context,
+                section_requirement_items=section_requirement_items,
             )
 
         elif agent_name == "verifier":

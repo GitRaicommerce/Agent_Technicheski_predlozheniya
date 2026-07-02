@@ -196,6 +196,7 @@ export interface TpOutlineSection {
   required?: boolean;
   requirements?: string[];
   requirement_ids?: string[];
+  requirement_checklist_items?: RequirementChecklistItem[];
   subsections?: TpOutlineSection[];
   children?: TpOutlineSection[];
 }

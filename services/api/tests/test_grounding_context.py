@@ -130,3 +130,66 @@ async def test_drafting_prompt_and_saved_generation_include_grounding_context(mo
         "grounding_context": grounding_context
     }
     assert result["generation_ids"]["variant_1"] == saved_generation.id
+
+
+@pytest.mark.asyncio
+async def test_drafting_prompt_and_saved_generation_include_requirement_coverage(mock_db):
+    project_id = str(uuid.uuid4())
+    section_uid = str(uuid.uuid4())
+    requirement_items = [
+        {
+            "id": "req-schedule",
+            "text": "Следва да се представи подробен линеен график за изпълнение.",
+            "importance": "mandatory",
+            "category_label": "График и срокове",
+            "coverage_question": "Покрит ли е линейният график?",
+        }
+    ]
+
+    with patch(
+        "app.agents.drafting.llm_gateway.call",
+        new=AsyncMock(
+            return_value={
+                "variant_1": {
+                    "text": "Представя се подробен линеен график за изпълнение на дейностите.",
+                    "evidence_map": {},
+                    "requirement_coverage": [
+                        {
+                            "id": "req-schedule",
+                            "status": "covered",
+                            "evidence": "линеен график",
+                        }
+                    ],
+                },
+                "flags": [],
+            }
+        ),
+    ) as llm_call:
+        result = await run_drafting(
+            project_id=project_id,
+            section_uid=section_uid,
+            section_title="Линеен график",
+            section_requirements=["Да се представи линеен график."],
+            evidence_snippets=[],
+            schedule_summary=None,
+            lex_citations=[],
+            db=mock_db,
+            trace_id=str(uuid.uuid4()),
+            project_grounding_context=None,
+            section_requirement_items=requirement_items,
+        )
+
+    prompt = llm_call.await_args.kwargs["user_message"]
+    saved_generation = mock_db.add.call_args.args[0]
+
+    assert "SECTION REQUIREMENT CHECKLIST" in prompt
+    assert "id=req-schedule" in prompt
+    assert saved_generation.flags_json["requirement_coverage"]["missing_ids"] == []
+    assert saved_generation.flags_json["requirement_coverage"]["covered_ids"] == [
+        "req-schedule"
+    ]
+    assert (
+        saved_generation.used_sources_json["section_requirement_items"][0]["id"]
+        == "req-schedule"
+    )
+    assert result["generation_ids"]["variant_1"] == saved_generation.id

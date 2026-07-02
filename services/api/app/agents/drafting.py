@@ -11,6 +11,11 @@ from typing import Any, TYPE_CHECKING
 import structlog
 
 from app.agents.context import format_grounding_context
+from app.agents.requirement_coverage import (
+    assess_requirement_coverage,
+    format_requirement_items_for_prompt,
+    normalize_requirement_items,
+)
 from app.core.llm_gateway import llm_gateway
 from app.core.models import Generation
 
@@ -24,6 +29,7 @@ You are a Bulgarian technical proposal drafting specialist for public procuremen
 
 You receive:
 - SECTION and REQUIREMENTS: what the text must cover.
+- SECTION REQUIREMENT CHECKLIST: atomic tender requirements for this section.
 - PROJECT GROUNDING CONTEXT: selected tender excerpts and schedule tasks.
 - EXAMPLE blocks: style and structure references from successful technical proposals.
 - SCHEDULE DATA: phases, activities and deadlines from the linear schedule.
@@ -38,6 +44,8 @@ Requirements:
   that depth. Shorter answers are acceptable only when the tender sources and
   requirements are genuinely narrow.
 - Cover every requirement from the section.
+- Cover every item in SECTION REQUIREMENT CHECKLIST explicitly. Do not merge
+  several checklist items into a vague generic paragraph.
 - Use clear paragraphs and, where useful, subheadings or numbered points.
 - Integrate concrete schedule data when available.
 - Preserve mandatory subtopics as explicit subheadings or numbered points
@@ -66,6 +74,7 @@ Grounding rules:
 - Self-check the draft against tender excerpts and schedule tasks before
   returning JSON. If a mandatory project part or activity is missing, revise the
   text before returning the final variant.
+- Self-check the draft against every checklist item id before returning JSON.
 
 Source priority:
 1. Tender excerpts and schedule tasks in PROJECT GROUNDING CONTEXT.
@@ -77,7 +86,10 @@ Return only valid JSON:
 {
   "variant_1": {
     "text": "<detailed Bulgarian text>",
-    "evidence_map": {"<key claim>": "<uuid from EXAMPLE/LEX or null>"}
+    "evidence_map": {"<key claim>": "<uuid from EXAMPLE/LEX or null>"},
+    "requirement_coverage": [
+      {"id": "<requirement id>", "status": "covered|missing", "evidence": "<short excerpt or explanation>"}
+    ]
   },
   "flags": []
 }
@@ -104,6 +116,7 @@ async def run_drafting(
     db: "AsyncSession",
     trace_id: str | None = None,
     project_grounding_context: dict[str, Any] | None = None,
+    section_requirement_items: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     trace_id = trace_id or str(uuid.uuid4())
     section_uid = _safe_section_uuid(section_uid)
@@ -127,13 +140,21 @@ async def run_drafting(
         for c in lex_citations
     )
 
+    normalized_requirement_items = normalize_requirement_items(
+        section_requirement_items,
+        fallback_requirements=section_requirements,
+    )
     requirements_text = "\n".join(f"- {r}" for r in section_requirements)
+    requirement_checklist_text = format_requirement_items_for_prompt(
+        normalized_requirement_items
+    )
     grounding_context_text = format_grounding_context(project_grounding_context)
 
     user_message = "\n\n".join(
         part
         for part in [
             f"SECTION: {section_title}\nREQUIREMENTS:\n{requirements_text}",
+            requirement_checklist_text,
             (
                 "PROJECT GROUNDING CONTEXT:\n"
                 f"[UNTRUSTED DATA START]\n{grounding_context_text}\n[UNTRUSTED DATA END]"
@@ -163,6 +184,20 @@ async def run_drafting(
         variant_data = llm_result.get(variant_key) or {}
         variant_text = variant_data.get("text", "")
         if variant_text:
+            requirement_coverage = assess_requirement_coverage(
+                variant_text,
+                normalized_requirement_items,
+            )
+            flags_payload = {
+                "flags": llm_result.get("flags", []),
+                "requirement_coverage": requirement_coverage,
+                "llm_requirement_coverage": variant_data.get("requirement_coverage", []),
+            }
+            used_sources: dict[str, Any] = {}
+            if project_grounding_context:
+                used_sources["grounding_context"] = project_grounding_context
+            if normalized_requirement_items:
+                used_sources["section_requirement_items"] = normalized_requirement_items
             gen = Generation(
                 id=str(uuid.uuid4()),
                 project_id=project_id,
@@ -170,12 +205,8 @@ async def run_drafting(
                 variant=variant_key.replace("variant_", ""),
                 text=variant_text,
                 evidence_map_json=variant_data.get("evidence_map"),
-                used_sources_json=(
-                    {"grounding_context": project_grounding_context}
-                    if project_grounding_context
-                    else None
-                ),
-                flags_json={"flags": llm_result.get("flags", [])},
+                used_sources_json=used_sources or None,
+                flags_json=flags_payload,
                 trace_id=trace_id,
                 selected=True,
             )

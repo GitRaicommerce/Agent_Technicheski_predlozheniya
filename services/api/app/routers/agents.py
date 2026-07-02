@@ -571,15 +571,17 @@ async def regenerate_section(
 
     section_title = section_uid
     section_requirements: list[str] = []
+    section_requirement_items: list[dict] = []
 
     if outline:
         def _find(secs: list) -> bool:
             for s in secs:
                 uid = s.get("uid") or s.get("section_uid", "")
                 if uid == section_uid:
-                    nonlocal section_title, section_requirements
+                    nonlocal section_title, section_requirements, section_requirement_items
                     section_title = s.get("title", section_uid)
                     section_requirements = s.get("requirements", [])
+                    section_requirement_items = s.get("requirement_checklist_items", [])
                     return True
                 if _find(s.get("subsections", s.get("children", []))):
                     return True
@@ -599,6 +601,7 @@ async def regenerate_section(
             "section_uid": section_uid,
             "section_title": section_title,
             "section_requirements": section_requirements,
+            "section_requirement_items": section_requirement_items,
         },
         db=db,
         trace_id=trace_id,

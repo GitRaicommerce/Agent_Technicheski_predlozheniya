@@ -337,6 +337,21 @@ def _dedupe_outline_sections(sections: list[dict[str, Any]]) -> list[dict[str, A
                 existing_requirement_ids.append(requirement_id)
         existing["requirement_ids"] = existing_requirement_ids
 
+        existing_checklist_items = existing.get("requirement_checklist_items") or []
+        existing_checklist_ids = {
+            str(item.get("id"))
+            for item in existing_checklist_items
+            if isinstance(item, dict) and item.get("id")
+        }
+        for item in section.get("requirement_checklist_items") or []:
+            if not isinstance(item, dict):
+                continue
+            item_id = str(item.get("id") or "")
+            if item_id and item_id not in existing_checklist_ids:
+                existing_checklist_ids.add(item_id)
+                existing_checklist_items.append(item)
+        existing["requirement_checklist_items"] = existing_checklist_items
+
         existing_refs = existing.get("source_refs") or []
         for source_ref in section.get("source_refs") or []:
             if source_ref not in existing_refs:
@@ -437,6 +452,27 @@ def _attach_requirement_to_section(section: dict[str, Any], item: RequirementIte
         list(section.get("source_refs") or []),
         item.source_chunk_id,
     )
+    checklist_items = list(section.get("requirement_checklist_items") or [])
+    if not any(
+        existing.get("id") == item.id
+        for existing in checklist_items
+        if isinstance(existing, dict)
+    ):
+        checklist_items.append(
+            {
+                "id": item.id,
+                "text": item.text,
+                "importance": item.importance,
+                "category": item.category,
+                "category_label": item.category_label,
+                "coverage_question": item.coverage_question,
+                "source_chunk_id": item.source_chunk_id,
+                "source_page": item.source_page,
+                "source_section_path": item.source_section_path,
+                "source_file": item.source_file,
+            }
+        )
+    section["requirement_checklist_items"] = checklist_items
 
 
 def _missing_requirement_sections(items: list[RequirementItem]) -> list[dict[str, Any]]:
