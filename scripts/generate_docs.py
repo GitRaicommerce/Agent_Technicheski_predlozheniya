@@ -64,6 +64,8 @@ def top_level_tree() -> list[str]:
             "env.txt",
             "backup.sql",
             ".playwright-results",
+            ".agents",
+            "local_analysis",
         }:
             continue
         suffix = "/" if path.is_dir() else ""
