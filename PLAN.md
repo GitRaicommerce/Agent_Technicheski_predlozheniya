@@ -65,6 +65,7 @@
 - Added a targeted stale-selected regeneration flow: the backend can enqueue a drafting job for exactly the selected stale sections, and the Generations panel now shows a bulk regenerate action when stale selected sections are present.
 - Added a universal drafting blueprint layer: section checklist items are now grouped by category/topic into structural guidance for the drafting prompt, and the generated blueprint is saved with generation metadata for later diagnostics.
 - Made the DOCX export proposal-depth gate blueprint-aware, so selected sections with many requirement structure groups need a developed narrative even when the raw checklist count is modest.
+- Surfaced blueprint-aware depth details in the DOCX export warning so users can see when a shallow section is blocked because it has many requirement structure groups.
 
 ## Active Goals
 

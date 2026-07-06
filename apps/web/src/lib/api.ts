@@ -342,8 +342,20 @@ export interface ExportReadiness {
   stale_section_count?: number;
   missing_requirement_sections?: unknown[];
   missing_requirement_count?: number;
-  quality_sections?: unknown[];
+  quality_sections?: ExportQualitySection[];
   quality_section_count?: number;
+}
+
+export interface ExportQualitySection {
+  section_uid: string;
+  generation_id?: string;
+  word_count?: number;
+  sentence_count?: number;
+  requirement_count?: number;
+  blueprint_group_count?: number;
+  min_words?: number;
+  min_sentences?: number;
+  issues?: Array<Record<string, unknown>>;
 }
 
 export const api = {

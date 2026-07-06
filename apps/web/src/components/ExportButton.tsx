@@ -1,13 +1,18 @@
 "use client";
 
 import { useState } from "react";
-import { api, ApiError } from "@/lib/api";
+import { api, ApiError, type ExportQualitySection } from "@/lib/api";
 import { useToast } from "@/components/ToastProvider";
 
 interface Props {
   projectId: string;
   projectName: string;
   onOpenGenerations?: () => void;
+}
+
+interface QualityWarningSummary {
+  maxBlueprintGroupCount: number | null;
+  maxMinWords: number | null;
 }
 
 export default function ExportButton({
@@ -27,7 +32,10 @@ export default function ExportButton({
     useState<number | null>(null);
   const [qualityWarning, setQualityWarning] = useState(false);
   const [qualitySectionCount, setQualitySectionCount] = useState<number | null>(null);
+  const [qualityWarningSummary, setQualityWarningSummary] =
+    useState<QualityWarningSummary | null>(null);
   const { toast } = useToast();
+  const qualityWarningDetail = formatQualityWarningSummary(qualityWarningSummary);
 
   const applyReadinessWarnings = (source: unknown, message = "") => {
     let handled = false;
@@ -50,6 +58,7 @@ export default function ExportButton({
     if (isQualityExportError(source)) {
       setQualityWarning(true);
       setQualitySectionCount(getQualitySectionCount(source));
+      setQualityWarningSummary(getQualityWarningSummary(source));
       handled = true;
     }
 
@@ -67,6 +76,7 @@ export default function ExportButton({
     setMissingRequirementCount(null);
     setQualityWarning(false);
     setQualitySectionCount(null);
+    setQualityWarningSummary(null);
 
     try {
       const readiness = await api.export.readiness(projectId);
@@ -194,6 +204,7 @@ export default function ExportButton({
             }. `}
             Прегледайте генерациите и регенерирайте по-подробен текст преди DOCX export.
           </p>
+          {qualityWarningDetail && <p className="mt-1">{qualityWarningDetail}</p>}
           {onOpenGenerations && (
             <button
               type="button"
@@ -327,6 +338,48 @@ function getQualitySectionCount(err: unknown): number | null {
   return Array.isArray(sections) ? sections.length : null;
 }
 
+function getQualityWarningSummary(err: unknown): QualityWarningSummary | null {
+  const payload = getReadinessPayload(err);
+  if (!payload || typeof payload !== "object") return null;
+
+  const sections = (payload as { quality_sections?: unknown }).quality_sections;
+  if (!Array.isArray(sections)) return null;
+
+  let maxBlueprintGroupCount = 0;
+  let maxMinWords = 0;
+  for (const rawSection of sections) {
+    if (!rawSection || typeof rawSection !== "object") continue;
+    const section = rawSection as ExportQualitySection;
+    if (typeof section.blueprint_group_count === "number") {
+      maxBlueprintGroupCount = Math.max(
+        maxBlueprintGroupCount,
+        section.blueprint_group_count,
+      );
+    }
+    if (typeof section.min_words === "number") {
+      maxMinWords = Math.max(maxMinWords, section.min_words);
+    }
+  }
+
+  if (maxBlueprintGroupCount <= 0 && maxMinWords <= 0) return null;
+  return {
+    maxBlueprintGroupCount: maxBlueprintGroupCount || null,
+    maxMinWords: maxMinWords || null,
+  };
+}
+
+function formatQualityWarningSummary(
+  summary: QualityWarningSummary | null,
+): string | null {
+  const groupCount = summary?.maxBlueprintGroupCount ?? 0;
+  if (groupCount <= 0) return null;
+
+  const minWords = summary?.maxMinWords ?? 0;
+  const minWordsText =
+    minWords > 0 ? ` и ориентир поне ${formatWordCount(minWords)}` : "";
+  return `Най-сложната засечена секция има ${formatBlueprintGroupCount(groupCount)}${minWordsText}.`;
+}
+
 function getReadinessPayload(source: unknown): unknown {
   if (source instanceof ApiError) {
     return getApiErrorPayload(source);
@@ -363,4 +416,12 @@ function formatRequirementCount(count: number): string {
 
 function formatQualitySectionCount(count: number): string {
   return `${count} ${count === 1 ? "секция" : "секции"}`;
+}
+
+function formatBlueprintGroupCount(count: number): string {
+  return `${count} ${count === 1 ? "група изисквания" : "групи изисквания"}`;
+}
+
+function formatWordCount(count: number): string {
+  return `${count} ${count === 1 ? "дума" : "думи"}`;
 }

@@ -207,7 +207,8 @@ describe("ExportButton", () => {
         {
           section_uid: "s1",
           word_count: 12,
-          min_words: 360,
+          min_words: 1200,
+          blueprint_group_count: 6,
         },
       ],
     });
@@ -224,6 +225,10 @@ describe("ExportButton", () => {
 
     expect(await screen.findByTestId("export-quality-warning"))
       .toHaveTextContent("1 секция");
+    expect(screen.getByTestId("export-quality-warning"))
+      .toHaveTextContent("6 групи изисквания");
+    expect(screen.getByTestId("export-quality-warning"))
+      .toHaveTextContent("1200 думи");
 
     await userEvent.click(screen.getByRole("button", { name: "Отвори Генерации" }));
 
