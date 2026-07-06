@@ -120,6 +120,63 @@ def test_extract_requirement_checklist_ignores_clear_admin_noise_without_tp_cont
     assert extract_requirement_checklist(chunks) == []
 
 
+def test_extract_requirement_checklist_ignores_procurement_only_noise_with_tp_words():
+    chunks = [
+        make_chunk(
+            "c-procurement-noise",
+            (
+                "Техническо предложение - включващо документите по чл. 39, ал. 3 от ЗОП.\n"
+                "Физическите лица по пълномощие, когато участникът се представлява от "
+                "физическо лице по пълномощие, следва да представят документите."
+            ),
+            page=14,
+        ),
+        make_chunk(
+            "c-experience-noise",
+            (
+                "Списък на строителството, идентично или сходно с предмета на поръчката, "
+                "изпълнено през последните 5 години, с удостоверения за добро изпълнение, "
+                "които да съдържат стойността и мястото на изпълнение."
+            ),
+            page=19,
+        ),
+        make_chunk(
+            "c-offer-submission-noise",
+            (
+                "Подаването на офертата задължава участниците да приемат напълно всички "
+                "изисквания и условия, посочени в документацията."
+            ),
+            page=9,
+        ),
+        make_chunk(
+            "c-professional-law-noise",
+            (
+                "6 ЗКАИИП следва да са изпълнени от избрания за изпълнител участник "
+                "при сключването на договора."
+            ),
+            page=21,
+        ),
+    ]
+
+    assert extract_requirement_checklist(chunks) == []
+
+
+def test_extract_requirement_checklist_ignores_generic_offer_ranking_noise():
+    chunks = [
+        make_chunk(
+            "c-ranking-noise",
+            (
+                "Класирането на офертите се извършва на база комплексна оценка на "
+                "офертите, като избраният критерий е оптимално съотношение качество/цена "
+                "и показателите и относителната им тежест са посочени в методиката."
+            ),
+            page=22,
+        )
+    ]
+
+    assert extract_requirement_checklist(chunks) == []
+
+
 def test_extract_requirement_checklist_keeps_unmapped_specific_requirements():
     chunks = [
         make_chunk(

@@ -95,6 +95,26 @@ ADMIN_NOISE = (
     "три или повече оферти",
 )
 
+PROCUREMENT_ONLY_NOISE = (
+    "включващо документите по чл",
+    "заявление за участие",
+    "пълномощие",
+    "контролен или управителен орган",
+    "списък на строителството",
+    "удостоверения за добро изпълнение",
+    "подаване на офертата",
+    "подаването на офертата",
+    "подаване на офертите",
+    "получаване на оферти",
+    "декриптирали офертата",
+    "съдържащите се в нея ценови предложения",
+    "класирането на офертите",
+    "комплексна оценка на офертите",
+    "относителната им тежест",
+    "оптимално съотношение качество/цена",
+    "зкаиип",
+)
+
 EXECUTION_RELEVANCE_CUES = (
     "изпълнение",
     "работна програма",
@@ -243,8 +263,15 @@ def _has_strong_tp_context(text: str) -> bool:
     return any(cue in normalized for cue in STRONG_TP_CONTEXT_CUES)
 
 
+def _is_procurement_only_noise(text: str) -> bool:
+    normalized = _normalize_for_match(text)
+    return any(noise in normalized for noise in PROCUREMENT_ONLY_NOISE)
+
+
 def _is_noise(text: str) -> bool:
     normalized = _normalize_for_match(text)
+    if _is_procurement_only_noise(normalized):
+        return True
     if _has_strong_tp_context(normalized):
         return False
     return any(noise in normalized for noise in ADMIN_NOISE)
@@ -254,6 +281,8 @@ def _is_relevant_to_technical_proposal(text: str, context: str) -> bool:
     combined = _normalize_for_match(f"{context} {text}")
     text_normalized = _normalize_for_match(text)
 
+    if _is_procurement_only_noise(text_normalized):
+        return False
     if _has_strong_tp_context(combined):
         return True
     if any(cue in text_normalized for cue in SCOPE_CUES):
