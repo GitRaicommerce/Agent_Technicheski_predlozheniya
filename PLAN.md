@@ -67,6 +67,7 @@
 - Made the DOCX export proposal-depth gate blueprint-aware, so selected sections with many requirement structure groups need a developed narrative even when the raw checklist count is modest.
 - Surfaced blueprint-aware depth details in the DOCX export warning so users can see when a shallow section is blocked because it has many requirement structure groups.
 - Added deterministic common-scenario regression tests that cover no-outline fallback, explicit outline preservation, requirement checklist attachment, drafting blueprint grouping, and blueprint-aware proposal-depth gating.
+- Added a non-mutating Markdown DOCX export readiness report endpoint for calibration runs, summarizing duplicate selected variants, stale evidence, missing requirements, shallow/blueprint-heavy sections, and recommended next actions.
 
 ## Active Goals
 
@@ -83,7 +84,7 @@
 4. Reduce remaining requirement-checklist noise from PDF text-cell joins and overly broad clauses that still produce awkward but technically relevant checklist items.
 5. Expand generated documentation with more precise backend endpoint and workflow coverage.
 6. Continue broadening common tender regression coverage with more real-world noisy PDF extraction and DOCX readiness combinations.
-7. Re-run the Pernik calibration after resolving duplicate selected variants and stale generations, then compare the regenerated output against the winning proposal.
+7. Use the readiness Markdown report during the next Pernik calibration, then compare the regenerated output against the winning proposal after duplicate selected variants and stale generations are resolved.
 
 ## Notes
 

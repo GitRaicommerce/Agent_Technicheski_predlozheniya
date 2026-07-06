@@ -170,6 +170,58 @@ async def test_export_readiness_aggregates_multiple_blockers(client, mock_db):
 
 
 @pytest.mark.asyncio
+async def test_export_readiness_report_returns_markdown_summary(client, mock_db):
+    project = _make_project()
+    mock_db.get = AsyncMock(return_value=project)
+
+    shallow_generation = MagicMock()
+    shallow_generation.id = "gen-shallow"
+    shallow_generation.section_uid = "sec-shallow"
+    shallow_generation.evidence_status = "ok"
+    shallow_generation.text = "Short covered text."
+    shallow_generation.flags_json = {
+        "requirement_coverage": {
+            "total": 2,
+            "covered": 2,
+            "missing": 0,
+            "missing_ids": [],
+            "items": [
+                {"id": "req-1", "status": "covered"},
+                {"id": "req-2", "status": "covered"},
+            ],
+        }
+    }
+    shallow_generation.used_sources_json = {
+        "drafting_blueprint": {
+            "groups": [
+                {
+                    "category": f"category-{index}",
+                    "label": f"Category {index}",
+                    "requirements": [{"id": f"req-{index}"}],
+                }
+                for index in range(1, 5)
+            ]
+        }
+    }
+
+    selected_result = MagicMock()
+    selected_result.scalars.return_value.all.return_value = [shallow_generation]
+    outline_result = MagicMock()
+    outline_result.scalar_one_or_none.return_value = None
+    mock_db.execute = AsyncMock(side_effect=[selected_result, outline_result])
+
+    resp = await client.get(f"/api/v1/export/{project.id}/readiness/report")
+
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("text/markdown")
+    assert "# DOCX export readiness report" in resp.text
+    assert "shallow_sections" in resp.text
+    assert "sec-shallow" in resp.text
+    assert "Blueprint groups" in resp.text
+    assert "too_short_for_requirements" in resp.text
+
+
+@pytest.mark.asyncio
 async def test_export_docx_missing_requirement_coverage_returns_409(client, mock_db):
     project = _make_project()
     mock_db.get = AsyncMock(return_value=project)

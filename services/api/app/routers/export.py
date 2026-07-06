@@ -1,11 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi.responses import PlainTextResponse, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.core.database import get_db
 from app.core.models import Project, Generation, TpOutline
 from app.agents.proposal_quality import assess_generation_depth
+from app.export.readiness_report import render_export_readiness_report
 
 router = APIRouter()
 
@@ -300,6 +301,20 @@ async def export_readiness(project_id: str, db: AsyncSession = Depends(get_db)):
 
     selected_generations = await _load_selected_generations(project_id, db)
     return await _build_export_readiness(project_id, selected_generations, db)
+
+
+@router.get("/{project_id}/readiness/report", response_class=PlainTextResponse)
+async def export_readiness_report(project_id: str, db: AsyncSession = Depends(get_db)):
+    project = await db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    selected_generations = await _load_selected_generations(project_id, db)
+    readiness = await _build_export_readiness(project_id, selected_generations, db)
+    return PlainTextResponse(
+        render_export_readiness_report(readiness),
+        media_type="text/markdown; charset=utf-8",
+    )
 
 
 @router.get("/{project_id}/docx")
