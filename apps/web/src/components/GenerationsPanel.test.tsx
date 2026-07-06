@@ -351,6 +351,141 @@ describe("GenerationsPanel", () => {
     });
   });
 
+  it("summarizes and filters sections that need generation attention", async () => {
+    listGenerationsMock.mockResolvedValue([
+      {
+        section_uid: "sec-clean",
+        section_title: "Clean Section",
+        variants: [
+          {
+            id: "gen-clean",
+            section_uid: "sec-clean",
+            variant: 1,
+            text: "Clean text",
+            evidence_status: "ok",
+            selected: true,
+            created_at: "2026-04-20T10:00:00.000Z",
+            flags_json: {
+              requirement_coverage: {
+                total: 1,
+                covered: 1,
+                missing: 0,
+                items: [
+                  {
+                    id: "req-clean",
+                    text: "Clean requirement",
+                    status: "covered",
+                  },
+                ],
+              },
+            },
+          },
+        ],
+      },
+      {
+        section_uid: "sec-duplicate",
+        section_title: "Duplicate Section",
+        variants: [
+          {
+            id: "gen-duplicate-1",
+            section_uid: "sec-duplicate",
+            variant: 1,
+            text: "First duplicate text",
+            evidence_status: "ok",
+            selected: true,
+            created_at: "2026-04-20T10:00:00.000Z",
+          },
+          {
+            id: "gen-duplicate-2",
+            section_uid: "sec-duplicate",
+            variant: 2,
+            text: "Second duplicate text",
+            evidence_status: "ok",
+            selected: true,
+            created_at: "2026-04-21T10:00:00.000Z",
+          },
+        ],
+      },
+      {
+        section_uid: "sec-stale",
+        section_title: "Stale Section",
+        variants: [
+          {
+            id: "gen-stale",
+            section_uid: "sec-stale",
+            variant: 1,
+            text: "Stale text",
+            evidence_status: "stale",
+            selected: true,
+            created_at: "2026-04-20T10:00:00.000Z",
+          },
+        ],
+      },
+      {
+        section_uid: "sec-missing",
+        section_title: "Missing Requirement Section",
+        variants: [
+          {
+            id: "gen-missing",
+            section_uid: "sec-missing",
+            variant: 1,
+            text: "Text without one requirement",
+            evidence_status: "ok",
+            selected: true,
+            created_at: "2026-04-20T10:00:00.000Z",
+            flags_json: {
+              requirement_coverage: {
+                total: 2,
+                covered: 1,
+                missing: 1,
+                missing_ids: ["req-missing"],
+                items: [
+                  {
+                    id: "req-covered",
+                    text: "Covered requirement",
+                    status: "covered",
+                  },
+                  {
+                    id: "req-missing",
+                    text: "Missing requirement",
+                    status: "missing",
+                  },
+                ],
+              },
+            },
+          },
+        ],
+      },
+    ]);
+
+    render(<GenerationsPanel projectId="project-1" />);
+
+    const summary = await screen.findByTestId("generation-attention-summary");
+    expect(summary).toHaveTextContent("3 секции изискват внимание");
+    expect(summary).toHaveTextContent("дублиран избор: 1");
+    expect(summary).toHaveTextContent("остарели избрани: 1");
+    expect(summary).toHaveTextContent("липсващи изисквания: 1");
+    expect(screen.getByTestId("generation-section-sec-clean")).toBeInTheDocument();
+    expect(screen.getByTestId("generation-stale-selected-badge-sec-stale"))
+      .toHaveTextContent("остаряла");
+
+    await userEvent.click(
+      screen.getByTestId("generation-attention-filter-toggle"),
+    );
+
+    expect(screen.queryByTestId("generation-section-sec-clean"))
+      .not.toBeInTheDocument();
+    expect(screen.getByTestId("generation-section-sec-duplicate"))
+      .toBeInTheDocument();
+    expect(screen.getByTestId("generation-section-sec-stale"))
+      .toBeInTheDocument();
+    expect(screen.getByTestId("generation-section-sec-missing"))
+      .toBeInTheDocument();
+    expect(screen.getByText("3 / 4 секции")).toBeInTheDocument();
+    expect(screen.getByTestId("generation-attention-filter-toggle"))
+      .toHaveTextContent("Покажи всички");
+  });
+
   it("starts a stale selected sections generation job", async () => {
     listGenerationsMock.mockResolvedValue([
       {

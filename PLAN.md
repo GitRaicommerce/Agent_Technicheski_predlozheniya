@@ -70,6 +70,7 @@
 - Added a non-mutating Markdown DOCX export readiness report endpoint for calibration runs, summarizing duplicate selected variants, stale evidence, missing requirements, shallow/blueprint-heavy sections, and recommended next actions.
 - Enriched export readiness diagnostics with outline section titles so calibration reports are readable by humans instead of listing only section UUIDs.
 - Exposed the Markdown export readiness report in the web export flow so blocked users can download a calibration/debug report directly from the UI.
+- Added a Generations panel attention summary and filter, with frontend unit and browser smoke coverage, that counts duplicate selected variants, stale selected sections, and missing requirement coverage so export blockers are easier to locate and resolve on any project.
 
 ## Active Goals
 
@@ -80,7 +81,7 @@
 
 ## Next Recommended Steps
 
-1. Resolve Pernik's legacy duplicate selected generations through the Generations panel by choosing one variant per ambiguous section, then re-run the aggregated export readiness check.
+1. Use the Generations panel attention filter to resolve Pernik's legacy duplicate selected generations by choosing one variant per ambiguous section, then re-run the aggregated export readiness check.
 2. Use the Generations panel bulk stale-regeneration action for Pernik after duplicate selections are resolved, then re-run export readiness and the proposal gap analysis against the winning technical proposal.
 3. Calibrate the drafting blueprint and blueprint-aware depth thresholds against regenerated Pernik output and the winning proposal so structural groups become closer to the expected work-program narrative.
 4. Reduce remaining requirement-checklist noise from PDF text-cell joins and overly broad clauses that still produce awkward but technically relevant checklist items.

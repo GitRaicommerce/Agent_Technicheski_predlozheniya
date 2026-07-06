@@ -30,6 +30,7 @@ export default function GenerationsPanel({
   );
   const [retryingJob, setRetryingJob] = useState(false);
   const [regeneratingStaleJob, setRegeneratingStaleJob] = useState(false);
+  const [showOnlyAttention, setShowOnlyAttention] = useState(false);
   const [generationJob, setGenerationJob] = useState<GenerationJob | null>(null);
   const hasLoadedRef = useRef(false);
 
@@ -185,6 +186,13 @@ export default function GenerationsPanel({
     );
   }
 
+  const attentionSummary = summarizeGenerationAttention(sections);
+  const shouldFilterAttention =
+    showOnlyAttention && attentionSummary.attentionSectionCount > 0;
+  const visibleSections = shouldFilterAttention
+    ? sections.filter(sectionNeedsAttention)
+    : sections;
+
   return (
     <div className="space-y-1">
       {generationJob && (
@@ -202,9 +210,16 @@ export default function GenerationsPanel({
           void handleRegenerateStaleSections();
         }}
       />
+      <GenerationAttentionSummary
+        summary={attentionSummary}
+        showOnlyAttention={shouldFilterAttention}
+        onToggle={() => setShowOnlyAttention((value) => !value)}
+      />
       <div className="mb-1 flex items-center justify-between">
         <span className="text-xs text-gray-400">
-          {sections.length} раздела
+          {shouldFilterAttention
+            ? `${visibleSections.length} / ${sections.length} секции`
+            : `${sections.length} раздела`}
         </span>
         <button
           onClick={load}
@@ -216,7 +231,7 @@ export default function GenerationsPanel({
         </button>
       </div>
 
-      {sections.map((section) => {
+      {visibleSections.map((section) => {
         const isOpen = expanded.has(section.section_uid);
         const selectedVariants = section.variants.filter(
           (variant) => variant.selected,
@@ -224,7 +239,7 @@ export default function GenerationsPanel({
         const displayVariant =
           selectedVariants[0] ?? section.variants[0];
         const requirementCoverage = getRequirementCoverage(displayVariant);
-        const hasDuplicateSelected = selectedVariants.length > 1;
+        const attention = getSectionAttention(section);
 
         return (
           <div
@@ -243,13 +258,22 @@ export default function GenerationsPanel({
                 </p>
               </button>
               <div className="flex shrink-0 items-center gap-1">
-                {hasDuplicateSelected && (
+                {attention.hasDuplicateSelected && (
                   <span
                     data-testid={`generation-duplicate-selected-badge-${section.section_uid}`}
                     className="rounded bg-red-100 px-1.5 py-0.5 text-[11px] font-medium text-red-700"
                     title="Multiple selected variants"
                   >
                     {selectedVariants.length} selected
+                  </span>
+                )}
+                {attention.hasStaleSelected && (
+                  <span
+                    data-testid={`generation-stale-selected-badge-${section.section_uid}`}
+                    className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium text-amber-700"
+                    title="Избраната генерация използва остарели доказателства"
+                  >
+                    остаряла
                   </span>
                 )}
                 <RequirementCoverageBadge coverage={requirementCoverage} />
@@ -289,6 +313,69 @@ export default function GenerationsPanel({
           </div>
         );
       })}
+    </div>
+  );
+}
+
+interface GenerationAttentionSummaryData {
+  attentionSectionCount: number;
+  duplicateSelectedSectionCount: number;
+  staleSelectedSectionCount: number;
+  missingRequirementSectionCount: number;
+}
+
+function GenerationAttentionSummary({
+  summary,
+  showOnlyAttention,
+  onToggle,
+}: {
+  summary: GenerationAttentionSummaryData;
+  showOnlyAttention: boolean;
+  onToggle: () => void;
+}) {
+  if (summary.attentionSectionCount <= 0) return null;
+
+  return (
+    <div
+      data-testid="generation-attention-summary"
+      className="mb-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-900"
+    >
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="space-y-1">
+          <p className="font-medium">
+            {summary.attentionSectionCount}{" "}
+            {summary.attentionSectionCount === 1
+              ? "секция изисква"
+              : "секции изискват"}{" "}
+            внимание
+          </p>
+          <div className="flex flex-wrap gap-1.5 text-[11px]">
+            {summary.duplicateSelectedSectionCount > 0 && (
+              <span className="rounded bg-white px-1.5 py-0.5">
+                дублиран избор: {summary.duplicateSelectedSectionCount}
+              </span>
+            )}
+            {summary.staleSelectedSectionCount > 0 && (
+              <span className="rounded bg-white px-1.5 py-0.5">
+                остарели избрани: {summary.staleSelectedSectionCount}
+              </span>
+            )}
+            {summary.missingRequirementSectionCount > 0 && (
+              <span className="rounded bg-white px-1.5 py-0.5">
+                липсващи изисквания: {summary.missingRequirementSectionCount}
+              </span>
+            )}
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={onToggle}
+          data-testid="generation-attention-filter-toggle"
+          className="shrink-0 rounded border border-blue-300 bg-white px-2 py-1 font-medium text-blue-800 transition hover:bg-blue-100"
+        >
+          {showOnlyAttention ? "Покажи всички" : "Покажи проблемните"}
+        </button>
+      </div>
     </div>
   );
 }
@@ -425,10 +512,67 @@ function GenerationVariantSelector({
 
 function countStaleSelectedSections(sections: SectionGenerations[]): number {
   return sections.filter((section) =>
-    section.variants.some(
-      (variant) => variant.selected && variant.evidence_status === "stale",
-    ),
+    getSectionAttention(section).hasStaleSelected,
   ).length;
+}
+
+function summarizeGenerationAttention(
+  sections: SectionGenerations[],
+): GenerationAttentionSummaryData {
+  return sections.reduce<GenerationAttentionSummaryData>(
+    (summary, section) => {
+      const attention = getSectionAttention(section);
+      if (sectionAttentionCount(attention) > 0) {
+        summary.attentionSectionCount += 1;
+      }
+      if (attention.hasDuplicateSelected) {
+        summary.duplicateSelectedSectionCount += 1;
+      }
+      if (attention.hasStaleSelected) {
+        summary.staleSelectedSectionCount += 1;
+      }
+      if (attention.hasMissingRequirementCoverage) {
+        summary.missingRequirementSectionCount += 1;
+      }
+      return summary;
+    },
+    {
+      attentionSectionCount: 0,
+      duplicateSelectedSectionCount: 0,
+      staleSelectedSectionCount: 0,
+      missingRequirementSectionCount: 0,
+    },
+  );
+}
+
+function sectionNeedsAttention(section: SectionGenerations): boolean {
+  return sectionAttentionCount(getSectionAttention(section)) > 0;
+}
+
+function sectionAttentionCount(attention: {
+  hasDuplicateSelected: boolean;
+  hasStaleSelected: boolean;
+  hasMissingRequirementCoverage: boolean;
+}): number {
+  return [
+    attention.hasDuplicateSelected,
+    attention.hasStaleSelected,
+    attention.hasMissingRequirementCoverage,
+  ].filter(Boolean).length;
+}
+
+function getSectionAttention(section: SectionGenerations) {
+  const selectedVariants = section.variants.filter((variant) => variant.selected);
+  const displayVariant = selectedVariants[0] ?? section.variants[0];
+  const { missing } = coverageCounts(getRequirementCoverage(displayVariant));
+
+  return {
+    hasDuplicateSelected: selectedVariants.length > 1,
+    hasStaleSelected: selectedVariants.some(
+      (variant) => variant.evidence_status === "stale",
+    ),
+    hasMissingRequirementCoverage: missing > 0,
+  };
 }
 
 function GenerationJobProgress({

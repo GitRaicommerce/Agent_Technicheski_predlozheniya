@@ -557,6 +557,13 @@ test.describe("smoke", () => {
         .getByTestId("export-duplicate-selected-warning")
         .getByRole("button")
         .click();
+      await expect(page.getByTestId("generation-attention-summary")).toContainText(
+        "1 секция изисква внимание",
+      );
+      await expect(page.getByTestId("generation-attention-summary")).toContainText(
+        "дублиран избор: 1",
+      );
+      await page.getByTestId("generation-attention-filter-toggle").click();
       await expect(
         page.getByTestId(`generation-section-${sectionUid}`),
       ).toBeVisible();
@@ -751,7 +758,7 @@ test.describe("smoke", () => {
     expect(createResponse.ok()).toBeTruthy();
     const project = (await createResponse.json()) as { id: string };
     const projectId = project.id;
-    await seedProjectState(projectId, {
+    const { sectionUid } = await seedProjectState(projectId, {
       outlineLocked: true,
       staleGeneration: true,
     });
@@ -805,6 +812,15 @@ test.describe("smoke", () => {
       await expect(
         page.getByTestId("generation-stale-selected-action"),
       ).toContainText("1 selected stale section");
+      await expect(page.getByTestId("generation-attention-summary")).toContainText(
+        "1 секция изисква внимание",
+      );
+      await expect(page.getByTestId("generation-attention-summary")).toContainText(
+        "остарели избрани: 1",
+      );
+      await expect(
+        page.getByTestId(`generation-stale-selected-badge-${sectionUid}`),
+      ).toContainText("остаряла");
 
       await page.getByTestId("generation-stale-regenerate-button").click();
 
