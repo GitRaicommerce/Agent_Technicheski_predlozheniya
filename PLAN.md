@@ -54,6 +54,7 @@
 - Added requirement-aware drafting and verification: outline sections now preserve structured checklist items, drafting prompts include a per-section checklist, generated variants store deterministic requirement coverage metadata, and verifier marks missing checklist items as review gaps.
 - Surfaced generated-text requirement coverage in the Generations panel and added a DOCX pre-export check that blocks export when selected sections still miss tender checklist requirements.
 - Improved logical reconstruction of requirement text extracted from noisy PDFs so wrapped list items and scored sentences are kept as complete checklist requirements, with regression coverage for no-outline risk/quality/environment/specific tender scenarios.
+- Re-ran the Pernik requirement-checklist calibration after wrapped-line reconstruction; extracted requirements increased from 92 to 97 and obviously truncated candidate requirements dropped from 50 to 15 in the local diagnostic check.
 
 ## Active Goals
 
@@ -65,9 +66,10 @@
 ## Next Recommended Steps
 
 1. Regenerate the stale Pernik sections after the current fixes and re-run the proposal gap analysis against the winning technical proposal.
-2. Expand generated documentation with more precise backend endpoint and workflow coverage.
-3. Build broader regression coverage around common tender scenarios, including explicit outline, no outline, specific requirements, quality/risk/environment-heavy tenders, noisy PDF extraction, and DOCX export readiness.
-4. Add quality gates around proposal depth and checklist coverage so short/generic generated proposals are flagged before export or final review.
+2. Reduce remaining requirement-checklist noise from administrative/procurement-only clauses and PDF text-cell joins that still produce overly broad or irrelevant checklist items.
+3. Expand generated documentation with more precise backend endpoint and workflow coverage.
+4. Build broader regression coverage around common tender scenarios, including explicit outline, no outline, specific requirements, quality/risk/environment-heavy tenders, noisy PDF extraction, and DOCX export readiness.
+5. Add quality gates around proposal depth and checklist coverage so short/generic generated proposals are flagged before export or final review.
 
 ## Notes
 
