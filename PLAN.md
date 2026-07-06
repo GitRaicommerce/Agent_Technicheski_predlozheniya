@@ -66,6 +66,7 @@
 - Added a universal drafting blueprint layer: section checklist items are now grouped by category/topic into structural guidance for the drafting prompt, and the generated blueprint is saved with generation metadata for later diagnostics.
 - Made the DOCX export proposal-depth gate blueprint-aware, so selected sections with many requirement structure groups need a developed narrative even when the raw checklist count is modest.
 - Surfaced blueprint-aware depth details in the DOCX export warning so users can see when a shallow section is blocked because it has many requirement structure groups.
+- Added deterministic common-scenario regression tests that cover no-outline fallback, explicit outline preservation, requirement checklist attachment, drafting blueprint grouping, and blueprint-aware proposal-depth gating.
 
 ## Active Goals
 
@@ -81,8 +82,8 @@
 3. Calibrate the drafting blueprint and blueprint-aware depth thresholds against regenerated Pernik output and the winning proposal so structural groups become closer to the expected work-program narrative.
 4. Reduce remaining requirement-checklist noise from PDF text-cell joins and overly broad clauses that still produce awkward but technically relevant checklist items.
 5. Expand generated documentation with more precise backend endpoint and workflow coverage.
-6. Build broader regression coverage around common tender scenarios, including explicit outline, no outline, specific requirements, quality/risk/environment-heavy tenders, noisy PDF extraction, and DOCX export readiness.
-7. Expand blueprint-aware proposal-depth regression scenarios so narrow, medium, and complex tenders are checked without blocking legitimately short sections.
+6. Continue broadening common tender regression coverage with more real-world noisy PDF extraction and DOCX readiness combinations.
+7. Re-run the Pernik calibration after resolving duplicate selected variants and stale generations, then compare the regenerated output against the winning proposal.
 
 ## Notes
 

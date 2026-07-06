@@ -166,8 +166,9 @@ TP AI is a monorepo for an AI-assisted workflow that prepares technical proposal
 
 ## Test Inventory
 
-- Total backend tests discovered: `121`
+- Total backend tests discovered: `124`
 - `test_agents.py`: `27`
+- `test_common_proposal_scenarios.py`: `3`
 - `test_drafting_blueprint.py`: `2`
 - `test_export.py`: `9`
 - `test_files.py`: `10`
