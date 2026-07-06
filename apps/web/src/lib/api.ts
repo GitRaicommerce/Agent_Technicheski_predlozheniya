@@ -485,6 +485,14 @@ export const api = {
   export: {
     readiness: (projectId: string) =>
       apiFetch<ExportReadiness>(`/api/v1/export/${projectId}/readiness`),
+    readinessReport: async (projectId: string) => {
+      const response = await fetch(
+        buildUrl(`/api/v1/export/${projectId}/readiness/report`),
+        { cache: "no-store" },
+      );
+      await ensureOk(response);
+      return response.text();
+    },
     docx: async (projectId: string) => {
       const response = await fetch(buildUrl(`/api/v1/export/${projectId}/docx`));
       await ensureOk(response);

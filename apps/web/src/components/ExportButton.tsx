@@ -21,6 +21,7 @@ export default function ExportButton({
   onOpenGenerations,
 }: Props) {
   const [loading, setLoading] = useState(false);
+  const [reportLoading, setReportLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [duplicateSelectedWarning, setDuplicateSelectedWarning] = useState(false);
   const [duplicateSelectedCount, setDuplicateSelectedCount] =
@@ -36,6 +37,11 @@ export default function ExportButton({
     useState<QualityWarningSummary | null>(null);
   const { toast } = useToast();
   const qualityWarningDetail = formatQualityWarningSummary(qualityWarningSummary);
+  const hasReadinessWarnings =
+    duplicateSelectedWarning ||
+    staleWarning ||
+    missingRequirementWarning ||
+    qualityWarning;
 
   const applyReadinessWarnings = (source: unknown, message = "") => {
     let handled = false;
@@ -88,12 +94,10 @@ export default function ExportButton({
       }
 
       const blob = await api.export.docx(projectId);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `TP_${projectName.slice(0, 50).replace(/\s+/g, "_")}.docx`;
-      a.click();
-      URL.revokeObjectURL(url);
+      downloadBlob(
+        blob,
+        `TP_${projectName.slice(0, 50).replace(/\s+/g, "_")}.docx`,
+      );
       toast("DOCX файлът е изтеглен.", "success");
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Грешка при експорт";
@@ -102,6 +106,28 @@ export default function ExportButton({
       }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDownloadReadinessReport = async () => {
+    setReportLoading(true);
+    setError(null);
+
+    try {
+      const report = await api.export.readinessReport(projectId);
+      downloadBlob(
+        new Blob([report], { type: "text/markdown;charset=utf-8" }),
+        `TP_${projectName.slice(0, 50).replace(/\s+/g, "_")}_readiness.md`,
+      );
+      toast("Readiness отчетът е изтеглен.", "success");
+    } catch (err: unknown) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Грешка при изтегляне на readiness отчета",
+      );
+    } finally {
+      setReportLoading(false);
     }
   };
 
@@ -217,9 +243,30 @@ export default function ExportButton({
         </div>
       )}
 
+      {hasReadinessWarnings && (
+        <button
+          type="button"
+          onClick={handleDownloadReadinessReport}
+          disabled={reportLoading}
+          data-testid="export-readiness-report-button"
+          className="mt-2 rounded border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+        >
+          {reportLoading ? "Изтегля се..." : "Свали readiness report"}
+        </button>
+      )}
+
       {error && <p className="text-red-500 text-xs mt-1">{error}</p>}
     </div>
   );
+}
+
+function downloadBlob(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 function isStaleExportError(err: unknown, message: string): boolean {

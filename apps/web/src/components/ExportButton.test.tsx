@@ -26,6 +26,7 @@ vi.mock("@/lib/api", async () => {
       export: {
         ...actual.api.export,
         readiness: vi.fn(),
+        readinessReport: vi.fn(),
         docx: vi.fn(),
       },
     },
@@ -33,6 +34,7 @@ vi.mock("@/lib/api", async () => {
 });
 
 const readinessMock = vi.mocked(api.export.readiness);
+const readinessReportMock = vi.mocked(api.export.readinessReport);
 const exportMock = vi.mocked(api.export.docx);
 
 describe("ExportButton", () => {
@@ -45,6 +47,7 @@ describe("ExportButton", () => {
       ready: true,
       status: "ready",
     });
+    readinessReportMock.mockResolvedValue("# readiness");
 
     const originalCreateElement = document.createElement.bind(document);
     vi.spyOn(document, "createElement").mockImplementation(((tagName: string) => {
@@ -233,6 +236,33 @@ describe("ExportButton", () => {
     await userEvent.click(screen.getByRole("button", { name: "Отвори Генерации" }));
 
     expect(openGenerationsMock).toHaveBeenCalled();
+  });
+
+  it("downloads markdown readiness report after blocked preflight", async () => {
+    readinessMock.mockResolvedValue({
+      project_id: "project-1",
+      ready: false,
+      status: "blocked",
+      duplicate_selected_count: 1,
+      duplicate_selected_sections: [{ section_uid: "s1" }],
+    });
+    readinessReportMock.mockResolvedValue("# DOCX export readiness report");
+
+    render(<ExportButton projectId="project-1" projectName="Project Alpha" />);
+
+    await userEvent.click(screen.getByTestId("export-docx-button"));
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Свали readiness report" }),
+    );
+
+    expect(readinessReportMock).toHaveBeenCalledWith("project-1");
+    expect(createObjectURLMock).toHaveBeenCalledWith(expect.any(Blob));
+    expect(clickMock).toHaveBeenCalled();
+    expect(revokeObjectURLMock).toHaveBeenCalledWith("blob:test-url");
+    expect(toastMock).toHaveBeenCalledWith(
+      "Readiness отчетът е изтеглен.",
+      "success",
+    );
   });
 
   it("shows multiple readiness warnings from one preflight response", async () => {
