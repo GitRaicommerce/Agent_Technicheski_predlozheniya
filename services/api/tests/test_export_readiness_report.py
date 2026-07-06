@@ -20,14 +20,19 @@ def test_render_export_readiness_report_includes_blockers_and_actions():
             "duplicate_selected_sections": [
                 {
                     "section_uid": "sec-duplicate",
+                    "section_title": "Duplicate section title",
                     "selected_count": 2,
                     "generation_ids": ["gen-1", "gen-2"],
                 }
             ],
             "stale_sections": ["sec-stale"],
+            "stale_section_details": [
+                {"section_uid": "sec-stale", "section_title": "Stale section title"}
+            ],
             "missing_requirement_sections": [
                 {
                     "section_uid": "sec-missing",
+                    "section_title": "Missing section title",
                     "missing_count": 2,
                     "missing_requirement_ids": ["req-1", "req-2"],
                     "missing_items": [
@@ -38,6 +43,7 @@ def test_render_export_readiness_report_includes_blockers_and_actions():
             "quality_sections": [
                 {
                     "section_uid": "sec-shallow",
+                    "section_title": "Shallow section title",
                     "word_count": 180,
                     "min_words": 1200,
                     "sentence_count": 3,
@@ -52,10 +58,11 @@ def test_render_export_readiness_report_includes_blockers_and_actions():
 
     assert "# DOCX export readiness report" in report
     assert "| duplicate_selected | 1 | Duplicates |" in report
-    assert "`sec-duplicate`: 2 selected variants (gen-1, gen-2)" in report
-    assert "`sec-stale`" in report
+    assert "Duplicate section title (`sec-duplicate`): 2 selected variants (gen-1, gen-2)" in report
+    assert "Stale section title (`sec-stale`)" in report
+    assert "Missing section title (`sec-missing`): 2 missing (req-1, req-2)" in report
     assert "`req-1`: Describe the detailed schedule." in report
-    assert "| `sec-shallow` | 180 | 1200 | 3 | 10 | 2 | 6 | too_short_for_requirements |" in report
+    assert "| Shallow section title (`sec-shallow`) | 180 | 1200 | 3 | 10 | 2 | 6 | too_short_for_requirements |" in report
     assert "Изберете точно една генерирана версия" in report
     assert "Регенерирайте избраните stale секции" in report
 

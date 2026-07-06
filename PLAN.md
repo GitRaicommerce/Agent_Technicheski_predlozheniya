@@ -68,6 +68,7 @@
 - Surfaced blueprint-aware depth details in the DOCX export warning so users can see when a shallow section is blocked because it has many requirement structure groups.
 - Added deterministic common-scenario regression tests that cover no-outline fallback, explicit outline preservation, requirement checklist attachment, drafting blueprint grouping, and blueprint-aware proposal-depth gating.
 - Added a non-mutating Markdown DOCX export readiness report endpoint for calibration runs, summarizing duplicate selected variants, stale evidence, missing requirements, shallow/blueprint-heavy sections, and recommended next actions.
+- Enriched export readiness diagnostics with outline section titles so calibration reports are readable by humans instead of listing only section UUIDs.
 
 ## Active Goals
 

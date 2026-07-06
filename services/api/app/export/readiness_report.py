@@ -18,6 +18,18 @@ def _list(values: list[str], *, empty: str = "няма") -> str:
     return ", ".join(values) if values else empty
 
 
+def _table_cell(value: Any) -> str:
+    return str(value or "").replace("|", "\\|")
+
+
+def _section_label(section: dict[str, Any]) -> str:
+    section_uid = str(section.get("section_uid") or "n/a")
+    title = _truncate(section.get("section_title"), limit=90)
+    if title:
+        return f"{title} (`{section_uid}`)"
+    return f"`{section_uid}`"
+
+
 def _blocker_actions(readiness: dict[str, Any]) -> list[str]:
     actions: list[str] = []
     blocker_codes = {
@@ -77,9 +89,9 @@ def render_export_readiness_report(readiness: dict[str, Any]) -> str:
                 "| "
                 + " | ".join(
                     [
-                        str(blocker.get("code", "")),
+                        _table_cell(blocker.get("code", "")),
                         str(_as_int(blocker.get("count"))),
-                        _truncate(blocker.get("message")),
+                        _table_cell(_truncate(blocker.get("message"))),
                     ]
                 )
                 + " |"
@@ -100,20 +112,26 @@ def render_export_readiness_report(readiness: dict[str, Any]) -> str:
             ]
             lines.append(
                 "- "
-                f"`{section.get('section_uid', 'n/a')}`: "
+                f"{_section_label(section)}: "
                 f"{_as_int(section.get('selected_count'))} selected variants "
                 f"({_list(generation_ids)})"
             )
 
-    stale_sections = [
-        str(item)
-        for item in readiness.get("stale_sections") or []
-        if item is not None
+    stale_section_details = [
+        item
+        for item in readiness.get("stale_section_details") or []
+        if isinstance(item, dict)
     ]
-    if stale_sections:
+    if not stale_section_details:
+        stale_section_details = [
+            {"section_uid": str(item)}
+            for item in readiness.get("stale_sections") or []
+            if item is not None
+        ]
+    if stale_section_details:
         lines.extend(["", "## Stale Evidence Sections", ""])
-        for section_uid in stale_sections:
-            lines.append(f"- `{section_uid}`")
+        for section in stale_section_details:
+            lines.append(f"- {_section_label(section)}")
 
     missing_sections = [
         item
@@ -130,7 +148,7 @@ def render_export_readiness_report(readiness: dict[str, Any]) -> str:
             ]
             lines.append(
                 "- "
-                f"`{section.get('section_uid', 'n/a')}`: "
+                f"{_section_label(section)}: "
                 f"{_as_int(section.get('missing_count'))} missing "
                 f"({_list(missing_ids)})"
             )
@@ -161,14 +179,14 @@ def render_export_readiness_report(readiness: dict[str, Any]) -> str:
                 "| "
                 + " | ".join(
                     [
-                        f"`{section.get('section_uid', 'n/a')}`",
+                        _table_cell(_section_label(section)),
                         str(_as_int(section.get("word_count"))),
                         str(_as_int(section.get("min_words"))),
                         str(_as_int(section.get("sentence_count"))),
                         str(_as_int(section.get("min_sentences"))),
                         str(_as_int(section.get("requirement_count"))),
                         str(_as_int(section.get("blueprint_group_count"))),
-                        _list(issue_codes),
+                        _table_cell(_list(issue_codes)),
                     ]
                 )
                 + " |"

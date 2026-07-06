@@ -69,7 +69,23 @@ def _walk_outline_sections(sections: list[dict]):
         yield from _walk_outline_sections(children)
 
 
-async def _load_outline_requirement_counts(project_id: str, db: AsyncSession) -> dict[str, int]:
+def _outline_requirement_count(section: dict) -> int:
+    checklist_items = section.get("requirement_checklist_items")
+    requirement_ids = section.get("requirement_ids")
+    requirements = section.get("requirements")
+    if isinstance(checklist_items, list) and checklist_items:
+        return len(checklist_items)
+    if isinstance(requirement_ids, list) and requirement_ids:
+        return len(requirement_ids)
+    if isinstance(requirements, list) and requirements:
+        return len(requirements)
+    return 0
+
+
+async def _load_outline_section_metadata(
+    project_id: str,
+    db: AsyncSession,
+) -> dict[str, dict]:
     result = await db.execute(
         select(TpOutline)
         .where(TpOutline.project_id == project_id)
@@ -81,22 +97,69 @@ async def _load_outline_requirement_counts(project_id: str, db: AsyncSession) ->
         return {}
 
     sections = outline.outline_json.get("sections", outline.outline_json.get("outline", []))
-    counts: dict[str, int] = {}
+    metadata: dict[str, dict] = {}
     for section in _walk_outline_sections(sections):
         section_uid = section.get("uid") or section.get("section_uid")
         if not section_uid:
             continue
 
-        checklist_items = section.get("requirement_checklist_items")
-        requirement_ids = section.get("requirement_ids")
-        requirements = section.get("requirements")
-        if isinstance(checklist_items, list) and checklist_items:
-            counts[section_uid] = len(checklist_items)
-        elif isinstance(requirement_ids, list) and requirement_ids:
-            counts[section_uid] = len(requirement_ids)
-        elif isinstance(requirements, list) and requirements:
-            counts[section_uid] = len(requirements)
-    return counts
+        metadata[section_uid] = {
+            "section_title": section.get("title"),
+            "requirement_count": _outline_requirement_count(section),
+        }
+    return metadata
+
+
+def _requirement_counts_from_metadata(metadata: dict[str, dict]) -> dict[str, int]:
+    return {
+        section_uid: requirement_count
+        for section_uid, item in metadata.items()
+        if isinstance((requirement_count := item.get("requirement_count")), int)
+        and requirement_count > 0
+    }
+
+
+def _section_title(
+    section_uid: str,
+    outline_section_metadata: dict[str, dict],
+) -> str | None:
+    metadata = outline_section_metadata.get(section_uid)
+    if not isinstance(metadata, dict):
+        return None
+    title = metadata.get("section_title")
+    return title if isinstance(title, str) and title.strip() else None
+
+
+def _attach_section_titles(
+    sections: list[dict],
+    outline_section_metadata: dict[str, dict],
+) -> list[dict]:
+    titled_sections = []
+    for section in sections:
+        titled_section = dict(section)
+        section_uid = str(titled_section.get("section_uid") or "")
+        title = _section_title(section_uid, outline_section_metadata)
+        if title:
+            titled_section["section_title"] = title
+        titled_sections.append(titled_section)
+    return titled_sections
+
+
+def _stale_section_details(
+    stale_sections: list[str],
+    outline_section_metadata: dict[str, dict],
+) -> list[dict]:
+    return [
+        {
+            "section_uid": section_uid,
+            **(
+                {"section_title": title}
+                if (title := _section_title(section_uid, outline_section_metadata))
+                else {}
+            ),
+        }
+        for section_uid in stale_sections
+    ]
 
 
 def _quality_review_issue(
@@ -195,16 +258,35 @@ async def _build_export_readiness(
         for generation in selected_generations
         if (issue := _missing_requirement_coverage(generation))
     ]
-    outline_requirement_counts = (
-        await _load_outline_requirement_counts(project_id, db)
+    outline_section_metadata = (
+        await _load_outline_section_metadata(project_id, db)
         if selected_generations
         else {}
+    )
+    outline_requirement_counts = _requirement_counts_from_metadata(
+        outline_section_metadata
     )
     quality_sections = [
         issue
         for generation in selected_generations
         if (issue := _quality_review_issue(generation, outline_requirement_counts))
     ]
+    duplicate_sections = _attach_section_titles(
+        duplicate_sections,
+        outline_section_metadata,
+    )
+    missing_requirement_sections = _attach_section_titles(
+        missing_requirement_sections,
+        outline_section_metadata,
+    )
+    quality_sections = _attach_section_titles(
+        quality_sections,
+        outline_section_metadata,
+    )
+    stale_section_details = _stale_section_details(
+        stale_sections,
+        outline_section_metadata,
+    )
 
     missing_requirement_count = sum(
         section["missing_count"] for section in missing_requirement_sections
@@ -254,6 +336,7 @@ async def _build_export_readiness(
         "duplicate_selected_sections": duplicate_sections,
         "duplicate_selected_count": len(duplicate_sections),
         "stale_sections": stale_sections,
+        "stale_section_details": stale_section_details,
         "stale_section_count": len(stale_sections),
         "missing_requirement_sections": missing_requirement_sections,
         "missing_requirement_count": missing_requirement_count,

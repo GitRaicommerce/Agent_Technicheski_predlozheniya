@@ -206,8 +206,21 @@ async def test_export_readiness_report_returns_markdown_summary(client, mock_db)
 
     selected_result = MagicMock()
     selected_result.scalars.return_value.all.return_value = [shallow_generation]
+    outline = MagicMock()
+    outline.outline_json = {
+        "sections": [
+            {
+                "uid": "sec-shallow",
+                "title": "Blueprint heavy section",
+                "requirement_checklist_items": [
+                    {"id": "req-1"},
+                    {"id": "req-2"},
+                ],
+            }
+        ]
+    }
     outline_result = MagicMock()
-    outline_result.scalar_one_or_none.return_value = None
+    outline_result.scalar_one_or_none.return_value = outline
     mock_db.execute = AsyncMock(side_effect=[selected_result, outline_result])
 
     resp = await client.get(f"/api/v1/export/{project.id}/readiness/report")
@@ -217,6 +230,7 @@ async def test_export_readiness_report_returns_markdown_summary(client, mock_db)
     assert "# DOCX export readiness report" in resp.text
     assert "shallow_sections" in resp.text
     assert "sec-shallow" in resp.text
+    assert "Blueprint heavy section" in resp.text
     assert "Blueprint groups" in resp.text
     assert "too_short_for_requirements" in resp.text
 
