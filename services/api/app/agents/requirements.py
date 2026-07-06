@@ -290,8 +290,84 @@ def _split_sentences(text: str) -> list[str]:
     return result
 
 
+def _line_looks_complete(line: str) -> bool:
+    return bool(re.search(r"[\.;:!?]\s*$", normalize_text(line)))
+
+
+def _ends_with_open_connector(line: str) -> bool:
+    normalized = _normalize_for_match(line)
+    connectors = (
+        "и",
+        "или",
+        "с",
+        "със",
+        "в",
+        "във",
+        "на",
+        "за",
+        "към",
+        "от",
+        "при",
+        "чрез",
+        "по",
+        "между",
+    )
+    return any(
+        normalized == connector or normalized.endswith(f" {connector}")
+        for connector in connectors
+    )
+
+
+def _should_join_wrapped_line(current: str, next_line: str) -> bool:
+    current = normalize_text(current)
+    next_line = normalize_text(next_line)
+    if not current or not next_line:
+        return False
+    if _looks_like_list_item(next_line):
+        return False
+    if current.endswith(":"):
+        return False
+    if _looks_like_list_item(current) and not _line_looks_complete(current):
+        return True
+    if _contains_requirement_cue(current) and not _line_looks_complete(current):
+        return True
+    if current.endswith((",", "(", "/", "-")):
+        return True
+    if _ends_with_open_connector(current):
+        return True
+    return next_line[:1].islower() and not _line_looks_complete(current)
+
+
+def _logical_lines_from_text(text: str) -> list[str]:
+    raw_lines = [
+        line.strip()
+        for line in str(text or "").splitlines()
+        if line.strip()
+    ]
+    logical_lines: list[str] = []
+    current = ""
+
+    for raw_line in raw_lines:
+        line = normalize_text(raw_line)
+        if not line:
+            continue
+
+        if current and _should_join_wrapped_line(current, line):
+            joiner = "" if current.endswith("-") else " "
+            current = f"{current.rstrip('-')}{joiner}{line}"
+            continue
+
+        if current:
+            logical_lines.append(current)
+        current = line
+
+    if current:
+        logical_lines.append(current)
+    return logical_lines
+
+
 def _candidate_requirements_from_text(text: str) -> list[str]:
-    lines = [line.strip() for line in str(text or "").splitlines() if line.strip()]
+    lines = _logical_lines_from_text(text)
     if not lines:
         lines = [normalize_text(text)] if normalize_text(text) else []
 

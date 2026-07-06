@@ -41,6 +41,34 @@ def test_extract_requirement_checklist_splits_tp_list_items():
     assert all(item.source_page == 42 for item in items)
 
 
+def test_extract_requirement_checklist_reconstructs_wrapped_pdf_list_items():
+    chunks = [
+        make_chunk(
+            "c-wrapped-list",
+            (
+                "Техническото предложение следва да съдържа:\n"
+                "1. описание на организацията за\n"
+                "изпълнение, включително отговорности и ресурси;\n"
+                "2. мерки за контрол на\n"
+                "качеството и приемане на изпълнените работи;\n"
+                "3. организация на комуникацията\n"
+                "с Възложителя и строителния надзор."
+            ),
+            page=43,
+        )
+    ]
+
+    items = extract_requirement_checklist(chunks)
+
+    assert len(items) == 3
+    assert any("отговорности и ресурси" in item.text for item in items)
+    assert any("качеството и приемане" in item.text for item in items)
+    assert any("Възложителя и строителния надзор" in item.text for item in items)
+    assert any(item.category == "organization" for item in items)
+    assert any(item.category == "quality" for item in items)
+    assert any(item.category == "communication" for item in items)
+
+
 def test_extract_requirement_checklist_keeps_scored_requirements():
     chunks = [
         make_chunk(
@@ -56,6 +84,28 @@ def test_extract_requirement_checklist_keeps_scored_requirements():
     assert items[0].importance == "scored"
     assert items[0].category == "risk"
     assert "Управление на риска" in items[0].suggested_section
+
+
+def test_extract_requirement_checklist_reconstructs_wrapped_scored_sentence():
+    chunks = [
+        make_chunk(
+            "c-wrapped-scored",
+            (
+                "Ще се оценява предложената методология за управление на\n"
+                "риска, идентифициране на конкретни рискове и мерки при\n"
+                "непредвидени обстоятелства."
+            ),
+            page=56,
+        )
+    ]
+
+    items = extract_requirement_checklist(chunks)
+
+    assert len(items) == 1
+    assert items[0].importance == "scored"
+    assert items[0].category == "risk"
+    assert "идентифициране на конкретни рискове" in items[0].text
+    assert "непредвидени обстоятелства" in items[0].text
 
 
 def test_extract_requirement_checklist_ignores_clear_admin_noise_without_tp_context():

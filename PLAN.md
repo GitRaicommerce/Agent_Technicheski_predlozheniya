@@ -53,6 +53,7 @@
 - Added a universal fallback for tender-specific requirements that do not fit predefined categories, and connected requirement checklist items to outline sections through `requirement_ids`, missing-section creation, and outline coverage summaries.
 - Added requirement-aware drafting and verification: outline sections now preserve structured checklist items, drafting prompts include a per-section checklist, generated variants store deterministic requirement coverage metadata, and verifier marks missing checklist items as review gaps.
 - Surfaced generated-text requirement coverage in the Generations panel and added a DOCX pre-export check that blocks export when selected sections still miss tender checklist requirements.
+- Improved logical reconstruction of requirement text extracted from noisy PDFs so wrapped list items and scored sentences are kept as complete checklist requirements, with regression coverage for no-outline risk/quality/environment/specific tender scenarios.
 
 ## Active Goals
 
@@ -63,11 +64,10 @@
 
 ## Next Recommended Steps
 
-1. Improve logical sentence reconstruction in requirement extraction so PDF line breaks and table-cell fragments do not produce truncated checklist items.
-2. Regenerate the stale Pernik sections after the current fixes and re-run the proposal gap analysis against the winning technical proposal.
-3. Expand generated documentation with more precise backend endpoint and workflow coverage.
-4. Build broader regression coverage around common tender scenarios, including explicit outline, no outline, specific requirements, quality/risk/environment-heavy tenders, and noisy PDF extraction.
-5. Improve logical sentence reconstruction in requirement extraction where real PDF line breaks and table-cell fragments still create truncated checklist items.
+1. Regenerate the stale Pernik sections after the current fixes and re-run the proposal gap analysis against the winning technical proposal.
+2. Expand generated documentation with more precise backend endpoint and workflow coverage.
+3. Build broader regression coverage around common tender scenarios, including explicit outline, no outline, specific requirements, quality/risk/environment-heavy tenders, noisy PDF extraction, and DOCX export readiness.
+4. Add quality gates around proposal depth and checklist coverage so short/generic generated proposals are flagged before export or final review.
 
 ## Notes
 
