@@ -12,6 +12,10 @@ import structlog
 from sqlalchemy import update
 
 from app.agents.context import format_grounding_context
+from app.agents.drafting_blueprint import (
+    build_drafting_blueprint,
+    format_drafting_blueprint_for_prompt,
+)
 from app.agents.requirement_coverage import (
     assess_requirement_coverage,
     format_requirement_items_for_prompt,
@@ -150,12 +154,21 @@ async def run_drafting(
         normalized_requirement_items
     )
     grounding_context_text = format_grounding_context(project_grounding_context)
+    drafting_blueprint = build_drafting_blueprint(
+        section_title=section_title,
+        requirement_items=normalized_requirement_items,
+        project_grounding_context=project_grounding_context,
+    )
+    drafting_blueprint_text = format_drafting_blueprint_for_prompt(
+        drafting_blueprint
+    )
 
     user_message = "\n\n".join(
         part
         for part in [
             f"SECTION: {section_title}\nREQUIREMENTS:\n{requirements_text}",
             requirement_checklist_text,
+            drafting_blueprint_text,
             (
                 "PROJECT GROUNDING CONTEXT:\n"
                 f"[UNTRUSTED DATA START]\n{grounding_context_text}\n[UNTRUSTED DATA END]"
@@ -207,6 +220,8 @@ async def run_drafting(
                 used_sources["grounding_context"] = project_grounding_context
             if normalized_requirement_items:
                 used_sources["section_requirement_items"] = normalized_requirement_items
+            if drafting_blueprint.get("groups") or drafting_blueprint.get("context_cues"):
+                used_sources["drafting_blueprint"] = drafting_blueprint
             gen = Generation(
                 id=str(uuid.uuid4()),
                 project_id=project_id,

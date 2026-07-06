@@ -81,7 +81,9 @@ def normalize_requirement_items(
                 "id": requirement_id,
                 "text": text,
                 "importance": item.get("importance") or "mandatory",
+                "category": item.get("category") or "",
                 "category_label": item.get("category_label") or "",
+                "topic": item.get("topic") or "",
                 "coverage_question": item.get("coverage_question") or "",
                 "source_chunk_id": item.get("source_chunk_id") or "",
             }
@@ -109,7 +111,9 @@ def normalize_requirement_items(
                 "id": requirement_id,
                 "text": cleaned,
                 "importance": "mandatory",
+                "category": "",
                 "category_label": "",
+                "topic": "",
                 "coverage_question": "",
                 "source_chunk_id": "",
             }

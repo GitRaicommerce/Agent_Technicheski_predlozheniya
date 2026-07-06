@@ -125,11 +125,11 @@ async def test_drafting_prompt_and_saved_generation_include_grounding_context(mo
     saved_generation = mock_db.add.call_args.args[0]
 
     assert "PROJECT GROUNDING CONTEXT" in prompt
+    assert "DRAFTING BLUEPRINT" in prompt
     assert "Геодезия" in prompt
     assert "ПУСО" in prompt
-    assert saved_generation.used_sources_json == {
-        "grounding_context": grounding_context
-    }
+    assert saved_generation.used_sources_json["grounding_context"] == grounding_context
+    assert "drafting_blueprint" in saved_generation.used_sources_json
     assert result["generation_ids"]["variant_1"] == saved_generation.id
 
 
@@ -181,6 +181,7 @@ async def test_drafting_prompt_and_saved_generation_include_requirement_coverage
             "id": "req-schedule",
             "text": "Следва да се представи подробен линеен график за изпълнение.",
             "importance": "mandatory",
+            "category": "schedule",
             "category_label": "График и срокове",
             "coverage_question": "Покрит ли е линейният график?",
         }
@@ -223,6 +224,7 @@ async def test_drafting_prompt_and_saved_generation_include_requirement_coverage
     saved_generation = mock_db.add.call_args.args[0]
 
     assert "SECTION REQUIREMENT CHECKLIST" in prompt
+    assert "DRAFTING BLUEPRINT" in prompt
     assert "id=req-schedule" in prompt
     assert saved_generation.flags_json["requirement_coverage"]["missing_ids"] == []
     assert saved_generation.flags_json["requirement_coverage"]["covered_ids"] == [
@@ -231,5 +233,11 @@ async def test_drafting_prompt_and_saved_generation_include_requirement_coverage
     assert (
         saved_generation.used_sources_json["section_requirement_items"][0]["id"]
         == "req-schedule"
+    )
+    assert (
+        saved_generation.used_sources_json["drafting_blueprint"]["groups"][0][
+            "category"
+        ]
+        == "schedule"
     )
     assert result["generation_ids"]["variant_1"] == saved_generation.id

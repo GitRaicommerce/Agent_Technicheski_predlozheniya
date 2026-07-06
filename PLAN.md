@@ -63,6 +63,7 @@
 - Added an explicit DOCX export readiness preflight endpoint and connected the Export button to it so duplicate selections, stale evidence, missing requirement coverage, and shallow selected sections are reported together before download instead of one blocker at a time.
 - Re-ran the aggregated readiness preflight against the real Pernik project without mutating data; it currently reports 14 sections with duplicate selected variants and 14 selected sections with stale evidence, with no missing-requirement or shallow-section blockers visible yet.
 - Added a targeted stale-selected regeneration flow: the backend can enqueue a drafting job for exactly the selected stale sections, and the Generations panel now shows a bulk regenerate action when stale selected sections are present.
+- Added a universal drafting blueprint layer: section checklist items are now grouped by category/topic into structural guidance for the drafting prompt, and the generated blueprint is saved with generation metadata for later diagnostics.
 
 ## Active Goals
 
@@ -75,10 +76,11 @@
 
 1. Resolve Pernik's legacy duplicate selected generations through the Generations panel by choosing one variant per ambiguous section, then re-run the aggregated export readiness check.
 2. Use the Generations panel bulk stale-regeneration action for Pernik after duplicate selections are resolved, then re-run export readiness and the proposal gap analysis against the winning technical proposal.
-3. Reduce remaining requirement-checklist noise from PDF text-cell joins and overly broad clauses that still produce awkward but technically relevant checklist items.
-4. Expand generated documentation with more precise backend endpoint and workflow coverage.
-5. Build broader regression coverage around common tender scenarios, including explicit outline, no outline, specific requirements, quality/risk/environment-heavy tenders, noisy PDF extraction, and DOCX export readiness.
-6. Calibrate the proposal-depth quality thresholds against regenerated Pernik output and the winning proposal so the gate catches shallow sections without blocking legitimately narrow sections.
+3. Calibrate the drafting blueprint against regenerated Pernik output and the winning proposal so structural groups become closer to the expected work-program narrative.
+4. Reduce remaining requirement-checklist noise from PDF text-cell joins and overly broad clauses that still produce awkward but technically relevant checklist items.
+5. Expand generated documentation with more precise backend endpoint and workflow coverage.
+6. Build broader regression coverage around common tender scenarios, including explicit outline, no outline, specific requirements, quality/risk/environment-heavy tenders, noisy PDF extraction, and DOCX export readiness.
+7. Calibrate the proposal-depth quality thresholds against regenerated Pernik output and the winning proposal so the gate catches shallow sections without blocking legitimately narrow sections.
 
 ## Notes
 
