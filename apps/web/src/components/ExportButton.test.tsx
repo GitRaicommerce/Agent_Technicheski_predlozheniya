@@ -159,6 +159,41 @@ describe("ExportButton", () => {
     expect(openGenerationsMock).toHaveBeenCalled();
   });
 
+  it("shows quality warning for shallow generated sections", async () => {
+    const openGenerationsMock = vi.fn();
+    exportMock.mockRejectedValue(
+      new ApiError("Pre-export check failed", 409, {
+        detail: {
+          quality_section_count: 1,
+          quality_sections: [
+            {
+              section_uid: "s1",
+              word_count: 12,
+              min_words: 360,
+            },
+          ],
+        },
+      }),
+    );
+
+    render(
+      <ExportButton
+        projectId="project-1"
+        projectName="Project Alpha"
+        onOpenGenerations={openGenerationsMock}
+      />,
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Експорт .docx" }));
+
+    expect(await screen.findByTestId("export-quality-warning"))
+      .toHaveTextContent("1 секция");
+
+    await userEvent.click(screen.getByRole("button", { name: "Отвори Генерации" }));
+
+    expect(openGenerationsMock).toHaveBeenCalled();
+  });
+
   it("shows generic export errors", async () => {
     exportMock.mockRejectedValue(new Error("Export failed"));
 

@@ -55,6 +55,7 @@ async function seedProjectState(
   options?: {
     staleGeneration?: boolean;
     missingRequirementCoverage?: boolean;
+    shallowRequirementCoverage?: boolean;
     outlineLocked?: boolean;
     includeAlternativeGeneration?: boolean;
     generationJob?: {
@@ -135,7 +136,36 @@ async function seedProjectState(
           ],
         },
       }
-    : null;
+    : options?.shallowRequirementCoverage
+      ? {
+          requirement_coverage: {
+            total: 3,
+            covered: 3,
+            missing: 0,
+            missing_ids: [],
+            items: [
+              {
+                id: "req-general-1",
+                text: "Cover the general execution requirements.",
+                status: "covered",
+              },
+              {
+                id: "req-general-2",
+                text: "Describe sequence, controls, and responsibilities.",
+                status: "covered",
+              },
+              {
+                id: "req-general-3",
+                text: "Describe acceptance and reporting for the work.",
+                status: "covered",
+              },
+            ],
+          },
+        }
+      : null;
+  const generationText = options?.shallowRequirementCoverage
+    ? "Short covered text."
+    : "Seeded generated text for smoke export.";
 
   await client.connect();
   try {
@@ -188,7 +218,7 @@ async function seedProjectState(
         generationId,
         projectId,
         sectionUid,
-        "Seeded generated text for smoke export.",
+        generationText,
         options?.staleGeneration ? "stale" : "ok",
         randomUUID(),
         JSON.stringify(generationFlags),
@@ -516,6 +546,44 @@ test.describe("smoke", () => {
       await expect(
         page.getByTestId(`generation-requirement-coverage-${sectionUid}`),
       ).toContainText("1/2");
+    } finally {
+      await request.delete(`/api/v1/projects/${projectId}`);
+    }
+  });
+
+  test("shows quality warning for shallow selected generations", async ({
+    page,
+    request,
+  }) => {
+    const projectName = `Smoke Quality ${Date.now()}`;
+    const createResponse = await request.post("/api/v1/projects", {
+      data: {
+        name: projectName,
+        location: "Sofia",
+      },
+    });
+
+    expect(createResponse.ok()).toBeTruthy();
+    const project = (await createResponse.json()) as { id: string };
+    const projectId = project.id;
+    const { sectionUid } = await seedProjectState(projectId, {
+      shallowRequirementCoverage: true,
+      outlineLocked: true,
+    });
+
+    try {
+      await page.goto(`/projects/${projectId}`);
+      await waitForProjectPage(page, projectName);
+
+      await page.getByTestId("export-docx-button").click();
+
+      await expect(page.getByTestId("export-quality-warning")).toContainText(
+        "1 секция",
+      );
+      await page.getByTestId("export-quality-warning").getByRole("button").click();
+      await expect(
+        page.getByTestId(`generation-section-${sectionUid}`),
+      ).toBeVisible();
     } finally {
       await request.delete(`/api/v1/projects/${projectId}`);
     }

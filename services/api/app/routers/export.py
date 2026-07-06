@@ -5,6 +5,7 @@ from sqlalchemy import select
 
 from app.core.database import get_db
 from app.core.models import Project, Generation, TpOutline, ScheduleNormalized
+from app.agents.proposal_quality import assess_generation_depth
 
 router = APIRouter()
 
@@ -42,6 +43,35 @@ def _missing_requirement_coverage(generation: Generation) -> dict | None:
         "missing_requirement_ids": [str(item) for item in missing_ids],
         "missing_count": len(missing_ids),
         "missing_items": missing_items,
+    }
+
+
+def _quality_review_issue(generation: Generation) -> dict | None:
+    flags = generation.flags_json or {}
+    if not isinstance(flags, dict):
+        return None
+
+    coverage = flags.get("requirement_coverage")
+    if not isinstance(coverage, dict):
+        return None
+
+    missing_ids = coverage.get("missing_ids")
+    if isinstance(missing_ids, list) and missing_ids:
+        return None
+
+    assessment = assess_generation_depth(generation.text or "", coverage)
+    if assessment["status"] == "ok":
+        return None
+
+    return {
+        "section_uid": generation.section_uid,
+        "generation_id": generation.id,
+        "word_count": assessment["word_count"],
+        "sentence_count": assessment["sentence_count"],
+        "requirement_count": assessment["requirement_count"],
+        "min_words": assessment["min_words"],
+        "min_sentences": assessment["min_sentences"],
+        "issues": assessment["issues"],
     }
 
 
@@ -89,6 +119,21 @@ async def export_docx(project_id: str, db: AsyncSession = Depends(get_db)):
                 "missing_requirement_count": sum(
                     section["missing_count"] for section in missing_requirement_sections
                 ),
+            },
+        )
+
+    quality_sections = [
+        issue
+        for generation in selected_generations
+        if (issue := _quality_review_issue(generation))
+    ]
+    if quality_sections:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": "Pre-export check failed: some selected sections are too short for their mapped tender requirements.",
+                "quality_sections": quality_sections,
+                "quality_section_count": len(quality_sections),
             },
         )
 

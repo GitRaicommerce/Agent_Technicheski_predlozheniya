@@ -22,6 +22,8 @@ export default function ExportButton({
   const [missingRequirementWarning, setMissingRequirementWarning] = useState(false);
   const [missingRequirementCount, setMissingRequirementCount] =
     useState<number | null>(null);
+  const [qualityWarning, setQualityWarning] = useState(false);
+  const [qualitySectionCount, setQualitySectionCount] = useState<number | null>(null);
   const { toast } = useToast();
 
   const handleExport = async () => {
@@ -31,6 +33,8 @@ export default function ExportButton({
     setStaleSectionCount(null);
     setMissingRequirementWarning(false);
     setMissingRequirementCount(null);
+    setQualityWarning(false);
+    setQualitySectionCount(null);
 
     try {
       const blob = await api.export.docx(projectId);
@@ -46,6 +50,9 @@ export default function ExportButton({
       if (isRequirementCoverageExportError(err)) {
         setMissingRequirementWarning(true);
         setMissingRequirementCount(getMissingRequirementCount(err));
+      } else if (isQualityExportError(err)) {
+        setQualityWarning(true);
+        setQualitySectionCount(getQualitySectionCount(err));
       } else if (isStaleExportError(err, msg)) {
         setStaleWarning(true);
         setStaleSectionCount(getStaleSectionCount(err));
@@ -105,6 +112,31 @@ export default function ExportButton({
                 : ""
             }. `}
             Прегледайте генерациите и регенерирайте засегнатите секции преди DOCX export.
+          </p>
+          {onOpenGenerations && (
+            <button
+              type="button"
+              onClick={onOpenGenerations}
+              className="mt-2 rounded border border-amber-300 bg-white px-2 py-1 font-medium text-amber-800 transition hover:bg-amber-100"
+            >
+              Отвори Генерации
+            </button>
+          )}
+        </div>
+      )}
+
+      {qualityWarning && (
+        <div
+          data-testid="export-quality-warning"
+          className="mt-1 max-w-xs rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800"
+        >
+          <p>
+            {`Има избрани секции, които са твърде кратки спрямо изискванията${
+              qualitySectionCount
+                ? ` (${formatQualitySectionCount(qualitySectionCount)})`
+                : ""
+            }. `}
+            Прегледайте генерациите и регенерирайте по-подробен текст преди DOCX export.
           </p>
           {onOpenGenerations && (
             <button
@@ -188,6 +220,32 @@ function getMissingRequirementCount(err: unknown): number | null {
   return count > 0 ? count : sections.length;
 }
 
+function isQualityExportError(err: unknown): boolean {
+  if (!(err instanceof ApiError) || err.status !== 409) return false;
+
+  const payload = getApiErrorPayload(err);
+  return (
+    !!payload &&
+    typeof payload === "object" &&
+    (Array.isArray((payload as { quality_sections?: unknown }).quality_sections) ||
+      typeof (payload as { quality_section_count?: unknown })
+        .quality_section_count === "number")
+  );
+}
+
+function getQualitySectionCount(err: unknown): number | null {
+  if (!(err instanceof ApiError)) return null;
+  const payload = getApiErrorPayload(err);
+  if (!payload || typeof payload !== "object") return null;
+
+  const explicitCount = (payload as { quality_section_count?: unknown })
+    .quality_section_count;
+  if (typeof explicitCount === "number") return explicitCount;
+
+  const sections = (payload as { quality_sections?: unknown }).quality_sections;
+  return Array.isArray(sections) ? sections.length : null;
+}
+
 function getApiErrorPayload(error: ApiError): unknown {
   const detail = error.detail;
   return detail && typeof detail === "object" && "detail" in detail
@@ -201,4 +259,8 @@ function formatStaleSectionCount(count: number): string {
 
 function formatRequirementCount(count: number): string {
   return `${count} ${count === 1 ? "изискване" : "изисквания"}`;
+}
+
+function formatQualitySectionCount(count: number): string {
+  return `${count} ${count === 1 ? "секция" : "секции"}`;
 }

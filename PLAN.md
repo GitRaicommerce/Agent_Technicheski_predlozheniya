@@ -56,6 +56,7 @@
 - Improved logical reconstruction of requirement text extracted from noisy PDFs so wrapped list items and scored sentences are kept as complete checklist requirements, with regression coverage for no-outline risk/quality/environment/specific tender scenarios.
 - Re-ran the Pernik requirement-checklist calibration after wrapped-line reconstruction; extracted requirements increased from 92 to 97 and obviously truncated candidate requirements dropped from 50 to 15 in the local diagnostic check.
 - Added a conservative procurement-only noise filter for requirement extraction and re-ran Pernik calibration; the checklist settled at 85 requirements with the tracked administrative residuals reduced from 8 to 0.
+- Added a deterministic proposal-depth quality gate before DOCX export: selected sections with mapped checklist requirements now need enough developed text for their requirement count, with backend, frontend, and browser smoke coverage for shallow generated sections.
 
 ## Active Goals
 
@@ -70,7 +71,7 @@
 2. Reduce remaining requirement-checklist noise from PDF text-cell joins and overly broad clauses that still produce awkward but technically relevant checklist items.
 3. Expand generated documentation with more precise backend endpoint and workflow coverage.
 4. Build broader regression coverage around common tender scenarios, including explicit outline, no outline, specific requirements, quality/risk/environment-heavy tenders, noisy PDF extraction, and DOCX export readiness.
-5. Add quality gates around proposal depth and checklist coverage so short/generic generated proposals are flagged before export or final review.
+5. Calibrate the proposal-depth quality thresholds against regenerated Pernik output and the winning proposal so the gate catches shallow sections without blocking legitimately narrow sections.
 
 ## Notes
 
