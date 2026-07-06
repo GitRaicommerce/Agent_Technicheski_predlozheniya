@@ -29,6 +29,33 @@ export default function ExportButton({
   const [qualitySectionCount, setQualitySectionCount] = useState<number | null>(null);
   const { toast } = useToast();
 
+  const applyReadinessWarnings = (source: unknown, message = "") => {
+    let handled = false;
+
+    if (isDuplicateSelectedExportError(source)) {
+      setDuplicateSelectedWarning(true);
+      setDuplicateSelectedCount(getDuplicateSelectedCount(source));
+      handled = true;
+    }
+    if (isStaleExportError(source, message)) {
+      setStaleWarning(true);
+      setStaleSectionCount(getStaleSectionCount(source));
+      handled = true;
+    }
+    if (isRequirementCoverageExportError(source)) {
+      setMissingRequirementWarning(true);
+      setMissingRequirementCount(getMissingRequirementCount(source));
+      handled = true;
+    }
+    if (isQualityExportError(source)) {
+      setQualityWarning(true);
+      setQualitySectionCount(getQualitySectionCount(source));
+      handled = true;
+    }
+
+    return handled;
+  };
+
   const handleExport = async () => {
     setLoading(true);
     setError(null);
@@ -42,6 +69,14 @@ export default function ExportButton({
     setQualitySectionCount(null);
 
     try {
+      const readiness = await api.export.readiness(projectId);
+      if (!readiness.ready) {
+        if (!applyReadinessWarnings(readiness)) {
+          setError(readiness.message ?? "Pre-export readiness check failed.");
+        }
+        return;
+      }
+
       const blob = await api.export.docx(projectId);
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -52,19 +87,7 @@ export default function ExportButton({
       toast("DOCX файлът е изтеглен.", "success");
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Грешка при експорт";
-      if (isDuplicateSelectedExportError(err)) {
-        setDuplicateSelectedWarning(true);
-        setDuplicateSelectedCount(getDuplicateSelectedCount(err));
-      } else if (isRequirementCoverageExportError(err)) {
-        setMissingRequirementWarning(true);
-        setMissingRequirementCount(getMissingRequirementCount(err));
-      } else if (isQualityExportError(err)) {
-        setQualityWarning(true);
-        setQualitySectionCount(getQualitySectionCount(err));
-      } else if (isStaleExportError(err, msg)) {
-        setStaleWarning(true);
-        setStaleSectionCount(getStaleSectionCount(err));
-      } else {
+      if (!applyReadinessWarnings(err, msg)) {
         setError(msg);
       }
     } finally {
@@ -190,19 +213,18 @@ export default function ExportButton({
 
 function isStaleExportError(err: unknown, message: string): boolean {
   if (message.toLowerCase().includes("stale")) return true;
-  if (!(err instanceof ApiError) || err.status !== 409) return false;
 
-  const payload = getApiErrorPayload(err);
+  const payload = getReadinessPayload(err);
   return (
     !!payload &&
     typeof payload === "object" &&
-    Array.isArray((payload as { stale_sections?: unknown }).stale_sections)
+    (positiveNumber((payload as { stale_section_count?: unknown }).stale_section_count) ||
+      nonEmptyArray((payload as { stale_sections?: unknown }).stale_sections))
   );
 }
 
 function getStaleSectionCount(err: unknown): number | null {
-  if (!(err instanceof ApiError)) return null;
-  const payload = getApiErrorPayload(err);
+  const payload = getReadinessPayload(err);
   if (!payload || typeof payload !== "object") return null;
 
   const staleSections = (payload as { stale_sections?: unknown }).stale_sections;
@@ -217,24 +239,23 @@ function getStaleSectionCount(err: unknown): number | null {
 }
 
 function isDuplicateSelectedExportError(err: unknown): boolean {
-  if (!(err instanceof ApiError) || err.status !== 409) return false;
-
-  const payload = getApiErrorPayload(err);
+  const payload = getReadinessPayload(err);
   return (
     !!payload &&
     typeof payload === "object" &&
-    (Array.isArray(
-      (payload as { duplicate_selected_sections?: unknown })
-        .duplicate_selected_sections,
+    (positiveNumber(
+      (payload as { duplicate_selected_count?: unknown })
+        .duplicate_selected_count,
     ) ||
-      typeof (payload as { duplicate_selected_count?: unknown })
-        .duplicate_selected_count === "number")
+      nonEmptyArray(
+        (payload as { duplicate_selected_sections?: unknown })
+          .duplicate_selected_sections,
+      ))
   );
 }
 
 function getDuplicateSelectedCount(err: unknown): number | null {
-  if (!(err instanceof ApiError)) return null;
-  const payload = getApiErrorPayload(err);
+  const payload = getReadinessPayload(err);
   if (!payload || typeof payload !== "object") return null;
 
   const explicitCount = (payload as { duplicate_selected_count?: unknown })
@@ -247,24 +268,23 @@ function getDuplicateSelectedCount(err: unknown): number | null {
 }
 
 function isRequirementCoverageExportError(err: unknown): boolean {
-  if (!(err instanceof ApiError) || err.status !== 409) return false;
-
-  const payload = getApiErrorPayload(err);
+  const payload = getReadinessPayload(err);
   return (
     !!payload &&
     typeof payload === "object" &&
-    (Array.isArray(
-      (payload as { missing_requirement_sections?: unknown })
-        .missing_requirement_sections,
+    (positiveNumber(
+      (payload as { missing_requirement_count?: unknown })
+        .missing_requirement_count,
     ) ||
-      typeof (payload as { missing_requirement_count?: unknown })
-        .missing_requirement_count === "number")
+      nonEmptyArray(
+        (payload as { missing_requirement_sections?: unknown })
+          .missing_requirement_sections,
+      ))
   );
 }
 
 function getMissingRequirementCount(err: unknown): number | null {
-  if (!(err instanceof ApiError)) return null;
-  const payload = getApiErrorPayload(err);
+  const payload = getReadinessPayload(err);
   if (!payload || typeof payload !== "object") return null;
 
   const explicitCount = (payload as { missing_requirement_count?: unknown })
@@ -284,21 +304,19 @@ function getMissingRequirementCount(err: unknown): number | null {
 }
 
 function isQualityExportError(err: unknown): boolean {
-  if (!(err instanceof ApiError) || err.status !== 409) return false;
-
-  const payload = getApiErrorPayload(err);
+  const payload = getReadinessPayload(err);
   return (
     !!payload &&
     typeof payload === "object" &&
-    (Array.isArray((payload as { quality_sections?: unknown }).quality_sections) ||
-      typeof (payload as { quality_section_count?: unknown })
-        .quality_section_count === "number")
+    (positiveNumber(
+      (payload as { quality_section_count?: unknown }).quality_section_count,
+    ) ||
+      nonEmptyArray((payload as { quality_sections?: unknown }).quality_sections))
   );
 }
 
 function getQualitySectionCount(err: unknown): number | null {
-  if (!(err instanceof ApiError)) return null;
-  const payload = getApiErrorPayload(err);
+  const payload = getReadinessPayload(err);
   if (!payload || typeof payload !== "object") return null;
 
   const explicitCount = (payload as { quality_section_count?: unknown })
@@ -307,6 +325,21 @@ function getQualitySectionCount(err: unknown): number | null {
 
   const sections = (payload as { quality_sections?: unknown }).quality_sections;
   return Array.isArray(sections) ? sections.length : null;
+}
+
+function getReadinessPayload(source: unknown): unknown {
+  if (source instanceof ApiError) {
+    return getApiErrorPayload(source);
+  }
+  return source;
+}
+
+function positiveNumber(value: unknown): boolean {
+  return typeof value === "number" && value > 0;
+}
+
+function nonEmptyArray(value: unknown): boolean {
+  return Array.isArray(value) && value.length > 0;
 }
 
 function getApiErrorPayload(error: ApiError): unknown {

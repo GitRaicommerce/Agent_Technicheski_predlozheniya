@@ -80,6 +80,96 @@ async def test_export_docx_duplicate_selected_returns_409(client, mock_db):
 
 
 @pytest.mark.asyncio
+async def test_export_readiness_aggregates_multiple_blockers(client, mock_db):
+    project = _make_project()
+    mock_db.get = AsyncMock(return_value=project)
+
+    duplicate_first = MagicMock()
+    duplicate_first.id = "gen-duplicate-1"
+    duplicate_first.section_uid = "sec-duplicate"
+    duplicate_first.evidence_status = "ok"
+    duplicate_first.flags_json = {}
+    duplicate_first.text = "Duplicate first text."
+
+    duplicate_second = MagicMock()
+    duplicate_second.id = "gen-duplicate-2"
+    duplicate_second.section_uid = "sec-duplicate"
+    duplicate_second.evidence_status = "ok"
+    duplicate_second.flags_json = {}
+    duplicate_second.text = "Duplicate second text."
+
+    stale_generation = MagicMock()
+    stale_generation.id = "gen-stale"
+    stale_generation.section_uid = "sec-stale"
+    stale_generation.evidence_status = "stale"
+    stale_generation.flags_json = {}
+    stale_generation.text = "Stale selected text."
+
+    missing_generation = MagicMock()
+    missing_generation.id = "gen-missing"
+    missing_generation.section_uid = "sec-missing"
+    missing_generation.evidence_status = "ok"
+    missing_generation.text = "Text with missing requirements."
+    missing_generation.flags_json = {
+        "requirement_coverage": {
+            "missing_ids": ["req-1", "req-2"],
+            "items": [
+                {"id": "req-1", "text": "First missing", "status": "missing"},
+                {"id": "req-2", "text": "Second missing", "status": "missing"},
+            ],
+        }
+    }
+
+    shallow_generation = MagicMock()
+    shallow_generation.id = "gen-shallow"
+    shallow_generation.section_uid = "sec-shallow"
+    shallow_generation.evidence_status = "ok"
+    shallow_generation.text = "Short covered text."
+    shallow_generation.flags_json = {
+        "requirement_coverage": {
+            "total": 3,
+            "covered": 3,
+            "missing": 0,
+            "missing_ids": [],
+            "items": [
+                {"id": "req-3", "status": "covered"},
+                {"id": "req-4", "status": "covered"},
+                {"id": "req-5", "status": "covered"},
+            ],
+        }
+    }
+
+    selected_result = MagicMock()
+    selected_result.scalars.return_value.all.return_value = [
+        duplicate_first,
+        duplicate_second,
+        stale_generation,
+        missing_generation,
+        shallow_generation,
+    ]
+    outline_result = MagicMock()
+    outline_result.scalar_one_or_none.return_value = None
+    mock_db.execute = AsyncMock(side_effect=[selected_result, outline_result])
+
+    resp = await client.get(f"/api/v1/export/{project.id}/readiness")
+
+    assert resp.status_code == 200
+    detail = resp.json()
+    assert detail["ready"] is False
+    assert detail["blocker_count"] == 4
+    assert [blocker["code"] for blocker in detail["blockers"]] == [
+        "duplicate_selected",
+        "stale_evidence",
+        "missing_requirements",
+        "shallow_sections",
+    ]
+    assert detail["duplicate_selected_count"] == 1
+    assert detail["stale_section_count"] == 1
+    assert detail["missing_requirement_count"] == 2
+    assert detail["quality_section_count"] == 1
+
+
+@pytest.mark.asyncio
 async def test_export_docx_missing_requirement_coverage_returns_409(client, mock_db):
     project = _make_project()
     mock_db.get = AsyncMock(return_value=project)

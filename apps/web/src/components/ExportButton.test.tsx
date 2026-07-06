@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import ExportButton from "./ExportButton";
-import { api, ApiError } from "@/lib/api";
+import { api } from "@/lib/api";
 
 const toastMock = vi.fn();
 const createObjectURLMock = vi.fn(() => "blob:test-url");
@@ -25,12 +25,14 @@ vi.mock("@/lib/api", async () => {
       ...actual.api,
       export: {
         ...actual.api.export,
+        readiness: vi.fn(),
         docx: vi.fn(),
       },
     },
   };
 });
 
+const readinessMock = vi.mocked(api.export.readiness);
 const exportMock = vi.mocked(api.export.docx);
 
 describe("ExportButton", () => {
@@ -38,6 +40,11 @@ describe("ExportButton", () => {
     vi.clearAllMocks();
     URL.createObjectURL = createObjectURLMock;
     URL.revokeObjectURL = revokeObjectURLMock;
+    readinessMock.mockResolvedValue({
+      project_id: "project-1",
+      ready: true,
+      status: "ready",
+    });
 
     const originalCreateElement = document.createElement.bind(document);
     vi.spyOn(document, "createElement").mockImplementation(((tagName: string) => {
@@ -67,13 +74,13 @@ describe("ExportButton", () => {
 
   it("shows stale warning for stale export conflicts", async () => {
     const openGenerationsMock = vi.fn();
-    exportMock.mockRejectedValue(
-      new ApiError("Pre-export check failed", 409, {
-        detail: {
-          stale_sections: ["s1", "s2"],
-        },
-      }),
-    );
+    readinessMock.mockResolvedValue({
+      project_id: "project-1",
+      ready: false,
+      status: "blocked",
+      stale_sections: ["s1", "s2"],
+      stale_section_count: 2,
+    });
 
     render(
       <ExportButton
@@ -96,20 +103,19 @@ describe("ExportButton", () => {
 
   it("shows duplicate selected warning for ambiguous export sections", async () => {
     const openGenerationsMock = vi.fn();
-    exportMock.mockRejectedValue(
-      new ApiError("Pre-export check failed", 409, {
-        detail: {
-          duplicate_selected_count: 1,
-          duplicate_selected_sections: [
-            {
-              section_uid: "s1",
-              selected_count: 2,
-              generation_ids: ["g1", "g2"],
-            },
-          ],
+    readinessMock.mockResolvedValue({
+      project_id: "project-1",
+      ready: false,
+      status: "blocked",
+      duplicate_selected_count: 1,
+      duplicate_selected_sections: [
+        {
+          section_uid: "s1",
+          selected_count: 2,
+          generation_ids: ["g1", "g2"],
         },
-      }),
-    );
+      ],
+    });
 
     render(
       <ExportButton
@@ -131,16 +137,13 @@ describe("ExportButton", () => {
 
   it("shows requirement coverage warning for missing requirement conflicts", async () => {
     const openGenerationsMock = vi.fn();
-    exportMock.mockRejectedValue(
-      new ApiError("Pre-export check failed", 409, {
-        detail: {
-          missing_requirement_count: 2,
-          missing_requirement_sections: [
-            { section_uid: "s1", missing_count: 2 },
-          ],
-        },
-      }),
-    );
+    readinessMock.mockResolvedValue({
+      project_id: "project-1",
+      ready: false,
+      status: "blocked",
+      missing_requirement_count: 2,
+      missing_requirement_sections: [{ section_uid: "s1", missing_count: 2 }],
+    });
 
     render(
       <ExportButton
@@ -162,19 +165,18 @@ describe("ExportButton", () => {
 
   it("shows requirement warning for missing requirement coverage", async () => {
     const openGenerationsMock = vi.fn();
-    exportMock.mockRejectedValue(
-      new ApiError("Pre-export check failed", 409, {
-        detail: {
-          missing_requirement_count: 2,
-          missing_requirement_sections: [
-            {
-              section_uid: "s1",
-              missing_requirement_ids: ["req-1", "req-2"],
-            },
-          ],
+    readinessMock.mockResolvedValue({
+      project_id: "project-1",
+      ready: false,
+      status: "blocked",
+      missing_requirement_count: 2,
+      missing_requirement_sections: [
+        {
+          section_uid: "s1",
+          missing_requirement_ids: ["req-1", "req-2"],
         },
-      }),
-    );
+      ],
+    });
 
     render(
       <ExportButton
@@ -196,20 +198,19 @@ describe("ExportButton", () => {
 
   it("shows quality warning for shallow generated sections", async () => {
     const openGenerationsMock = vi.fn();
-    exportMock.mockRejectedValue(
-      new ApiError("Pre-export check failed", 409, {
-        detail: {
-          quality_section_count: 1,
-          quality_sections: [
-            {
-              section_uid: "s1",
-              word_count: 12,
-              min_words: 360,
-            },
-          ],
+    readinessMock.mockResolvedValue({
+      project_id: "project-1",
+      ready: false,
+      status: "blocked",
+      quality_section_count: 1,
+      quality_sections: [
+        {
+          section_uid: "s1",
+          word_count: 12,
+          min_words: 360,
         },
-      }),
-    );
+      ],
+    });
 
     render(
       <ExportButton
@@ -227,6 +228,34 @@ describe("ExportButton", () => {
     await userEvent.click(screen.getByRole("button", { name: "Отвори Генерации" }));
 
     expect(openGenerationsMock).toHaveBeenCalled();
+  });
+
+  it("shows multiple readiness warnings from one preflight response", async () => {
+    readinessMock.mockResolvedValue({
+      project_id: "project-1",
+      ready: false,
+      status: "blocked",
+      duplicate_selected_count: 1,
+      duplicate_selected_sections: [{ section_uid: "s1" }],
+      stale_section_count: 2,
+      stale_sections: ["s2", "s3"],
+      missing_requirement_count: 3,
+      missing_requirement_sections: [{ section_uid: "s4", missing_count: 3 }],
+      quality_section_count: 1,
+      quality_sections: [{ section_uid: "s5" }],
+    });
+
+    render(<ExportButton projectId="project-1" projectName="Project Alpha" />);
+
+    await userEvent.click(screen.getByTestId("export-docx-button"));
+
+    expect(
+      await screen.findByTestId("export-duplicate-selected-warning"),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("export-stale-warning")).toBeInTheDocument();
+    expect(screen.getByTestId("export-requirement-warning")).toBeInTheDocument();
+    expect(screen.getByTestId("export-quality-warning")).toBeInTheDocument();
+    expect(exportMock).not.toHaveBeenCalled();
   });
 
   it("shows generic export errors", async () => {

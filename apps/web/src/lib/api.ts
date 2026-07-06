@@ -327,6 +327,25 @@ export interface GenerationJob {
   completed_at?: string | null;
 }
 
+export interface ExportReadiness {
+  project_id: string;
+  ready: boolean;
+  status: "ready" | "blocked" | string;
+  message?: string;
+  selected_generation_count?: number;
+  selected_section_count?: number;
+  blocker_count?: number;
+  blockers?: Array<{ code: string; count: number; message: string }>;
+  duplicate_selected_sections?: unknown[];
+  duplicate_selected_count?: number;
+  stale_sections?: string[];
+  stale_section_count?: number;
+  missing_requirement_sections?: unknown[];
+  missing_requirement_count?: number;
+  quality_sections?: unknown[];
+  quality_section_count?: number;
+}
+
 export const api = {
   projects: {
     list: (limit = 20, offset = 0) =>
@@ -447,6 +466,8 @@ export const api = {
       ),
   },
   export: {
+    readiness: (projectId: string) =>
+      apiFetch<ExportReadiness>(`/api/v1/export/${projectId}/readiness`),
     docx: async (projectId: string) => {
       const response = await fetch(buildUrl(`/api/v1/export/${projectId}/docx`));
       await ensureOk(response);

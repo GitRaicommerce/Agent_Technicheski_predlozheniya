@@ -11,9 +11,8 @@ router = APIRouter()
 
 
 def _missing_requirement_coverage(generation: Generation) -> dict | None:
-    flags = generation.flags_json or {}
-    if not isinstance(flags, dict):
-        return None
+    raw_flags = getattr(generation, "flags_json", None)
+    flags = raw_flags if isinstance(raw_flags, dict) else {}
 
     coverage = flags.get("requirement_coverage")
     if not isinstance(coverage, dict):
@@ -103,8 +102,9 @@ def _quality_review_issue(
     generation: Generation,
     outline_requirement_counts: dict[str, int],
 ) -> dict | None:
-    flags = generation.flags_json or {}
-    coverage = flags.get("requirement_coverage") if isinstance(flags, dict) else None
+    raw_flags = getattr(generation, "flags_json", None)
+    flags = raw_flags if isinstance(raw_flags, dict) else {}
+    coverage = flags.get("requirement_coverage")
     if not isinstance(coverage, dict):
         requirement_count = outline_requirement_counts.get(generation.section_uid, 0)
         if requirement_count <= 0:
@@ -115,7 +115,10 @@ def _quality_review_issue(
     if isinstance(missing_ids, list) and missing_ids:
         return None
 
-    assessment = assess_generation_depth(generation.text or "", coverage)
+    assessment = assess_generation_depth(
+        getattr(generation, "text", "") or "",
+        coverage,
+    )
     if assessment["status"] == "ok":
         return None
 
@@ -131,62 +134,59 @@ def _quality_review_issue(
     }
 
 
-@router.get("/{project_id}/docx")
-async def export_docx(project_id: str, db: AsyncSession = Depends(get_db)):
-    project = await db.get(Project, project_id)
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+def _selected_section_count(generations: list[Generation]) -> int:
+    return len({generation.section_uid for generation in generations})
 
-    selected_result = await db.execute(
-        select(Generation).where(
-            Generation.project_id == project_id,
-            Generation.selected.is_(True),
+
+def _stale_sections(generations: list[Generation]) -> list[str]:
+    section_uids: list[str] = []
+    seen: set[str] = set()
+    for generation in generations:
+        if generation.evidence_status != "stale" or generation.section_uid in seen:
+            continue
+        section_uids.append(generation.section_uid)
+        seen.add(generation.section_uid)
+    return section_uids
+
+
+def _readiness_message(readiness: dict) -> str:
+    blockers = readiness.get("blockers") or []
+    if len(blockers) != 1:
+        return "Pre-export check failed: multiple readiness issues were found."
+
+    code = blockers[0].get("code")
+    if code == "duplicate_selected":
+        return (
+            "Pre-export check failed: some sections have multiple selected "
+            "generated variants."
         )
-    )
-    selected_generations = selected_result.scalars().all()
+    if code == "stale_evidence":
+        return "Pre-export check failed: some selected sections have stale evidence."
+    if code == "missing_requirements":
+        return (
+            "Pre-export check failed: some selected sections do not cover all "
+            "tender requirements."
+        )
+    if code == "shallow_sections":
+        return (
+            "Pre-export check failed: some selected sections are too short for "
+            "their mapped tender requirements."
+        )
+    return "Pre-export check failed: proposal is not ready for DOCX export."
 
+
+async def _build_export_readiness(
+    project_id: str,
+    selected_generations: list[Generation],
+    db: AsyncSession,
+) -> dict:
     duplicate_sections = _duplicate_selected_sections(selected_generations)
-    if duplicate_sections:
-        raise HTTPException(
-            status_code=409,
-            detail={
-                "message": "Pre-export check failed: some sections have multiple selected generated variants.",
-                "duplicate_selected_sections": duplicate_sections,
-                "duplicate_selected_count": len(duplicate_sections),
-            },
-        )
-
-    stale = [
-        generation
-        for generation in selected_generations
-        if generation.evidence_status == "stale"
-    ]
-    if stale:
-        raise HTTPException(
-            status_code=409,
-            detail={
-                "message": "Pre-export check failed: some selected sections have stale evidence.",
-                "stale_sections": [g.section_uid for g in stale],
-            },
-        )
-
+    stale_sections = _stale_sections(selected_generations)
     missing_requirement_sections = [
         issue
         for generation in selected_generations
         if (issue := _missing_requirement_coverage(generation))
     ]
-    if missing_requirement_sections:
-        raise HTTPException(
-            status_code=409,
-            detail={
-                "message": "Pre-export check failed: some selected sections do not cover all tender requirements.",
-                "missing_requirement_sections": missing_requirement_sections,
-                "missing_requirement_count": sum(
-                    section["missing_count"] for section in missing_requirement_sections
-                ),
-            },
-        )
-
     outline_requirement_counts = (
         await _load_outline_requirement_counts(project_id, db)
         if selected_generations
@@ -197,15 +197,110 @@ async def export_docx(project_id: str, db: AsyncSession = Depends(get_db)):
         for generation in selected_generations
         if (issue := _quality_review_issue(generation, outline_requirement_counts))
     ]
-    if quality_sections:
-        raise HTTPException(
-            status_code=409,
-            detail={
-                "message": "Pre-export check failed: some selected sections are too short for their mapped tender requirements.",
-                "quality_sections": quality_sections,
-                "quality_section_count": len(quality_sections),
-            },
+
+    missing_requirement_count = sum(
+        section["missing_count"] for section in missing_requirement_sections
+    )
+    blockers: list[dict] = []
+    if duplicate_sections:
+        blockers.append(
+            {
+                "code": "duplicate_selected",
+                "count": len(duplicate_sections),
+                "message": "Some sections have multiple selected generated variants.",
+            }
         )
+    if stale_sections:
+        blockers.append(
+            {
+                "code": "stale_evidence",
+                "count": len(stale_sections),
+                "message": "Some selected sections have stale evidence.",
+            }
+        )
+    if missing_requirement_sections:
+        blockers.append(
+            {
+                "code": "missing_requirements",
+                "count": missing_requirement_count,
+                "message": "Some selected sections do not cover all tender requirements.",
+            }
+        )
+    if quality_sections:
+        blockers.append(
+            {
+                "code": "shallow_sections",
+                "count": len(quality_sections),
+                "message": "Some selected sections are too short for their mapped tender requirements.",
+            }
+        )
+
+    readiness = {
+        "project_id": project_id,
+        "ready": not blockers,
+        "status": "ready" if not blockers else "blocked",
+        "selected_generation_count": len(selected_generations),
+        "selected_section_count": _selected_section_count(selected_generations),
+        "blocker_count": len(blockers),
+        "blockers": blockers,
+        "duplicate_selected_sections": duplicate_sections,
+        "duplicate_selected_count": len(duplicate_sections),
+        "stale_sections": stale_sections,
+        "stale_section_count": len(stale_sections),
+        "missing_requirement_sections": missing_requirement_sections,
+        "missing_requirement_count": missing_requirement_count,
+        "quality_sections": quality_sections,
+        "quality_section_count": len(quality_sections),
+    }
+    readiness["message"] = (
+        "Proposal is ready for DOCX export."
+        if readiness["ready"]
+        else _readiness_message(readiness)
+    )
+    return readiness
+
+
+async def _load_selected_generations(
+    project_id: str,
+    db: AsyncSession,
+) -> list[Generation]:
+    selected_result = await db.execute(
+        select(Generation).where(
+            Generation.project_id == project_id,
+            Generation.selected.is_(True),
+        )
+    )
+    return list(selected_result.scalars().all())
+
+
+async def _require_export_ready(project_id: str, db: AsyncSession) -> dict:
+    selected_generations = await _load_selected_generations(project_id, db)
+    readiness = await _build_export_readiness(project_id, selected_generations, db)
+    if readiness["ready"]:
+        return readiness
+
+    raise HTTPException(
+        status_code=409,
+        detail=readiness,
+    )
+
+
+@router.get("/{project_id}/readiness")
+async def export_readiness(project_id: str, db: AsyncSession = Depends(get_db)):
+    project = await db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    selected_generations = await _load_selected_generations(project_id, db)
+    return await _build_export_readiness(project_id, selected_generations, db)
+
+
+@router.get("/{project_id}/docx")
+async def export_docx(project_id: str, db: AsyncSession = Depends(get_db)):
+    project = await db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    await _require_export_ready(project_id, db)
 
     from urllib.parse import quote
     from app.export.docx_generator import generate_docx

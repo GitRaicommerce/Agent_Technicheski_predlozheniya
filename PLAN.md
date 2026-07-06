@@ -60,6 +60,8 @@
 - Hardened generation selection and export readiness: drafting now unselects older section generations before saving a new selected variant, DOCX export blocks ambiguous sections with multiple selected variants, and legacy sections without coverage metadata can still be depth-checked from outline requirements.
 - Re-ran the Pernik export readiness check after the duplicate-selected guard; the real project is now correctly blocked before export with 14 ambiguous selected sections that must be resolved before a fresh gap analysis.
 - Added a universal duplicate-selected remediation flow in the Generations panel: users can now see all variants for a section, identify sections with multiple selected variants, choose exactly one variant through the existing select endpoint, and re-run export readiness without a database repair.
+- Added an explicit DOCX export readiness preflight endpoint and connected the Export button to it so duplicate selections, stale evidence, missing requirement coverage, and shallow selected sections are reported together before download instead of one blocker at a time.
+- Re-ran the aggregated readiness preflight against the real Pernik project without mutating data; it currently reports 14 sections with duplicate selected variants and 14 selected sections with stale evidence, with no missing-requirement or shallow-section blockers visible yet.
 
 ## Active Goals
 
@@ -70,8 +72,8 @@
 
 ## Next Recommended Steps
 
-1. Resolve Pernik's legacy duplicate selected generations through the Generations panel by choosing one variant per ambiguous section, then re-run export readiness.
-2. Regenerate the stale Pernik sections after the current fixes and re-run the proposal gap analysis against the winning technical proposal.
+1. Resolve Pernik's legacy duplicate selected generations through the Generations panel by choosing one variant per ambiguous section, then re-run the aggregated export readiness check.
+2. Regenerate the stale Pernik sections surfaced by readiness after the current fixes and re-run the proposal gap analysis against the winning technical proposal.
 3. Reduce remaining requirement-checklist noise from PDF text-cell joins and overly broad clauses that still produce awkward but technically relevant checklist items.
 4. Expand generated documentation with more precise backend endpoint and workflow coverage.
 5. Build broader regression coverage around common tender scenarios, including explicit outline, no outline, specific requirements, quality/risk/environment-heavy tenders, noisy PDF extraction, and DOCX export readiness.

@@ -580,6 +580,44 @@ test.describe("smoke", () => {
     }
   });
 
+  test("shows multiple pre-export warnings from one readiness check", async ({
+    page,
+    request,
+  }) => {
+    const projectName = `Smoke Readiness ${Date.now()}`;
+    const createResponse = await request.post("/api/v1/projects", {
+      data: {
+        name: projectName,
+        location: "Sofia",
+      },
+    });
+
+    expect(createResponse.ok()).toBeTruthy();
+    const project = (await createResponse.json()) as { id: string };
+    const projectId = project.id;
+    await seedProjectState(projectId, {
+      duplicateSelectedGeneration: true,
+      staleGeneration: true,
+      missingRequirementCoverage: true,
+      outlineLocked: true,
+    });
+
+    try {
+      await page.goto(`/projects/${projectId}`);
+      await waitForProjectPage(page, projectName);
+
+      await page.getByTestId("export-docx-button").click();
+
+      await expect(
+        page.getByTestId("export-duplicate-selected-warning"),
+      ).toBeVisible();
+      await expect(page.getByTestId("export-stale-warning")).toBeVisible();
+      await expect(page.getByTestId("export-requirement-warning")).toBeVisible();
+    } finally {
+      await request.delete(`/api/v1/projects/${projectId}`);
+    }
+  });
+
   test("shows requirement coverage warning for incomplete selected generations", async ({
     page,
     request,
