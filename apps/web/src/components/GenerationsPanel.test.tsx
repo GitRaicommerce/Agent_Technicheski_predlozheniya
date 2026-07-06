@@ -18,6 +18,7 @@ vi.mock("@/lib/api", async () => {
         latestGenerationJob: vi.fn(),
         retryGenerationJob: vi.fn(),
         regenerateSection: vi.fn(),
+        selectGeneration: vi.fn(),
       },
     },
   };
@@ -27,6 +28,7 @@ const listGenerationsMock = vi.mocked(api.agents.listGenerations);
 const latestGenerationJobMock = vi.mocked(api.agents.latestGenerationJob);
 const retryGenerationJobMock = vi.mocked(api.agents.retryGenerationJob);
 const regenerateSectionMock = vi.mocked(api.agents.regenerateSection);
+const selectGenerationMock = vi.mocked(api.agents.selectGeneration);
 
 describe("GenerationsPanel", () => {
   beforeEach(() => {
@@ -123,6 +125,90 @@ describe("GenerationsPanel", () => {
     ).toHaveTextContent("1 липсват");
     expect(screen.getByText(/req-missing/)).toBeInTheDocument();
     expect(screen.getByText(/Missing requirement/)).toBeInTheDocument();
+  });
+
+  it("selects one variant to resolve duplicate selected generations", async () => {
+    listGenerationsMock
+      .mockResolvedValueOnce([
+        {
+          section_uid: "sec-duplicate",
+          section_title: "Duplicate Section",
+          variants: [
+            {
+              id: "gen-1",
+              section_uid: "sec-duplicate",
+              variant: 1,
+              text: "First selected text",
+              evidence_status: "ok",
+              selected: true,
+              created_at: "2026-04-20T10:00:00.000Z",
+            },
+            {
+              id: "gen-2",
+              section_uid: "sec-duplicate",
+              variant: 2,
+              text: "Second selected text",
+              evidence_status: "ok",
+              selected: true,
+              created_at: "2026-04-21T10:00:00.000Z",
+            },
+          ],
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          section_uid: "sec-duplicate",
+          section_title: "Duplicate Section",
+          variants: [
+            {
+              id: "gen-2",
+              section_uid: "sec-duplicate",
+              variant: 2,
+              text: "Second selected text",
+              evidence_status: "ok",
+              selected: true,
+              created_at: "2026-04-21T10:00:00.000Z",
+            },
+            {
+              id: "gen-1",
+              section_uid: "sec-duplicate",
+              variant: 1,
+              text: "First selected text",
+              evidence_status: "ok",
+              selected: false,
+              created_at: "2026-04-20T10:00:00.000Z",
+            },
+          ],
+        },
+      ]);
+    selectGenerationMock.mockResolvedValue({
+      status: "selected",
+      generation_id: "gen-2",
+    });
+
+    render(<GenerationsPanel projectId="project-1" />);
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Duplicate Section/i }),
+    );
+
+    expect(
+      await screen.findByTestId(
+        "generation-duplicate-selected-warning-sec-duplicate",
+      ),
+    ).toHaveTextContent("2 selected variants");
+
+    await userEvent.click(await screen.findByTestId("generation-select-gen-2"));
+
+    await waitFor(() => {
+      expect(selectGenerationMock).toHaveBeenCalledWith("project-1", "gen-2");
+    });
+    await waitFor(() => {
+      expect(listGenerationsMock).toHaveBeenCalledTimes(2);
+    });
+    expect(
+      screen.queryByTestId("generation-duplicate-selected-warning-sec-duplicate"),
+    ).not.toBeInTheDocument();
   });
 
   it("regenerates a section and reloads the list", async () => {

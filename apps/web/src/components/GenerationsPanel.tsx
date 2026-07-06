@@ -25,16 +25,19 @@ export default function GenerationsPanel({
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [regenerating, setRegenerating] = useState<string | null>(null);
+  const [selectingGeneration, setSelectingGeneration] = useState<string | null>(
+    null,
+  );
   const [retryingJob, setRetryingJob] = useState(false);
   const [generationJob, setGenerationJob] = useState<GenerationJob | null>(null);
   const hasLoadedRef = useRef(false);
 
-  const load = useCallback(() => {
+  const load = useCallback(async () => {
     if (!hasLoadedRef.current) {
       setLoading(true);
     }
     setError(null);
-    Promise.all([
+    return Promise.all([
       api.agents.listGenerations(projectId),
       api.agents.latestGenerationJob(projectId),
     ])
@@ -54,7 +57,7 @@ export default function GenerationsPanel({
   }, [projectId]);
 
   useEffect(() => {
-    load();
+    void load();
   }, [load, refreshKey]);
 
   useEffect(() => {
@@ -65,7 +68,9 @@ export default function GenerationsPanel({
       return;
     }
 
-    const timer = window.setInterval(load, 2500);
+    const timer = window.setInterval(() => {
+      void load();
+    }, 2500);
     return () => window.clearInterval(timer);
   }, [generationJob?.status, load]);
 
@@ -90,6 +95,19 @@ export default function GenerationsPanel({
       // Allow a manual retry without blocking the rest of the panel.
     } finally {
       setRegenerating(null);
+    }
+  };
+
+  const handleSelectGeneration = async (generationId: string) => {
+    setSelectingGeneration(generationId);
+    setError(null);
+    try {
+      await api.agents.selectGeneration(projectId, generationId);
+      await load();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Generation selection failed.");
+    } finally {
+      setSelectingGeneration(null);
     }
   };
 
@@ -175,10 +193,13 @@ export default function GenerationsPanel({
 
       {sections.map((section) => {
         const isOpen = expanded.has(section.section_uid);
+        const selectedVariants = section.variants.filter(
+          (variant) => variant.selected,
+        );
         const displayVariant =
-          section.variants.find((variant) => variant.selected) ??
-          section.variants[0];
+          selectedVariants[0] ?? section.variants[0];
         const requirementCoverage = getRequirementCoverage(displayVariant);
+        const hasDuplicateSelected = selectedVariants.length > 1;
 
         return (
           <div
@@ -197,6 +218,15 @@ export default function GenerationsPanel({
                 </p>
               </button>
               <div className="flex shrink-0 items-center gap-1">
+                {hasDuplicateSelected && (
+                  <span
+                    data-testid={`generation-duplicate-selected-badge-${section.section_uid}`}
+                    className="rounded bg-red-100 px-1.5 py-0.5 text-[11px] font-medium text-red-700"
+                    title="Multiple selected variants"
+                  >
+                    {selectedVariants.length} selected
+                  </span>
+                )}
                 <RequirementCoverageBadge coverage={requirementCoverage} />
                 <button
                   onClick={() => handleRegenerate(section.section_uid)}
@@ -214,14 +244,116 @@ export default function GenerationsPanel({
             </div>
 
             {isOpen && displayVariant && (
-              <SectionText
-                variant={displayVariant}
-                requirementCoverage={requirementCoverage}
-              />
+              <div className="bg-white px-3 py-3">
+                <GenerationVariantSelector
+                  sectionUid={section.section_uid}
+                  variants={section.variants}
+                  selectedCount={selectedVariants.length}
+                  displayVariantId={displayVariant.id}
+                  selectingGeneration={selectingGeneration}
+                  onSelect={(generationId) => {
+                    void handleSelectGeneration(generationId);
+                  }}
+                />
+                <SectionText
+                  variant={displayVariant}
+                  requirementCoverage={requirementCoverage}
+                />
+              </div>
             )}
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function GenerationVariantSelector({
+  sectionUid,
+  variants,
+  selectedCount,
+  displayVariantId,
+  selectingGeneration,
+  onSelect,
+}: {
+  sectionUid: string;
+  variants: Generation[];
+  selectedCount: number;
+  displayVariantId: string;
+  selectingGeneration: string | null;
+  onSelect: (generationId: string) => void;
+}) {
+  if (variants.length <= 1 && selectedCount <= 1) return null;
+
+  return (
+    <div
+      data-testid={`generation-variants-${sectionUid}`}
+      className="mb-3 space-y-2"
+    >
+      {selectedCount > 1 && (
+        <div
+          data-testid={`generation-duplicate-selected-warning-${sectionUid}`}
+          className="rounded border border-red-200 bg-red-50 px-2.5 py-2 text-xs text-red-700"
+        >
+          This section has {selectedCount} selected variants. Choose one to make
+          DOCX export unambiguous.
+        </div>
+      )}
+      <div className="space-y-1">
+        {variants.map((variant) => {
+          const isDisplayed = variant.id === displayVariantId;
+          const isSoleSelected = variant.selected && selectedCount === 1;
+          const isSelecting = selectingGeneration === variant.id;
+
+          return (
+            <div
+              key={variant.id}
+              data-testid={`generation-variant-row-${variant.id}`}
+              className={`flex items-center justify-between gap-2 rounded border px-2.5 py-2 text-xs ${
+                isDisplayed
+                  ? "border-blue-200 bg-blue-50"
+                  : "border-gray-200 bg-white"
+              }`}
+            >
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="font-medium text-gray-700">
+                    Variant {variant.variant}
+                  </span>
+                  {variant.selected && (
+                    <span className="rounded bg-green-100 px-1.5 py-0.5 text-[11px] font-medium text-green-700">
+                      Selected
+                    </span>
+                  )}
+                  {variant.evidence_status === "stale" && (
+                    <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium text-amber-700">
+                      Stale
+                    </span>
+                  )}
+                </div>
+                <p className="mt-1 truncate text-[11px] text-gray-500">
+                  {new Date(variant.created_at).toLocaleString()}
+                </p>
+              </div>
+              <button
+                type="button"
+                data-testid={`generation-select-${variant.id}`}
+                onClick={() => onSelect(variant.id)}
+                disabled={isSoleSelected || isSelecting}
+                className="shrink-0 rounded border border-blue-200 bg-white px-2 py-1 text-[11px] font-medium text-blue-700 transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:border-gray-200 disabled:text-gray-400"
+              >
+                {isSelecting
+                  ? "..."
+                  : isSoleSelected
+                    ? "Selected"
+                    : selectedCount > 1
+                      ? "Keep this"
+                      : "Select"}
+              </button>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -313,7 +445,7 @@ function SectionText({
   const isLong = text.length > previewLen;
 
   return (
-    <div className="bg-white px-3 py-3">
+    <div>
       <RequirementCoverageDetails
         sectionUid={variant.section_uid}
         coverage={requirementCoverage}

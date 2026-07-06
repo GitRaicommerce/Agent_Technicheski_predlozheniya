@@ -50,6 +50,15 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
+function exportReadyText(opening: string) {
+  const detailSentence =
+    "The proposal explains the execution sequence, responsible roles, coordination rhythm, quality controls, reporting evidence, risk response, resource readiness, acceptance checks, and communication duties in enough operational detail for export validation.";
+
+  return [opening, ...Array.from({ length: 12 }, () => detailSentence)].join(
+    " ",
+  );
+}
+
 async function seedProjectState(
   projectId: string,
   options?: {
@@ -166,7 +175,7 @@ async function seedProjectState(
       : null;
   const generationText = options?.shallowRequirementCoverage
     ? "Short covered text."
-    : "Seeded generated text for smoke export.";
+    : exportReadyText("Seeded generated text for smoke export.");
 
   await client.connect();
   try {
@@ -238,7 +247,7 @@ async function seedProjectState(
           alternativeGenerationId,
           projectId,
           sectionUid,
-          "Alternative smoke variant text.",
+          exportReadyText("Alternative smoke variant text."),
           options?.duplicateSelectedGeneration ?? false,
           randomUUID(),
         ],
@@ -529,10 +538,11 @@ test.describe("smoke", () => {
     expect(createResponse.ok()).toBeTruthy();
     const project = (await createResponse.json()) as { id: string };
     const projectId = project.id;
-    const { sectionUid } = await seedProjectState(projectId, {
+    const { sectionUid, alternativeGenerationId } = await seedProjectState(projectId, {
       duplicateSelectedGeneration: true,
       outlineLocked: true,
     });
+    expect(alternativeGenerationId).toBeTruthy();
 
     try {
       await page.goto(`/projects/${projectId}`);
@@ -550,6 +560,21 @@ test.describe("smoke", () => {
       await expect(
         page.getByTestId(`generation-section-${sectionUid}`),
       ).toBeVisible();
+      await page.getByTestId(`generation-section-${sectionUid}`).click();
+      await expect(
+        page.getByTestId(`generation-duplicate-selected-warning-${sectionUid}`),
+      ).toContainText("2 selected variants");
+
+      await page
+        .getByTestId(`generation-select-${alternativeGenerationId}`)
+        .click();
+
+      await expect(
+        page.getByTestId(`generation-duplicate-selected-warning-${sectionUid}`),
+      ).toHaveCount(0);
+
+      const exportResponse = await request.get(`/api/v1/export/${projectId}/docx`);
+      expect(exportResponse.ok()).toBeTruthy();
     } finally {
       await request.delete(`/api/v1/projects/${projectId}`);
     }
