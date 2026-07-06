@@ -115,9 +115,15 @@ def _quality_review_issue(
     if isinstance(missing_ids, list) and missing_ids:
         return None
 
+    raw_used_sources = getattr(generation, "used_sources_json", None)
+    used_sources = raw_used_sources if isinstance(raw_used_sources, dict) else {}
+    raw_blueprint = used_sources.get("drafting_blueprint")
+    drafting_blueprint = raw_blueprint if isinstance(raw_blueprint, dict) else None
+
     assessment = assess_generation_depth(
         getattr(generation, "text", "") or "",
         coverage,
+        drafting_blueprint=drafting_blueprint,
     )
     if assessment["status"] == "ok":
         return None
@@ -128,6 +134,7 @@ def _quality_review_issue(
         "word_count": assessment["word_count"],
         "sentence_count": assessment["sentence_count"],
         "requirement_count": assessment["requirement_count"],
+        "blueprint_group_count": assessment["blueprint_group_count"],
         "min_words": assessment["min_words"],
         "min_sentences": assessment["min_sentences"],
         "issues": assessment["issues"],

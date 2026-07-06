@@ -246,6 +246,61 @@ async def test_export_docx_shallow_requirement_text_returns_409(client, mock_db)
 
 
 @pytest.mark.asyncio
+async def test_export_docx_uses_drafting_blueprint_for_quality_gate(client, mock_db):
+    project = _make_project()
+    mock_db.get = AsyncMock(return_value=project)
+
+    generation = MagicMock()
+    generation.id = "gen-blueprint-shallow"
+    generation.section_uid = "sec-blueprint"
+    generation.evidence_status = "ok"
+    generation.text = (
+        "The text names coordination, quality, risk, environment, schedule, "
+        "and reporting in a very short way."
+    )
+    generation.flags_json = {
+        "requirement_coverage": {
+            "total": 2,
+            "covered": 2,
+            "missing": 0,
+            "missing_ids": [],
+            "items": [
+                {"id": "req-1", "status": "covered"},
+                {"id": "req-2", "status": "covered"},
+            ],
+        }
+    }
+    generation.used_sources_json = {
+        "drafting_blueprint": {
+            "groups": [
+                {
+                    "category": f"category-{index}",
+                    "label": f"Category {index}",
+                    "requirements": [{"id": f"req-{index}"}],
+                }
+                for index in range(1, 7)
+            ]
+        }
+    }
+
+    selected_result = MagicMock()
+    selected_result.scalars.return_value.all.return_value = [generation]
+    outline_result = MagicMock()
+    outline_result.scalar_one_or_none.return_value = None
+    mock_db.execute = AsyncMock(side_effect=[selected_result, outline_result])
+
+    resp = await client.get(f"/api/v1/export/{project.id}/docx")
+
+    assert resp.status_code == 409
+    detail = resp.json()["detail"]
+    quality_section = detail["quality_sections"][0]
+    assert quality_section["section_uid"] == "sec-blueprint"
+    assert quality_section["requirement_count"] == 2
+    assert quality_section["blueprint_group_count"] == 6
+    assert quality_section["min_words"] >= 1200
+
+
+@pytest.mark.asyncio
 async def test_export_docx_uses_outline_requirements_for_legacy_quality_gate(client, mock_db):
     project = _make_project()
     mock_db.get = AsyncMock(return_value=project)
