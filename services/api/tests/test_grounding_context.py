@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from sqlalchemy.sql.dml import Update
 
 from app.agents.context import build_project_grounding_context
 from app.agents.drafting import run_drafting
@@ -130,6 +131,45 @@ async def test_drafting_prompt_and_saved_generation_include_grounding_context(mo
         "grounding_context": grounding_context
     }
     assert result["generation_ids"]["variant_1"] == saved_generation.id
+
+
+@pytest.mark.asyncio
+async def test_drafting_unselects_existing_section_generations_before_saving(mock_db):
+    project_id = str(uuid.uuid4())
+    section_uid = str(uuid.uuid4())
+
+    with patch(
+        "app.agents.drafting.llm_gateway.call",
+        new=AsyncMock(
+            return_value={
+                "variant_1": {
+                    "text": "Подробен нов текст за секцията.",
+                    "evidence_map": {},
+                },
+                "flags": [],
+            }
+        ),
+    ):
+        await run_drafting(
+            project_id=project_id,
+            section_uid=section_uid,
+            section_title="Организация",
+            section_requirements=[],
+            evidence_snippets=[],
+            schedule_summary=None,
+            lex_citations=[],
+            db=mock_db,
+            trace_id=str(uuid.uuid4()),
+        )
+
+    statement = mock_db.execute.await_args.args[0]
+    saved_generation = mock_db.add.call_args.args[0]
+
+    assert isinstance(statement, Update)
+    compiled = str(statement.compile(compile_kwargs={"literal_binds": True}))
+    assert "UPDATE generations" in compiled
+    assert "selected=false" in compiled.replace(" ", "").lower()
+    assert saved_generation.selected is True
 
 
 @pytest.mark.asyncio

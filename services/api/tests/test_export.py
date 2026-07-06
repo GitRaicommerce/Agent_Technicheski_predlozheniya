@@ -35,10 +35,11 @@ async def test_export_docx_stale_returns_409(client, mock_db):
 
     stale_gen = MagicMock()
     stale_gen.section_uid = "s1"
+    stale_gen.evidence_status = "stale"
 
-    stale_result = MagicMock()
-    stale_result.scalars.return_value.all.return_value = [stale_gen]
-    mock_db.execute = AsyncMock(return_value=stale_result)
+    selected_result = MagicMock()
+    selected_result.scalars.return_value.all.return_value = [stale_gen]
+    mock_db.execute = AsyncMock(return_value=selected_result)
 
     resp = await client.get(f"/api/v1/export/{project.id}/docx")
 
@@ -49,16 +50,44 @@ async def test_export_docx_stale_returns_409(client, mock_db):
 
 
 @pytest.mark.asyncio
+async def test_export_docx_duplicate_selected_returns_409(client, mock_db):
+    project = _make_project()
+    mock_db.get = AsyncMock(return_value=project)
+
+    first = MagicMock()
+    first.id = "gen-1"
+    first.section_uid = "sec-duplicate"
+    first.evidence_status = "ok"
+    second = MagicMock()
+    second.id = "gen-2"
+    second.section_uid = "sec-duplicate"
+    second.evidence_status = "ok"
+
+    selected_result = MagicMock()
+    selected_result.scalars.return_value.all.return_value = [first, second]
+    mock_db.execute = AsyncMock(return_value=selected_result)
+
+    resp = await client.get(f"/api/v1/export/{project.id}/docx")
+
+    assert resp.status_code == 409
+    detail = resp.json()["detail"]
+    assert detail["duplicate_selected_count"] == 1
+    assert detail["duplicate_selected_sections"][0]["section_uid"] == "sec-duplicate"
+    assert detail["duplicate_selected_sections"][0]["generation_ids"] == [
+        "gen-1",
+        "gen-2",
+    ]
+
+
+@pytest.mark.asyncio
 async def test_export_docx_missing_requirement_coverage_returns_409(client, mock_db):
     project = _make_project()
     mock_db.get = AsyncMock(return_value=project)
 
-    clean_stale_result = MagicMock()
-    clean_stale_result.scalars.return_value.all.return_value = []
-
     generation = MagicMock()
     generation.id = "gen-1"
     generation.section_uid = "sec-1"
+    generation.evidence_status = "ok"
     generation.flags_json = {
         "requirement_coverage": {
             "missing_ids": ["req-1"],
@@ -72,9 +101,9 @@ async def test_export_docx_missing_requirement_coverage_returns_409(client, mock
             ],
         }
     }
-    coverage_result = MagicMock()
-    coverage_result.scalars.return_value.all.return_value = [generation]
-    mock_db.execute = AsyncMock(side_effect=[clean_stale_result, coverage_result])
+    selected_result = MagicMock()
+    selected_result.scalars.return_value.all.return_value = [generation]
+    mock_db.execute = AsyncMock(return_value=selected_result)
 
     resp = await client.get(f"/api/v1/export/{project.id}/docx")
 
@@ -92,12 +121,10 @@ async def test_export_docx_shallow_requirement_text_returns_409(client, mock_db)
     project = _make_project()
     mock_db.get = AsyncMock(return_value=project)
 
-    clean_stale_result = MagicMock()
-    clean_stale_result.scalars.return_value.all.return_value = []
-
     generation = MagicMock()
     generation.id = "gen-shallow"
     generation.section_uid = "sec-shallow"
+    generation.evidence_status = "ok"
     generation.text = "Кратко общо описание."
     generation.flags_json = {
         "requirement_coverage": {
@@ -112,9 +139,11 @@ async def test_export_docx_shallow_requirement_text_returns_409(client, mock_db)
             ],
         }
     }
-    coverage_result = MagicMock()
-    coverage_result.scalars.return_value.all.return_value = [generation]
-    mock_db.execute = AsyncMock(side_effect=[clean_stale_result, coverage_result])
+    selected_result = MagicMock()
+    selected_result.scalars.return_value.all.return_value = [generation]
+    outline_result = MagicMock()
+    outline_result.scalar_one_or_none.return_value = None
+    mock_db.execute = AsyncMock(side_effect=[selected_result, outline_result])
 
     resp = await client.get(f"/api/v1/export/{project.id}/docx")
 
@@ -127,15 +156,54 @@ async def test_export_docx_shallow_requirement_text_returns_409(client, mock_db)
 
 
 @pytest.mark.asyncio
+async def test_export_docx_uses_outline_requirements_for_legacy_quality_gate(client, mock_db):
+    project = _make_project()
+    mock_db.get = AsyncMock(return_value=project)
+
+    generation = MagicMock()
+    generation.id = "gen-legacy"
+    generation.section_uid = "sec-legacy"
+    generation.evidence_status = "ok"
+    generation.text = "Кратък legacy текст."
+    generation.flags_json = {}
+
+    selected_result = MagicMock()
+    selected_result.scalars.return_value.all.return_value = [generation]
+    outline = MagicMock()
+    outline.outline_json = {
+        "sections": [
+            {
+                "uid": "sec-legacy",
+                "title": "Legacy section",
+                "requirements": [
+                    "Да се опише организацията.",
+                    "Да се опише контролът.",
+                    "Да се опише приемането.",
+                ],
+            }
+        ]
+    }
+    outline_result = MagicMock()
+    outline_result.scalar_one_or_none.return_value = outline
+    mock_db.execute = AsyncMock(side_effect=[selected_result, outline_result])
+
+    resp = await client.get(f"/api/v1/export/{project.id}/docx")
+
+    assert resp.status_code == 409
+    detail = resp.json()["detail"]
+    assert detail["quality_sections"][0]["section_uid"] == "sec-legacy"
+    assert detail["quality_sections"][0]["requirement_count"] == 3
+
+
+@pytest.mark.asyncio
 async def test_export_docx_ok(client, mock_db):
     """200 с DOCX bytes при успешен export."""
     project = _make_project(name="Test Project")
     mock_db.get = AsyncMock(return_value=project)
 
-    # No stale generations
-    clean_result = MagicMock()
-    clean_result.scalars.return_value.all.return_value = []
-    mock_db.execute = AsyncMock(return_value=clean_result)
+    selected_result = MagicMock()
+    selected_result.scalars.return_value.all.return_value = []
+    mock_db.execute = AsyncMock(return_value=selected_result)
 
     fake_docx = b"PK\x03\x04fake-docx-content"
 

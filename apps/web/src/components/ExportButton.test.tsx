@@ -94,6 +94,41 @@ describe("ExportButton", () => {
     expect(openGenerationsMock).toHaveBeenCalled();
   });
 
+  it("shows duplicate selected warning for ambiguous export sections", async () => {
+    const openGenerationsMock = vi.fn();
+    exportMock.mockRejectedValue(
+      new ApiError("Pre-export check failed", 409, {
+        detail: {
+          duplicate_selected_count: 1,
+          duplicate_selected_sections: [
+            {
+              section_uid: "s1",
+              selected_count: 2,
+              generation_ids: ["g1", "g2"],
+            },
+          ],
+        },
+      }),
+    );
+
+    render(
+      <ExportButton
+        projectId="project-1"
+        projectName="Project Alpha"
+        onOpenGenerations={openGenerationsMock}
+      />,
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Експорт .docx" }));
+
+    expect(await screen.findByTestId("export-duplicate-selected-warning"))
+      .toHaveTextContent("1 секция");
+
+    await userEvent.click(screen.getByRole("button", { name: "Отвори Генерации" }));
+
+    expect(openGenerationsMock).toHaveBeenCalled();
+  });
+
   it("shows requirement coverage warning for missing requirement conflicts", async () => {
     const openGenerationsMock = vi.fn();
     exportMock.mockRejectedValue(

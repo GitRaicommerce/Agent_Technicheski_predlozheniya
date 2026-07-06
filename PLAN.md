@@ -57,6 +57,8 @@
 - Re-ran the Pernik requirement-checklist calibration after wrapped-line reconstruction; extracted requirements increased from 92 to 97 and obviously truncated candidate requirements dropped from 50 to 15 in the local diagnostic check.
 - Added a conservative procurement-only noise filter for requirement extraction and re-ran Pernik calibration; the checklist settled at 85 requirements with the tracked administrative residuals reduced from 8 to 0.
 - Added a deterministic proposal-depth quality gate before DOCX export: selected sections with mapped checklist requirements now need enough developed text for their requirement count, with backend, frontend, and browser smoke coverage for shallow generated sections.
+- Hardened generation selection and export readiness: drafting now unselects older section generations before saving a new selected variant, DOCX export blocks ambiguous sections with multiple selected variants, and legacy sections without coverage metadata can still be depth-checked from outline requirements.
+- Re-ran the Pernik export readiness check after the duplicate-selected guard; the real project is now correctly blocked before export with 14 ambiguous selected sections that must be resolved before a fresh gap analysis.
 
 ## Active Goals
 
@@ -68,10 +70,11 @@
 ## Next Recommended Steps
 
 1. Regenerate the stale Pernik sections after the current fixes and re-run the proposal gap analysis against the winning technical proposal.
-2. Reduce remaining requirement-checklist noise from PDF text-cell joins and overly broad clauses that still produce awkward but technically relevant checklist items.
-3. Expand generated documentation with more precise backend endpoint and workflow coverage.
-4. Build broader regression coverage around common tender scenarios, including explicit outline, no outline, specific requirements, quality/risk/environment-heavy tenders, noisy PDF extraction, and DOCX export readiness.
-5. Calibrate the proposal-depth quality thresholds against regenerated Pernik output and the winning proposal so the gate catches shallow sections without blocking legitimately narrow sections.
+2. Resolve Pernik's legacy duplicate selected generations through the normal pin/select flow or a reviewed repair step, then re-run export readiness and gap analysis.
+3. Reduce remaining requirement-checklist noise from PDF text-cell joins and overly broad clauses that still produce awkward but technically relevant checklist items.
+4. Expand generated documentation with more precise backend endpoint and workflow coverage.
+5. Build broader regression coverage around common tender scenarios, including explicit outline, no outline, specific requirements, quality/risk/environment-heavy tenders, noisy PDF extraction, and DOCX export readiness.
+6. Calibrate the proposal-depth quality thresholds against regenerated Pernik output and the winning proposal so the gate catches shallow sections without blocking legitimately narrow sections.
 
 ## Notes
 

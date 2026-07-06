@@ -17,6 +17,9 @@ export default function ExportButton({
 }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [duplicateSelectedWarning, setDuplicateSelectedWarning] = useState(false);
+  const [duplicateSelectedCount, setDuplicateSelectedCount] =
+    useState<number | null>(null);
   const [staleWarning, setStaleWarning] = useState(false);
   const [staleSectionCount, setStaleSectionCount] = useState<number | null>(null);
   const [missingRequirementWarning, setMissingRequirementWarning] = useState(false);
@@ -29,6 +32,8 @@ export default function ExportButton({
   const handleExport = async () => {
     setLoading(true);
     setError(null);
+    setDuplicateSelectedWarning(false);
+    setDuplicateSelectedCount(null);
     setStaleWarning(false);
     setStaleSectionCount(null);
     setMissingRequirementWarning(false);
@@ -47,7 +52,10 @@ export default function ExportButton({
       toast("DOCX файлът е изтеглен.", "success");
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Грешка при експорт";
-      if (isRequirementCoverageExportError(err)) {
+      if (isDuplicateSelectedExportError(err)) {
+        setDuplicateSelectedWarning(true);
+        setDuplicateSelectedCount(getDuplicateSelectedCount(err));
+      } else if (isRequirementCoverageExportError(err)) {
         setMissingRequirementWarning(true);
         setMissingRequirementCount(getMissingRequirementCount(err));
       } else if (isQualityExportError(err)) {
@@ -74,6 +82,31 @@ export default function ExportButton({
       >
         {loading ? "Генерира се..." : "Експорт .docx"}
       </button>
+
+      {duplicateSelectedWarning && (
+        <div
+          data-testid="export-duplicate-selected-warning"
+          className="mt-1 max-w-xs rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800"
+        >
+          <p>
+            {`Има секции с повече от една избрана версия${
+              duplicateSelectedCount
+                ? ` (${formatDuplicateSelectedCount(duplicateSelectedCount)})`
+                : ""
+            }. `}
+            Оставете само една избрана генерация за всяка секция преди DOCX export.
+          </p>
+          {onOpenGenerations && (
+            <button
+              type="button"
+              onClick={onOpenGenerations}
+              className="mt-2 rounded border border-amber-300 bg-white px-2 py-1 font-medium text-amber-800 transition hover:bg-amber-100"
+            >
+              Отвори Генерации
+            </button>
+          )}
+        </div>
+      )}
 
       {staleWarning && (
         <div
@@ -183,6 +216,36 @@ function getStaleSectionCount(err: unknown): number | null {
     : staleSections.length;
 }
 
+function isDuplicateSelectedExportError(err: unknown): boolean {
+  if (!(err instanceof ApiError) || err.status !== 409) return false;
+
+  const payload = getApiErrorPayload(err);
+  return (
+    !!payload &&
+    typeof payload === "object" &&
+    (Array.isArray(
+      (payload as { duplicate_selected_sections?: unknown })
+        .duplicate_selected_sections,
+    ) ||
+      typeof (payload as { duplicate_selected_count?: unknown })
+        .duplicate_selected_count === "number")
+  );
+}
+
+function getDuplicateSelectedCount(err: unknown): number | null {
+  if (!(err instanceof ApiError)) return null;
+  const payload = getApiErrorPayload(err);
+  if (!payload || typeof payload !== "object") return null;
+
+  const explicitCount = (payload as { duplicate_selected_count?: unknown })
+    .duplicate_selected_count;
+  if (typeof explicitCount === "number") return explicitCount;
+
+  const sections = (payload as { duplicate_selected_sections?: unknown })
+    .duplicate_selected_sections;
+  return Array.isArray(sections) ? sections.length : null;
+}
+
 function isRequirementCoverageExportError(err: unknown): boolean {
   if (!(err instanceof ApiError) || err.status !== 409) return false;
 
@@ -254,6 +317,10 @@ function getApiErrorPayload(error: ApiError): unknown {
 }
 
 function formatStaleSectionCount(count: number): string {
+  return `${count} ${count === 1 ? "секция" : "секции"}`;
+}
+
+function formatDuplicateSelectedCount(count: number): string {
   return `${count} ${count === 1 ? "секция" : "секции"}`;
 }
 

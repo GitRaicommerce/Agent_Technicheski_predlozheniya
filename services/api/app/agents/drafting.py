@@ -9,6 +9,7 @@ import uuid
 from typing import Any, TYPE_CHECKING
 
 import structlog
+from sqlalchemy import update
 
 from app.agents.context import format_grounding_context
 from app.agents.requirement_coverage import (
@@ -184,6 +185,14 @@ async def run_drafting(
         variant_data = llm_result.get(variant_key) or {}
         variant_text = variant_data.get("text", "")
         if variant_text:
+            await db.execute(
+                update(Generation)
+                .where(
+                    Generation.project_id == project_id,
+                    Generation.section_uid == section_uid,
+                )
+                .values(selected=False)
+            )
             requirement_coverage = assess_requirement_coverage(
                 variant_text,
                 normalized_requirement_items,
