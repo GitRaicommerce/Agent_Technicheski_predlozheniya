@@ -29,6 +29,7 @@ export default function GenerationsPanel({
     null,
   );
   const [retryingJob, setRetryingJob] = useState(false);
+  const [regeneratingStaleJob, setRegeneratingStaleJob] = useState(false);
   const [generationJob, setGenerationJob] = useState<GenerationJob | null>(null);
   const hasLoadedRef = useRef(false);
 
@@ -122,6 +123,22 @@ export default function GenerationsPanel({
     }
   };
 
+  const handleRegenerateStaleSections = async () => {
+    setRegeneratingStaleJob(true);
+    setError(null);
+    try {
+      const nextJob = await api.agents.regenerateStaleGenerationJob(projectId);
+      setGenerationJob(nextJob);
+      await load();
+    } catch (e: unknown) {
+      setError(
+        e instanceof Error ? e.message : "Stale regeneration job failed.",
+      );
+    } finally {
+      setRegeneratingStaleJob(false);
+    }
+  };
+
   if (loading) {
     return (
       <p className="py-2 text-xs text-gray-400 animate-pulse">
@@ -177,6 +194,14 @@ export default function GenerationsPanel({
           retrying={retryingJob}
         />
       )}
+      <StaleRegenerationAction
+        staleSectionCount={countStaleSelectedSections(sections)}
+        generationJob={generationJob}
+        regenerating={regeneratingStaleJob}
+        onRegenerate={() => {
+          void handleRegenerateStaleSections();
+        }}
+      />
       <div className="mb-1 flex items-center justify-between">
         <span className="text-xs text-gray-400">
           {sections.length} раздела
@@ -264,6 +289,46 @@ export default function GenerationsPanel({
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function StaleRegenerationAction({
+  staleSectionCount,
+  generationJob,
+  regenerating,
+  onRegenerate,
+}: {
+  staleSectionCount: number;
+  generationJob: GenerationJob | null;
+  regenerating: boolean;
+  onRegenerate: () => void;
+}) {
+  const isActive =
+    generationJob?.status === "queued" || generationJob?.status === "processing";
+
+  if (staleSectionCount <= 0) return null;
+
+  return (
+    <div
+      data-testid="generation-stale-selected-action"
+      className="mb-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800"
+    >
+      <div className="flex items-center justify-between gap-2">
+        <span>
+          {staleSectionCount} selected stale{" "}
+          {staleSectionCount === 1 ? "section" : "sections"}
+        </span>
+        <button
+          type="button"
+          onClick={onRegenerate}
+          disabled={regenerating || isActive}
+          data-testid="generation-stale-regenerate-button"
+          className="shrink-0 rounded border border-amber-300 bg-white px-2 py-1 font-medium text-amber-800 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {regenerating ? "..." : "Regenerate"}
+        </button>
+      </div>
     </div>
   );
 }
@@ -356,6 +421,14 @@ function GenerationVariantSelector({
       </div>
     </div>
   );
+}
+
+function countStaleSelectedSections(sections: SectionGenerations[]): number {
+  return sections.filter((section) =>
+    section.variants.some(
+      (variant) => variant.selected && variant.evidence_status === "stale",
+    ),
+  ).length;
 }
 
 function GenerationJobProgress({

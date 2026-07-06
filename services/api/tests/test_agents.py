@@ -457,6 +457,50 @@ async def test_regenerate_section_ok(client, mock_db):
     assert "trace_id" in data
 
 
+@pytest.mark.asyncio
+async def test_regenerate_stale_generation_job_ok(client, mock_db):
+    pid = str(uuid.uuid4())
+    project = _make_project()
+    project.id = pid
+    job = MagicMock()
+    job.id = str(uuid.uuid4())
+    job.project_id = pid
+    job.job_type = "drafting_stale"
+    job.status = "queued"
+    job.total_sections = 2
+    job.completed_sections = 0
+    job.skipped_sections = 0
+    job.current_section_uid = None
+    job.current_section_title = None
+    job.error = None
+    job.result_json = {
+        "target_section_uids": ["s1", "s2"],
+        "target_reason": "stale_selected",
+    }
+    job.trace_id = str(uuid.uuid4())
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc)
+    job.created_at = now
+    job.updated_at = now
+    job.completed_at = None
+    mock_db.get = AsyncMock(return_value=project)
+
+    with patch(
+        "app.agents.generation_jobs.create_drafting_stale_job",
+        new=AsyncMock(return_value=job),
+    ) as create_job:
+        resp = await client.post(f"/api/v1/agents/{pid}/generation-jobs/stale")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["id"] == job.id
+    assert data["job_type"] == "drafting_stale"
+    assert data["total_sections"] == 2
+    assert data["result_json"]["target_reason"] == "stale_selected"
+    create_job.assert_awaited_once_with(project=project, db=mock_db)
+
+
 # ---------------------------------------------------------------------------
 # POST /api/v1/agents/{project_id}/outline/unlock
 # ---------------------------------------------------------------------------

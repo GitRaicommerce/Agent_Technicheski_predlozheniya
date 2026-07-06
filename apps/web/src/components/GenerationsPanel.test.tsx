@@ -17,6 +17,7 @@ vi.mock("@/lib/api", async () => {
         listGenerations: vi.fn(),
         latestGenerationJob: vi.fn(),
         retryGenerationJob: vi.fn(),
+        regenerateStaleGenerationJob: vi.fn(),
         regenerateSection: vi.fn(),
         selectGeneration: vi.fn(),
       },
@@ -27,6 +28,9 @@ vi.mock("@/lib/api", async () => {
 const listGenerationsMock = vi.mocked(api.agents.listGenerations);
 const latestGenerationJobMock = vi.mocked(api.agents.latestGenerationJob);
 const retryGenerationJobMock = vi.mocked(api.agents.retryGenerationJob);
+const regenerateStaleGenerationJobMock = vi.mocked(
+  api.agents.regenerateStaleGenerationJob,
+);
 const regenerateSectionMock = vi.mocked(api.agents.regenerateSection);
 const selectGenerationMock = vi.mocked(api.agents.selectGeneration);
 
@@ -341,6 +345,60 @@ describe("GenerationsPanel", () => {
 
     await waitFor(() => {
       expect(retryGenerationJobMock).toHaveBeenCalledWith("project-1");
+    });
+    await waitFor(() => {
+      expect(listGenerationsMock).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it("starts a stale selected sections generation job", async () => {
+    listGenerationsMock.mockResolvedValue([
+      {
+        section_uid: "sec-stale",
+        section_title: "Stale Section",
+        variants: [
+          {
+            id: "gen-stale",
+            section_uid: "sec-stale",
+            variant: 1,
+            text: "Stale text",
+            evidence_status: "stale",
+            selected: true,
+            created_at: "2026-04-20T10:00:00.000Z",
+          },
+        ],
+      },
+    ]);
+    regenerateStaleGenerationJobMock.mockResolvedValue({
+      id: "job-stale",
+      project_id: "project-1",
+      job_type: "drafting_stale",
+      status: "queued",
+      total_sections: 1,
+      completed_sections: 0,
+      skipped_sections: 0,
+      current_section_uid: null,
+      current_section_title: null,
+      error: null,
+      result_json: {
+        target_section_uids: ["sec-stale"],
+        target_reason: "stale_selected",
+      },
+      trace_id: "trace-stale",
+      created_at: "2026-04-20T10:02:00.000Z",
+      updated_at: "2026-04-20T10:02:00.000Z",
+      completed_at: null,
+    });
+
+    render(<GenerationsPanel projectId="project-1" />);
+
+    expect(await screen.findByTestId("generation-stale-selected-action"))
+      .toHaveTextContent("1 selected stale section");
+
+    await userEvent.click(screen.getByTestId("generation-stale-regenerate-button"));
+
+    await waitFor(() => {
+      expect(regenerateStaleGenerationJobMock).toHaveBeenCalledWith("project-1");
     });
     await waitFor(() => {
       expect(listGenerationsMock).toHaveBeenCalledTimes(2);

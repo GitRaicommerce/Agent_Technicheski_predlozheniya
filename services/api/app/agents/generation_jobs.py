@@ -42,7 +42,10 @@ def _set_job_result(
     results: list[dict[str, Any]],
     failed_sections: list[dict[str, Any]],
 ) -> None:
+    previous_result = job.result_json if isinstance(job.result_json, dict) else {}
     job.result_json = {
+        "target_section_uids": previous_result.get("target_section_uids"),
+        "target_reason": previous_result.get("target_reason"),
         "outline_id": outline.id,
         "outline_version": outline.version,
         "sections": results,
@@ -77,14 +80,79 @@ def _sections_pending_generation(
     ]
 
 
+def _target_section_uids(job: GenerationJob) -> set[str] | None:
+    result_json = job.result_json if isinstance(job.result_json, dict) else {}
+    target_uids = result_json.get("target_section_uids")
+    if not isinstance(target_uids, list):
+        return None
+
+    return {str(uid) for uid in target_uids if uid}
+
+
+def _targeted_sections(
+    all_sections: list[dict[str, Any]],
+    target_uids: set[str] | None,
+) -> list[dict[str, Any]]:
+    if target_uids is None:
+        return []
+
+    return [
+        section
+        for section in all_sections
+        if section.get("uid") and str(section.get("uid")) in target_uids
+    ]
+
+
 async def create_drafting_all_job(project: Project, db) -> GenerationJob:
+    return await create_drafting_job(project=project, db=db)
+
+
+async def create_drafting_stale_job(project: Project, db) -> GenerationJob:
+    stale_result = await db.execute(
+        select(Generation.section_uid)
+        .where(
+            Generation.project_id == project.id,
+            Generation.selected.is_(True),
+            Generation.evidence_status == "stale",
+        )
+        .distinct()
+    )
+    section_uids = [
+        row[0]
+        for row in stale_result
+        if row[0]
+    ]
+    if not section_uids:
+        raise ValueError("No stale selected sections to regenerate.")
+
+    return await create_drafting_job(
+        project=project,
+        db=db,
+        target_section_uids=section_uids,
+        target_reason="stale_selected",
+        job_type="drafting_stale",
+    )
+
+
+async def create_drafting_job(
+    project: Project,
+    db,
+    *,
+    target_section_uids: list[str] | None = None,
+    target_reason: str | None = None,
+    job_type: str = "drafting_all",
+) -> GenerationJob:
     trace_id = str(uuid.uuid4())
     job = GenerationJob(
         id=str(uuid.uuid4()),
         project_id=project.id,
-        job_type="drafting_all",
+        job_type=job_type,
         status="queued",
         trace_id=trace_id,
+        result_json={
+            "target_section_uids": target_section_uids,
+            "target_reason": target_reason,
+        } if target_section_uids is not None else None,
     )
     db.add(job)
     await db.flush()
@@ -171,11 +239,17 @@ async def _run_drafting_all_job(job: GenerationJob, db) -> None:
 
     all_sections: list[dict[str, Any]] = []
     _collect_sections(outline.outline_json.get("sections", []), all_sections)
-    pending_sections = _sections_pending_generation(all_sections, generation_statuses)
+    target_uids = _target_section_uids(job)
+    if target_uids is not None:
+        pending_sections = _targeted_sections(all_sections, target_uids)
+        section_scope_count = len(pending_sections)
+    else:
+        pending_sections = _sections_pending_generation(all_sections, generation_statuses)
+        section_scope_count = len(all_sections)
 
     job.status = "processing"
-    job.total_sections = len(all_sections)
-    job.skipped_sections = len(all_sections) - len(pending_sections)
+    job.total_sections = section_scope_count
+    job.skipped_sections = max(0, section_scope_count - len(pending_sections))
     job.updated_at = datetime.now(timezone.utc)
     await db.commit()
 

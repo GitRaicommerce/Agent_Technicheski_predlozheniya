@@ -736,6 +736,87 @@ test.describe("smoke", () => {
     }
   });
 
+  test("starts stale selected section regeneration from generations panel", async ({
+    page,
+    request,
+  }) => {
+    const projectName = `Smoke Stale Regen ${Date.now()}`;
+    const createResponse = await request.post("/api/v1/projects", {
+      data: {
+        name: projectName,
+        location: "Sofia",
+      },
+    });
+
+    expect(createResponse.ok()).toBeTruthy();
+    const project = (await createResponse.json()) as { id: string };
+    const projectId = project.id;
+    await seedProjectState(projectId, {
+      outlineLocked: true,
+      staleGeneration: true,
+    });
+    const staleJobId = randomUUID();
+    let staleJobStarted = false;
+    const staleJob = {
+      id: staleJobId,
+      project_id: projectId,
+      job_type: "drafting_stale",
+      status: "queued",
+      total_sections: 1,
+      completed_sections: 0,
+      skipped_sections: 0,
+      current_section_uid: null,
+      current_section_title: null,
+      error: null,
+      result_json: { target_reason: "stale_selected" },
+      trace_id: randomUUID(),
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      completed_at: null,
+    };
+
+    try {
+      await page.route(
+        `**/api/v1/agents/${projectId}/generation-jobs/latest`,
+        async (route) => {
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify(staleJobStarted ? staleJob : null),
+          });
+        },
+      );
+      await page.route(
+        `**/api/v1/agents/${projectId}/generation-jobs/stale`,
+        async (route) => {
+          staleJobStarted = true;
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify(staleJob),
+          });
+        },
+      );
+
+      await page.goto(`/projects/${projectId}`);
+      await waitForProjectPage(page, projectName);
+
+      await page.getByTestId("generations-panel-toggle").click();
+      await expect(
+        page.getByTestId("generation-stale-selected-action"),
+      ).toContainText("1 selected stale section");
+
+      await page.getByTestId("generation-stale-regenerate-button").click();
+
+      await expect(page.getByTestId("generation-job-progress")).toContainText(
+        "0 / 1",
+      );
+      expect(staleJobStarted).toBeTruthy();
+    } finally {
+      await request.delete(`/api/v1/projects/${projectId}`);
+    }
+  });
+
   test("reloads a section after a deterministic regenerate action", async ({
     page,
     request,
