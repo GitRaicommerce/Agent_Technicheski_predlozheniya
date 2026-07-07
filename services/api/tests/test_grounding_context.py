@@ -226,6 +226,7 @@ async def test_drafting_prompt_and_saved_generation_include_requirement_coverage
     assert "SECTION REQUIREMENT CHECKLIST" in prompt
     assert "DRAFTING BLUEPRINT" in prompt
     assert "SECTION DEPTH TARGET" in prompt
+    assert "response plan:" in prompt
     assert "id=req-schedule" in prompt
     assert saved_generation.flags_json["requirement_coverage"]["missing_ids"] == []
     assert saved_generation.flags_json["requirement_coverage"]["covered_ids"] == [
@@ -241,4 +242,13 @@ async def test_drafting_prompt_and_saved_generation_include_requirement_coverage
         ]
         == "schedule"
     )
+    assert (
+        saved_generation.used_sources_json["drafting_blueprint"]["groups"][0][
+            "requirements"
+        ][0]["response_plan"]["requirement_id"]
+        == "req-schedule"
+    )
+    assert "responsible role" in saved_generation.used_sources_json[
+        "drafting_blueprint"
+    ]["groups"][0]["requirements"][0]["response_plan"]["expected_response"]
     assert result["generation_ids"]["variant_1"] == saved_generation.id

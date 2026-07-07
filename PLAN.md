@@ -91,6 +91,7 @@
 - Added universal content-section filtering and Markdown subsection grouping to proposal gap analysis so calibration compares substantive work-program/methodology sections separately from formal front matter, declarations, signatures, forms, and internal generated-text subheadings.
 - Added section-level gap diagnostics to proposal calibration reports, mapping weak sections to actionable calibration focus areas: outline mapping, drafting depth, or grounding/checklist coverage, while filtering formal greeting/participant sections out of content comparisons.
 - Added calibration-focus rollups to the calibration manifest, summarizing how many gap-report sections point to outline mapping, drafting depth, grounding/checklist coverage, or monitor-only follow-up.
+- Added a requirement response plan to drafting blueprints so every checklist item instructs the model to write a concrete action, responsible role, control/evidence record, and sequence or deliverable link when supported by sources.
 
 ## Active Goals
 

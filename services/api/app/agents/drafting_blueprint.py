@@ -72,6 +72,7 @@ BLUEPRINT_GLOBAL_INSTRUCTIONS = [
     "Write Bulgarian subheadings for each relevant group unless the section title already provides a stronger tender-specific structure.",
     "Under every group, cover every listed requirement id explicitly.",
     "Do not merge unrelated requirement ids into one vague paragraph.",
+    "For every requirement response, state the action, responsible role, control or evidence record, and sequence/deliverable link when supported by sources.",
 ]
 
 
@@ -100,6 +101,26 @@ def _topic_key(item: dict[str, Any]) -> str:
 
 def _guidance_for_group(category: str) -> list[str]:
     return CATEGORY_GUIDANCE.get(category, DEFAULT_GUIDANCE)
+
+
+def _response_plan_for_item(item: dict[str, Any]) -> dict[str, Any]:
+    category = _clean(item.get("category"))
+    topic = _topic_key(item)
+    source_ref = _clean(item.get("source_ref")) or _clean(item.get("source_chunk_id"))
+    plan = {
+        "requirement_id": _clean(item.get("id")),
+        "topic": topic,
+        "expected_response": (
+            "Write a developed Bulgarian passage that names the concrete action, "
+            "responsible role, control point, evidence record, and link to the "
+            "work sequence or deliverable when the sources support it."
+        ),
+    }
+    if category in CATEGORY_GUIDANCE:
+        plan["category_focus"] = category
+    if source_ref:
+        plan["source_ref"] = source_ref
+    return plan
 
 
 def _context_cues(project_grounding_context: dict[str, Any] | None) -> list[str]:
@@ -169,6 +190,7 @@ def build_drafting_blueprint(
                     "id": requirement_id,
                     "text": text,
                     "importance": _clean(item.get("importance")) or "mandatory",
+                    "response_plan": _response_plan_for_item(item),
                 }
             )
         for topic_detail in group["topic_details"]:
@@ -233,5 +255,16 @@ def format_drafting_blueprint_for_prompt(blueprint: dict[str, Any]) -> str:
                 "   - requirement "
                 f"{item.get('id')} ({item.get('importance')}): {item.get('text')}"
             )
+            response_plan = item.get("response_plan")
+            if isinstance(response_plan, dict):
+                expected_response = _clean(response_plan.get("expected_response"))
+                if expected_response:
+                    lines.append(f"     response plan: {expected_response}")
+                category_focus = _clean(response_plan.get("category_focus"))
+                if category_focus:
+                    lines.append(f"     category focus: {category_focus}")
+                source_ref = _clean(response_plan.get("source_ref"))
+                if source_ref:
+                    lines.append(f"     source reference: {source_ref}")
 
     return "\n".join(lines)

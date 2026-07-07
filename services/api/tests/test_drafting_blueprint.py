@@ -50,6 +50,13 @@ def test_drafting_blueprint_groups_requirements_by_category():
     assert any("trigger" in item for item in groups[0]["guidance"])
     assert any("records" in item for item in groups[1]["guidance"])
     assert any("tender-specific" in item for item in groups[2]["guidance"])
+    assert (
+        groups[0]["requirements"][0]["response_plan"]["requirement_id"]
+        == "req-risk"
+    )
+    assert "responsible role" in groups[0]["requirements"][0]["response_plan"][
+        "expected_response"
+    ]
 
 
 def test_drafting_blueprint_prompt_includes_context_cues_and_ids():
@@ -78,6 +85,9 @@ def test_drafting_blueprint_prompt_includes_context_cues_and_ids():
     assert "req-schedule" in prompt
     assert "required topic coverage" in prompt
     assert "phases (req-schedule)" in prompt
+    assert "response plan:" in prompt
+    assert "responsible role" in prompt
+    assert "category focus: schedule" in prompt
     assert "Mobilization and design review" in prompt
     assert "phases, dependencies, and acceptance points" in prompt
 

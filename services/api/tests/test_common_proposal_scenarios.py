@@ -377,6 +377,60 @@ def test_common_single_category_with_many_topics_still_requires_developed_depth(
     assert shallow_result["min_words"] >= 800
 
 
+def test_common_blueprint_creates_response_plan_for_each_requirement():
+    requirement_items = [
+        {
+            "id": "req-organization",
+            "text": "Describe team roles, responsibilities, and coordination.",
+            "importance": "mandatory",
+            "category": "organization",
+            "category_label": "Organization",
+            "topic": "team roles",
+            "source_ref": "chunk-organization",
+        },
+        {
+            "id": "req-quality",
+            "text": "Describe inspections, protocols, and acceptance evidence.",
+            "importance": "mandatory",
+            "category": "quality",
+            "category_label": "Quality control",
+            "topic": "acceptance evidence",
+            "source_ref": "chunk-quality",
+        },
+        {
+            "id": "req-risk",
+            "text": "Describe risk trigger, owner, prevention, and escalation.",
+            "importance": "mandatory",
+            "category": "risk",
+            "category_label": "Risk management",
+            "topic": "risk response",
+            "source_ref": "chunk-risk",
+        },
+    ]
+    blueprint = build_drafting_blueprint(
+        section_title="Work programme",
+        requirement_items=requirement_items,
+    )
+
+    response_plans = [
+        requirement["response_plan"]
+        for group in blueprint["groups"]
+        for requirement in group["requirements"]
+    ]
+
+    assert [plan["requirement_id"] for plan in response_plans] == [
+        "req-organization",
+        "req-quality",
+        "req-risk",
+    ]
+    assert all("responsible role" in plan["expected_response"] for plan in response_plans)
+    assert {plan["source_ref"] for plan in response_plans} == {
+        "chunk-organization",
+        "chunk-quality",
+        "chunk-risk",
+    }
+
+
 def test_common_readiness_report_guides_mixed_blocker_remediation():
     chunks = [
         make_chunk(
