@@ -35,6 +35,8 @@ export default function GenerationsPanel({
   const [retryingJob, setRetryingJob] = useState(false);
   const [regeneratingStaleJob, setRegeneratingStaleJob] = useState(false);
   const [showOnlyAttention, setShowOnlyAttention] = useState(false);
+  const [resolvingDuplicateSelections, setResolvingDuplicateSelections] =
+    useState(false);
   const [generationJob, setGenerationJob] = useState<GenerationJob | null>(null);
   const hasLoadedRef = useRef(false);
 
@@ -150,6 +152,28 @@ export default function GenerationsPanel({
     }
   };
 
+  const handleResolveDuplicateSelections = async () => {
+    const targets = duplicateSelectionResolutionTargets(sections);
+    if (targets.length === 0) return;
+
+    setResolvingDuplicateSelections(true);
+    setError(null);
+    try {
+      for (const target of targets) {
+        await api.agents.selectGeneration(projectId, target.generationId);
+      }
+      await load();
+    } catch (e: unknown) {
+      setError(
+        e instanceof Error
+          ? e.message
+          : "Duplicate generation selection failed.",
+      );
+    } finally {
+      setResolvingDuplicateSelections(false);
+    }
+  };
+
   if (loading) {
     return (
       <p className="py-2 text-xs text-gray-400 animate-pulse">
@@ -208,6 +232,8 @@ export default function GenerationsPanel({
         sectionNeedsAttention(section, qualityAttentionSectionSet),
       )
     : sections;
+  const duplicateResolutionTargets =
+    duplicateSelectionResolutionTargets(sections);
 
   return (
     <div className="space-y-1">
@@ -230,6 +256,11 @@ export default function GenerationsPanel({
         summary={attentionSummary}
         showOnlyAttention={shouldFilterAttention}
         onToggle={() => setShowOnlyAttention((value) => !value)}
+        duplicateResolutionCount={duplicateResolutionTargets.length}
+        resolvingDuplicates={resolvingDuplicateSelections}
+        onResolveDuplicates={() => {
+          void handleResolveDuplicateSelections();
+        }}
       />
       <div className="mb-1 flex items-center justify-between">
         <span className="text-xs text-gray-400">
@@ -353,11 +384,17 @@ interface GenerationAttentionSummaryData {
 function GenerationAttentionSummary({
   summary,
   showOnlyAttention,
+  duplicateResolutionCount,
+  resolvingDuplicates,
   onToggle,
+  onResolveDuplicates,
 }: {
   summary: GenerationAttentionSummaryData;
   showOnlyAttention: boolean;
+  duplicateResolutionCount: number;
+  resolvingDuplicates: boolean;
   onToggle: () => void;
+  onResolveDuplicates: () => void;
 }) {
   if (summary.attentionSectionCount <= 0) return null;
 
@@ -406,6 +443,18 @@ function GenerationAttentionSummary({
         >
           {showOnlyAttention ? "Покажи всички" : "Покажи проблемните"}
         </button>
+        {duplicateResolutionCount > 0 && (
+          <button
+            type="button"
+            onClick={onResolveDuplicates}
+            disabled={resolvingDuplicates}
+            data-testid="generation-resolve-duplicates-latest-button"
+            className="shrink-0 rounded border border-red-300 bg-white px-2 py-1 font-medium text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+            title="Оставя само най-новата избрана версия във всяка секция с дублиран избор"
+          >
+            {resolvingDuplicates ? "Поправя..." : "Остави най-новите"}
+          </button>
+        )}
       </div>
     </div>
   );
@@ -539,6 +588,57 @@ function GenerationVariantSelector({
       </div>
     </div>
   );
+}
+
+interface DuplicateSelectionResolutionTarget {
+  sectionUid: string;
+  generationId: string;
+}
+
+function duplicateSelectionResolutionTargets(
+  sections: SectionGenerations[],
+): DuplicateSelectionResolutionTarget[] {
+  return sections
+    .map((section) => {
+      const selectedVariants = section.variants.filter(
+        (variant) => variant.selected,
+      );
+      if (selectedVariants.length <= 1) return null;
+
+      const latestSelected = selectedVariants.reduce((latest, variant) =>
+        compareGenerationRecency(variant, latest) >= 0 ? variant : latest,
+      );
+      return {
+        sectionUid: section.section_uid,
+        generationId: latestSelected.id,
+      };
+    })
+    .filter(
+      (target): target is DuplicateSelectionResolutionTarget =>
+        target !== null,
+    );
+}
+
+function compareGenerationRecency(left: Generation, right: Generation): number {
+  const leftTime = Date.parse(left.created_at);
+  const rightTime = Date.parse(right.created_at);
+  if (Number.isFinite(leftTime) && Number.isFinite(rightTime)) {
+    const timeDiff = leftTime - rightTime;
+    if (timeDiff !== 0) return timeDiff;
+  } else if (Number.isFinite(leftTime)) {
+    return 1;
+  } else if (Number.isFinite(rightTime)) {
+    return -1;
+  }
+
+  const leftVariant = Number(left.variant);
+  const rightVariant = Number(right.variant);
+  if (Number.isFinite(leftVariant) && Number.isFinite(rightVariant)) {
+    const variantDiff = leftVariant - rightVariant;
+    if (variantDiff !== 0) return variantDiff;
+  }
+
+  return left.id.localeCompare(right.id);
 }
 
 function countStaleSelectedSections(sections: SectionGenerations[]): number {

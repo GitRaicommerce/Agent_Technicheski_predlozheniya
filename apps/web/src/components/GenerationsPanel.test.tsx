@@ -215,6 +215,124 @@ describe("GenerationsPanel", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("resolves duplicate selected generations by keeping the newest selected variants", async () => {
+    listGenerationsMock
+      .mockResolvedValueOnce([
+        {
+          section_uid: "sec-duplicate-a",
+          section_title: "Duplicate Section A",
+          variants: [
+            {
+              id: "gen-a-old",
+              section_uid: "sec-duplicate-a",
+              variant: 1,
+              text: "Older selected text",
+              evidence_status: "ok",
+              selected: true,
+              created_at: "2026-04-20T10:00:00.000Z",
+            },
+            {
+              id: "gen-a-new",
+              section_uid: "sec-duplicate-a",
+              variant: 2,
+              text: "Newer selected text",
+              evidence_status: "ok",
+              selected: true,
+              created_at: "2026-04-21T10:00:00.000Z",
+            },
+          ],
+        },
+        {
+          section_uid: "sec-duplicate-b",
+          section_title: "Duplicate Section B",
+          variants: [
+            {
+              id: "gen-b-v1",
+              section_uid: "sec-duplicate-b",
+              variant: 1,
+              text: "Variant one selected text",
+              evidence_status: "ok",
+              selected: true,
+              created_at: "2026-04-22T10:00:00.000Z",
+            },
+            {
+              id: "gen-b-v3",
+              section_uid: "sec-duplicate-b",
+              variant: 3,
+              text: "Variant three selected text",
+              evidence_status: "ok",
+              selected: true,
+              created_at: "2026-04-22T10:00:00.000Z",
+            },
+          ],
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          section_uid: "sec-duplicate-a",
+          section_title: "Duplicate Section A",
+          variants: [
+            {
+              id: "gen-a-new",
+              section_uid: "sec-duplicate-a",
+              variant: 2,
+              text: "Newer selected text",
+              evidence_status: "ok",
+              selected: true,
+              created_at: "2026-04-21T10:00:00.000Z",
+            },
+          ],
+        },
+        {
+          section_uid: "sec-duplicate-b",
+          section_title: "Duplicate Section B",
+          variants: [
+            {
+              id: "gen-b-v3",
+              section_uid: "sec-duplicate-b",
+              variant: 3,
+              text: "Variant three selected text",
+              evidence_status: "ok",
+              selected: true,
+              created_at: "2026-04-22T10:00:00.000Z",
+            },
+          ],
+        },
+      ]);
+    selectGenerationMock.mockResolvedValue({
+      status: "selected",
+      generation_id: "gen-a-new",
+    });
+
+    render(<GenerationsPanel projectId="project-1" />);
+
+    expect(await screen.findByTestId("generation-attention-summary"))
+      .toHaveTextContent("дублиран избор: 2");
+
+    await userEvent.click(
+      screen.getByTestId("generation-resolve-duplicates-latest-button"),
+    );
+
+    await waitFor(() => {
+      expect(selectGenerationMock).toHaveBeenNthCalledWith(
+        1,
+        "project-1",
+        "gen-a-new",
+      );
+      expect(selectGenerationMock).toHaveBeenNthCalledWith(
+        2,
+        "project-1",
+        "gen-b-v3",
+      );
+    });
+    await waitFor(() => {
+      expect(listGenerationsMock).toHaveBeenCalledTimes(2);
+    });
+    expect(
+      screen.queryByTestId("generation-resolve-duplicates-latest-button"),
+    ).not.toBeInTheDocument();
+  });
+
   it("regenerates a section and reloads the list", async () => {
     listGenerationsMock
       .mockResolvedValueOnce([

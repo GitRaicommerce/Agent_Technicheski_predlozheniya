@@ -74,6 +74,7 @@
 - Connected blueprint-aware quality/depth readiness blockers back into the Generations panel attention filter so shallow selected sections flagged by export preflight are visible next to duplicate, stale, and missing-requirement issues.
 - Made export warning remediation open the Generations panel already focused on attention/problem sections, reducing manual filtering when resolving readiness blockers on any project.
 - Reduced requirement-checklist noise from broad catch-all compliance clauses and PDF scoring-table joins, while preserving concrete compliance requirements and adding a common-scenario regression so noisy rows do not inflate drafting blueprint groups.
+- Added a bulk duplicate-selected remediation action in the Generations attention panel that keeps the newest selected variant per ambiguous section through the existing selection endpoint, with frontend and browser coverage.
 
 ## Active Goals
 
@@ -84,7 +85,7 @@
 
 ## Next Recommended Steps
 
-1. Use the export warning remediation button and focused Generations attention view to resolve Pernik's legacy duplicate selected generations by choosing one variant per ambiguous section, then re-run the aggregated export readiness check.
+1. Use the export warning remediation button and the Generations bulk duplicate resolver to clear Pernik's legacy duplicate selected generations, then re-run the aggregated export readiness check.
 2. Use the Generations panel bulk stale-regeneration action for Pernik after duplicate selections are resolved; the same attention filter will also surface any blueprint-aware shallow/depth sections reported by the next export preflight.
 3. Re-run export readiness and the proposal gap analysis against the winning technical proposal, then calibrate the drafting blueprint and blueprint-aware depth thresholds against the regenerated Pernik output.
 4. Expand generated documentation with more precise backend endpoint and workflow coverage.

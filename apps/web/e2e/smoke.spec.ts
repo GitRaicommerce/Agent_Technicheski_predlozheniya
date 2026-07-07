@@ -569,17 +569,13 @@ test.describe("smoke", () => {
       await expect(
         page.getByTestId(`generation-section-${sectionUid}`),
       ).toBeVisible();
-      await page.getByTestId(`generation-section-${sectionUid}`).click();
-      await expect(
-        page.getByTestId(`generation-duplicate-selected-warning-${sectionUid}`),
-      ).toContainText("2 selected variants");
 
       await page
-        .getByTestId(`generation-select-${alternativeGenerationId}`)
+        .getByTestId("generation-resolve-duplicates-latest-button")
         .click();
 
       await expect(
-        page.getByTestId(`generation-duplicate-selected-warning-${sectionUid}`),
+        page.getByTestId("generation-resolve-duplicates-latest-button"),
       ).toHaveCount(0);
 
       const exportResponse = await request.get(`/api/v1/export/${projectId}/docx`);
