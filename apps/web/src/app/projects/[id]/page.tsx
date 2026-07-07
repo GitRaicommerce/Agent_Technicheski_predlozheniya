@@ -50,6 +50,8 @@ export default function ProjectPage() {
   const [outlineRefreshKey, setOutlineRefreshKey] = useState(0);
   const [scheduleRefreshKey, setScheduleRefreshKey] = useState(0);
   const [generationsRefreshKey, setGenerationsRefreshKey] = useState(0);
+  const [qualityAttentionSectionUids, setQualityAttentionSectionUids] =
+    useState<string[]>([]);
   const [showEdit, setShowEdit] = useState(false);
   const [editData, setEditData] = useState({ name: "", location: "", description: "", contracting_authority: "", tender_date: "" });
   const [saving, setSaving] = useState(false);
@@ -378,6 +380,7 @@ export default function ProjectPage() {
                 setShowGenerations(true);
                 setGenerationsRefreshKey((value) => value + 1);
               }}
+              onQualitySectionsBlocked={setQualityAttentionSectionUids}
             />
           </div>
         )}
@@ -499,6 +502,7 @@ export default function ProjectPage() {
                 <GenerationsPanel
                   projectId={project.id}
                   refreshKey={generationsRefreshKey}
+                  qualityAttentionSectionUids={qualityAttentionSectionUids}
                 />
               </div>
             )}

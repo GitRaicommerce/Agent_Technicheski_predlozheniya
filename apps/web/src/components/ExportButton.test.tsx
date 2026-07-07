@@ -201,6 +201,7 @@ describe("ExportButton", () => {
 
   it("shows quality warning for shallow generated sections", async () => {
     const openGenerationsMock = vi.fn();
+    const qualitySectionsBlockedMock = vi.fn();
     readinessMock.mockResolvedValue({
       project_id: "project-1",
       ready: false,
@@ -221,6 +222,7 @@ describe("ExportButton", () => {
         projectId="project-1"
         projectName="Project Alpha"
         onOpenGenerations={openGenerationsMock}
+        onQualitySectionsBlocked={qualitySectionsBlockedMock}
       />,
     );
 
@@ -232,6 +234,8 @@ describe("ExportButton", () => {
       .toHaveTextContent("6 групи изисквания");
     expect(screen.getByTestId("export-quality-warning"))
       .toHaveTextContent("1200 думи");
+    expect(qualitySectionsBlockedMock).toHaveBeenNthCalledWith(1, []);
+    expect(qualitySectionsBlockedMock).toHaveBeenLastCalledWith(["s1"]);
 
     await userEvent.click(screen.getByRole("button", { name: "Отвори Генерации" }));
 

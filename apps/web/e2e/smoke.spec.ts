@@ -694,9 +694,15 @@ test.describe("smoke", () => {
         "1 секция",
       );
       await page.getByTestId("export-quality-warning").getByRole("button").click();
+      await expect(page.getByTestId("generation-attention-summary")).toContainText(
+        "кратки секции: 1",
+      );
       await expect(
         page.getByTestId(`generation-section-${sectionUid}`),
       ).toBeVisible();
+      await expect(
+        page.getByTestId(`generation-quality-attention-badge-${sectionUid}`),
+      ).toContainText("кратка");
     } finally {
       await request.delete(`/api/v1/projects/${projectId}`);
     }

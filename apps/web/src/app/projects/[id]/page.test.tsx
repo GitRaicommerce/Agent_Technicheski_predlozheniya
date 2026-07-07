@@ -39,7 +39,29 @@ vi.mock("@/components/ChatPanel", () => ({
 }));
 
 vi.mock("@/components/ExportButton", () => ({
-  default: () => <div>Export Button</div>,
+  default: ({
+    onOpenGenerations,
+    onQualitySectionsBlocked,
+  }: {
+    onOpenGenerations?: () => void;
+    onQualitySectionsBlocked?: (sectionUids: string[]) => void;
+  }) => (
+    <div>
+      Export Button
+      <div
+        data-testid="mock-open-generations"
+        onClick={onOpenGenerations}
+      >
+        Open Generations
+      </div>
+      <div
+        data-testid="mock-quality-blockers"
+        onClick={() => onQualitySectionsBlocked?.(["sec-quality"])}
+      >
+        Set Quality Blockers
+      </div>
+    </div>
+  ),
 }));
 
 vi.mock("@/components/FileUploadPanel", () => ({
@@ -59,7 +81,15 @@ vi.mock("@/components/SchedulePanel", () => ({
 }));
 
 vi.mock("@/components/GenerationsPanel", () => ({
-  default: () => <div>Generations Panel</div>,
+  default: ({
+    qualityAttentionSectionUids = [],
+  }: {
+    qualityAttentionSectionUids?: string[];
+  }) => (
+    <div data-testid="mock-generations-panel">
+      Generations Panel {qualityAttentionSectionUids.join(",")}
+    </div>
+  ),
 }));
 
 vi.mock("@/lib/api", async () => {
@@ -198,6 +228,18 @@ describe("ProjectPage", () => {
     await userEvent.click(screen.getByTestId("requirements-panel-toggle"));
 
     expect(screen.getByText("Requirement Checklist Panel")).toBeInTheDocument();
+  });
+
+  it("passes quality export blockers into the generations panel", async () => {
+    render(<ProjectPage />);
+
+    expect(await screen.findByText("Project Alpha")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByTestId("mock-quality-blockers"));
+    await userEvent.click(screen.getByTestId("mock-open-generations"));
+
+    expect(screen.getByTestId("mock-generations-panel"))
+      .toHaveTextContent("sec-quality");
   });
 
   it("shows automatic Lex.bg status and allows manual refresh", async () => {

@@ -14,11 +14,13 @@ import { repairLikelyMojibake } from "@/lib/text";
 interface Props {
   projectId: string;
   refreshKey?: number;
+  qualityAttentionSectionUids?: string[];
 }
 
 export default function GenerationsPanel({
   projectId,
   refreshKey = 0,
+  qualityAttentionSectionUids = [],
 }: Props) {
   const [sections, setSections] = useState<SectionGenerations[]>([]);
   const [loading, setLoading] = useState(true);
@@ -186,11 +188,17 @@ export default function GenerationsPanel({
     );
   }
 
-  const attentionSummary = summarizeGenerationAttention(sections);
+  const qualityAttentionSectionSet = new Set(qualityAttentionSectionUids);
+  const attentionSummary = summarizeGenerationAttention(
+    sections,
+    qualityAttentionSectionSet,
+  );
   const shouldFilterAttention =
     showOnlyAttention && attentionSummary.attentionSectionCount > 0;
   const visibleSections = shouldFilterAttention
-    ? sections.filter(sectionNeedsAttention)
+    ? sections.filter((section) =>
+        sectionNeedsAttention(section, qualityAttentionSectionSet),
+      )
     : sections;
 
   return (
@@ -239,7 +247,7 @@ export default function GenerationsPanel({
         const displayVariant =
           selectedVariants[0] ?? section.variants[0];
         const requirementCoverage = getRequirementCoverage(displayVariant);
-        const attention = getSectionAttention(section);
+        const attention = getSectionAttention(section, qualityAttentionSectionSet);
 
         return (
           <div
@@ -274,6 +282,15 @@ export default function GenerationsPanel({
                     title="Избраната генерация използва остарели доказателства"
                   >
                     остаряла
+                  </span>
+                )}
+                {attention.hasQualityReviewIssue && (
+                  <span
+                    data-testid={`generation-quality-attention-badge-${section.section_uid}`}
+                    className="rounded bg-blue-100 px-1.5 py-0.5 text-[11px] font-medium text-blue-700"
+                    title="Избраната генерация е твърде кратка за export readiness"
+                  >
+                    кратка
                   </span>
                 )}
                 <RequirementCoverageBadge coverage={requirementCoverage} />
@@ -322,6 +339,7 @@ interface GenerationAttentionSummaryData {
   duplicateSelectedSectionCount: number;
   staleSelectedSectionCount: number;
   missingRequirementSectionCount: number;
+  qualityReviewSectionCount: number;
 }
 
 function GenerationAttentionSummary({
@@ -363,6 +381,11 @@ function GenerationAttentionSummary({
             {summary.missingRequirementSectionCount > 0 && (
               <span className="rounded bg-white px-1.5 py-0.5">
                 липсващи изисквания: {summary.missingRequirementSectionCount}
+              </span>
+            )}
+            {summary.qualityReviewSectionCount > 0 && (
+              <span className="rounded bg-white px-1.5 py-0.5">
+                кратки секции: {summary.qualityReviewSectionCount}
               </span>
             )}
           </div>
@@ -518,10 +541,11 @@ function countStaleSelectedSections(sections: SectionGenerations[]): number {
 
 function summarizeGenerationAttention(
   sections: SectionGenerations[],
+  qualityAttentionSectionUids: Set<string>,
 ): GenerationAttentionSummaryData {
   return sections.reduce<GenerationAttentionSummaryData>(
     (summary, section) => {
-      const attention = getSectionAttention(section);
+      const attention = getSectionAttention(section, qualityAttentionSectionUids);
       if (sectionAttentionCount(attention) > 0) {
         summary.attentionSectionCount += 1;
       }
@@ -534,6 +558,9 @@ function summarizeGenerationAttention(
       if (attention.hasMissingRequirementCoverage) {
         summary.missingRequirementSectionCount += 1;
       }
+      if (attention.hasQualityReviewIssue) {
+        summary.qualityReviewSectionCount += 1;
+      }
       return summary;
     },
     {
@@ -541,27 +568,39 @@ function summarizeGenerationAttention(
       duplicateSelectedSectionCount: 0,
       staleSelectedSectionCount: 0,
       missingRequirementSectionCount: 0,
+      qualityReviewSectionCount: 0,
     },
   );
 }
 
-function sectionNeedsAttention(section: SectionGenerations): boolean {
-  return sectionAttentionCount(getSectionAttention(section)) > 0;
+function sectionNeedsAttention(
+  section: SectionGenerations,
+  qualityAttentionSectionUids: Set<string>,
+): boolean {
+  return (
+    sectionAttentionCount(getSectionAttention(section, qualityAttentionSectionUids)) >
+    0
+  );
 }
 
 function sectionAttentionCount(attention: {
   hasDuplicateSelected: boolean;
   hasStaleSelected: boolean;
   hasMissingRequirementCoverage: boolean;
+  hasQualityReviewIssue: boolean;
 }): number {
   return [
     attention.hasDuplicateSelected,
     attention.hasStaleSelected,
     attention.hasMissingRequirementCoverage,
+    attention.hasQualityReviewIssue,
   ].filter(Boolean).length;
 }
 
-function getSectionAttention(section: SectionGenerations) {
+function getSectionAttention(
+  section: SectionGenerations,
+  qualityAttentionSectionUids = new Set<string>(),
+) {
   const selectedVariants = section.variants.filter((variant) => variant.selected);
   const displayVariant = selectedVariants[0] ?? section.variants[0];
   const { missing } = coverageCounts(getRequirementCoverage(displayVariant));
@@ -572,6 +611,7 @@ function getSectionAttention(section: SectionGenerations) {
       (variant) => variant.evidence_status === "stale",
     ),
     hasMissingRequirementCoverage: missing > 0,
+    hasQualityReviewIssue: qualityAttentionSectionUids.has(section.section_uid),
   };
 }
 

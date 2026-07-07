@@ -383,6 +383,35 @@ describe("GenerationsPanel", () => {
         ],
       },
       {
+        section_uid: "sec-quality",
+        section_title: "Quality Review Section",
+        variants: [
+          {
+            id: "gen-quality",
+            section_uid: "sec-quality",
+            variant: 1,
+            text: "Short but otherwise clean text",
+            evidence_status: "ok",
+            selected: true,
+            created_at: "2026-04-20T10:00:00.000Z",
+            flags_json: {
+              requirement_coverage: {
+                total: 1,
+                covered: 1,
+                missing: 0,
+                items: [
+                  {
+                    id: "req-quality",
+                    text: "Quality requirement",
+                    status: "covered",
+                  },
+                ],
+              },
+            },
+          },
+        ],
+      },
+      {
         section_uid: "sec-duplicate",
         section_title: "Duplicate Section",
         variants: [
@@ -458,14 +487,22 @@ describe("GenerationsPanel", () => {
       },
     ]);
 
-    render(<GenerationsPanel projectId="project-1" />);
+    render(
+      <GenerationsPanel
+        projectId="project-1"
+        qualityAttentionSectionUids={["sec-quality"]}
+      />,
+    );
 
     const summary = await screen.findByTestId("generation-attention-summary");
-    expect(summary).toHaveTextContent("3 секции изискват внимание");
+    expect(summary).toHaveTextContent("4 секции изискват внимание");
     expect(summary).toHaveTextContent("дублиран избор: 1");
     expect(summary).toHaveTextContent("остарели избрани: 1");
     expect(summary).toHaveTextContent("липсващи изисквания: 1");
+    expect(summary).toHaveTextContent("кратки секции: 1");
     expect(screen.getByTestId("generation-section-sec-clean")).toBeInTheDocument();
+    expect(screen.getByTestId("generation-quality-attention-badge-sec-quality"))
+      .toHaveTextContent("кратка");
     expect(screen.getByTestId("generation-stale-selected-badge-sec-stale"))
       .toHaveTextContent("остаряла");
 
@@ -481,7 +518,9 @@ describe("GenerationsPanel", () => {
       .toBeInTheDocument();
     expect(screen.getByTestId("generation-section-sec-missing"))
       .toBeInTheDocument();
-    expect(screen.getByText("3 / 4 секции")).toBeInTheDocument();
+    expect(screen.getByTestId("generation-section-sec-quality"))
+      .toBeInTheDocument();
+    expect(screen.getByText("4 / 5 секции")).toBeInTheDocument();
     expect(screen.getByTestId("generation-attention-filter-toggle"))
       .toHaveTextContent("Покажи всички");
   });

@@ -8,6 +8,7 @@ interface Props {
   projectId: string;
   projectName: string;
   onOpenGenerations?: () => void;
+  onQualitySectionsBlocked?: (sectionUids: string[]) => void;
 }
 
 interface QualityWarningSummary {
@@ -19,6 +20,7 @@ export default function ExportButton({
   projectId,
   projectName,
   onOpenGenerations,
+  onQualitySectionsBlocked,
 }: Props) {
   const [loading, setLoading] = useState(false);
   const [reportLoading, setReportLoading] = useState(false);
@@ -65,6 +67,7 @@ export default function ExportButton({
       setQualityWarning(true);
       setQualitySectionCount(getQualitySectionCount(source));
       setQualityWarningSummary(getQualityWarningSummary(source));
+      onQualitySectionsBlocked?.(getQualitySectionUids(source));
       handled = true;
     }
 
@@ -83,6 +86,7 @@ export default function ExportButton({
     setQualityWarning(false);
     setQualitySectionCount(null);
     setQualityWarningSummary(null);
+    onQualitySectionsBlocked?.([]);
 
     try {
       const readiness = await api.export.readiness(projectId);
@@ -413,6 +417,25 @@ function getQualityWarningSummary(err: unknown): QualityWarningSummary | null {
     maxBlueprintGroupCount: maxBlueprintGroupCount || null,
     maxMinWords: maxMinWords || null,
   };
+}
+
+function getQualitySectionUids(err: unknown): string[] {
+  const payload = getReadinessPayload(err);
+  if (!payload || typeof payload !== "object") return [];
+
+  const sections = (payload as { quality_sections?: unknown }).quality_sections;
+  if (!Array.isArray(sections)) return [];
+
+  const sectionUids = sections
+    .map((section) =>
+      section && typeof section === "object"
+        ? (section as ExportQualitySection).section_uid
+        : null,
+    )
+    .filter((sectionUid): sectionUid is string =>
+      typeof sectionUid === "string" && sectionUid.length > 0,
+    );
+  return [...new Set(sectionUids)];
 }
 
 function formatQualityWarningSummary(
