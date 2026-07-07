@@ -225,6 +225,7 @@ async def test_drafting_prompt_and_saved_generation_include_requirement_coverage
 
     assert "SECTION REQUIREMENT CHECKLIST" in prompt
     assert "DRAFTING BLUEPRINT" in prompt
+    assert "SECTION DEPTH TARGET" in prompt
     assert "id=req-schedule" in prompt
     assert saved_generation.flags_json["requirement_coverage"]["missing_ids"] == []
     assert saved_generation.flags_json["requirement_coverage"]["covered_ids"] == [

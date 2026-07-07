@@ -1,4 +1,8 @@
-from app.agents.proposal_quality import assess_generation_depth
+from app.agents.proposal_quality import (
+    assess_generation_depth,
+    build_generation_depth_target,
+    format_generation_depth_target_for_prompt,
+)
 
 
 def _drafting_blueprint(group_count: int) -> dict:
@@ -109,3 +113,38 @@ def test_generation_depth_accepts_developed_blueprint_structured_text():
     assert result["blueprint_group_count"] == 6
     assert result["word_count"] >= result["min_words"]
     assert result["sentence_count"] >= result["min_sentences"]
+
+
+def test_generation_depth_target_prompt_matches_export_gate_thresholds():
+    coverage = {
+        "total": 2,
+        "covered": 2,
+        "missing": 0,
+        "missing_ids": [],
+    }
+
+    target = build_generation_depth_target(
+        requirement_coverage=coverage,
+        drafting_blueprint=_drafting_blueprint(6),
+    )
+    prompt = format_generation_depth_target_for_prompt(target)
+
+    assert target["required"] is True
+    assert target["min_words"] >= 1200
+    assert target["min_sentences"] >= 10
+    assert "SECTION DEPTH TARGET" in prompt
+    assert "2 mapped checklist requirements" in prompt
+    assert "6 drafting blueprint groups" in prompt
+    assert str(target["min_words"]) in prompt
+
+
+def test_generation_depth_target_prompt_omits_zero_sentence_target():
+    target = build_generation_depth_target(
+        requirement_coverage={"total": 1, "items": [{"id": "req-1"}]},
+        drafting_blueprint=_drafting_blueprint(1),
+    )
+    prompt = format_generation_depth_target_for_prompt(target)
+
+    assert target["min_sentences"] == 0
+    assert "0 developed sentences" not in prompt
+    assert f"{target['min_words']} words" in prompt

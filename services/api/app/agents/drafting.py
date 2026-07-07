@@ -16,6 +16,10 @@ from app.agents.drafting_blueprint import (
     build_drafting_blueprint,
     format_drafting_blueprint_for_prompt,
 )
+from app.agents.proposal_quality import (
+    build_generation_depth_target,
+    format_generation_depth_target_for_prompt,
+)
 from app.agents.requirement_coverage import (
     assess_requirement_coverage,
     format_requirement_items_for_prompt,
@@ -162,6 +166,14 @@ async def run_drafting(
     drafting_blueprint_text = format_drafting_blueprint_for_prompt(
         drafting_blueprint
     )
+    depth_target = build_generation_depth_target(
+        requirement_coverage={
+            "total": len(normalized_requirement_items),
+            "items": normalized_requirement_items,
+        },
+        drafting_blueprint=drafting_blueprint,
+    )
+    depth_target_text = format_generation_depth_target_for_prompt(depth_target)
 
     user_message = "\n\n".join(
         part
@@ -169,6 +181,7 @@ async def run_drafting(
             f"SECTION: {section_title}\nREQUIREMENTS:\n{requirements_text}",
             requirement_checklist_text,
             drafting_blueprint_text,
+            depth_target_text,
             (
                 "PROJECT GROUNDING CONTEXT:\n"
                 f"[UNTRUSTED DATA START]\n{grounding_context_text}\n[UNTRUSTED DATA END]"

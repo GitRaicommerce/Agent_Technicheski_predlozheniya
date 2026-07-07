@@ -103,18 +103,16 @@ def assess_generation_depth(
     requirement_coverage: dict[str, Any] | None,
     drafting_blueprint: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    requirement_count = _coverage_total(requirement_coverage)
-    blueprint_group_count = _blueprint_group_count(drafting_blueprint)
+    target = build_generation_depth_target(
+        requirement_coverage=requirement_coverage,
+        drafting_blueprint=drafting_blueprint,
+    )
+    requirement_count = target["requirement_count"]
+    blueprint_group_count = target["blueprint_group_count"]
     word_count = _word_count(text)
     sentence_count = _sentence_count(text)
-    min_words = max(
-        _min_words_for_requirements(requirement_count),
-        _min_words_for_blueprint_groups(blueprint_group_count),
-    )
-    min_sentences = max(
-        _min_sentences_for_requirements(requirement_count),
-        _min_sentences_for_blueprint_groups(blueprint_group_count),
-    )
+    min_words = target["min_words"]
+    min_sentences = target["min_sentences"]
     issues: list[dict[str, Any]] = []
 
     if (requirement_count > 0 or blueprint_group_count > 1) and word_count < min_words:
@@ -158,3 +156,62 @@ def assess_generation_depth(
         "min_sentences": min_sentences,
         "issues": issues,
     }
+
+
+def build_generation_depth_target(
+    *,
+    requirement_coverage: dict[str, Any] | None,
+    drafting_blueprint: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    requirement_count = _coverage_total(requirement_coverage)
+    blueprint_group_count = _blueprint_group_count(drafting_blueprint)
+    min_words = max(
+        _min_words_for_requirements(requirement_count),
+        _min_words_for_blueprint_groups(blueprint_group_count),
+    )
+    min_sentences = max(
+        _min_sentences_for_requirements(requirement_count),
+        _min_sentences_for_blueprint_groups(blueprint_group_count),
+    )
+    return {
+        "requirement_count": requirement_count,
+        "blueprint_group_count": blueprint_group_count,
+        "min_words": min_words,
+        "min_sentences": min_sentences,
+        "required": requirement_count > 0 or blueprint_group_count > 1,
+    }
+
+
+def format_generation_depth_target_for_prompt(target: dict[str, Any]) -> str:
+    if not isinstance(target, dict) or not target.get("required"):
+        return ""
+
+    requirement_count = int(target.get("requirement_count") or 0)
+    blueprint_group_count = int(target.get("blueprint_group_count") or 0)
+    min_words = int(target.get("min_words") or 0)
+    min_sentences = int(target.get("min_sentences") or 0)
+    sentence_target = (
+        f" and {min_sentences} developed sentences" if min_sentences > 0 else ""
+    )
+
+    return "\n".join(
+        [
+            "SECTION DEPTH TARGET:",
+            (
+                "- Draft at least "
+                f"{min_words} words{sentence_target} "
+                "for this section unless the provided tender sources are "
+                "genuinely narrower."
+            ),
+            (
+                "- The target is derived from "
+                f"{requirement_count} mapped checklist requirements and "
+                f"{blueprint_group_count} drafting blueprint groups."
+            ),
+            (
+                "- Meet the target through concrete actions, roles, controls, "
+                "documents, sequence, acceptance evidence, and tender-specific "
+                "details; do not pad the section with repetition."
+            ),
+        ]
+    )

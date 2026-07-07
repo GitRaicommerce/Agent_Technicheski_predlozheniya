@@ -76,6 +76,7 @@
 - Reduced requirement-checklist noise from broad catch-all compliance clauses and PDF scoring-table joins, while preserving concrete compliance requirements and adding a common-scenario regression so noisy rows do not inflate drafting blueprint groups.
 - Added a bulk duplicate-selected remediation action in the Generations attention panel that keeps the newest selected variant per ambiguous section through the existing selection endpoint, with frontend and browser coverage.
 - Updated DOCX export readiness reports to point users to the bulk duplicate resolver and added a common mixed-blocker regression scenario covering duplicate, stale, missing-requirement, and shallow-section remediation guidance.
+- Fed the same requirement/blueprint depth thresholds used by DOCX export back into the drafting prompt as a section depth target, so generation is guided toward export-ready narrative depth before the final readiness gate.
 
 ## Active Goals
 
