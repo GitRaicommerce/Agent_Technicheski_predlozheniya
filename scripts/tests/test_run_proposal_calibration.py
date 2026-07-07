@@ -345,6 +345,15 @@ class RunProposalCalibrationTests(unittest.TestCase):
             manifest["readiness_actions"][2]["ui_action"],
             "Regenerate coverage",
         )
+        self.assertEqual(manifest["readiness_actions"][0]["api_method"], "POST")
+        self.assertEqual(
+            manifest["readiness_actions"][0]["api_path"],
+            "/api/v1/agents/project-1/remediation-actions/resolve_duplicate_selected",
+        )
+        self.assertEqual(
+            manifest["readiness_actions"][2]["api_path"],
+            "/api/v1/agents/project-1/remediation-actions/regenerate_missing_requirements",
+        )
         self.assertEqual(manifest["gap_priority_rows"][0]["focus"], "drafting depth")
 
     def test_snapshot_warning_count_reads_warning_section_only(self):
@@ -484,6 +493,10 @@ class RunProposalCalibrationTests(unittest.TestCase):
                 self.assertEqual(
                     manifest_json["readiness_actions"][0]["action_key"],
                     "regenerate_stale",
+                )
+                self.assertEqual(
+                    manifest_json["readiness_actions"][0]["api_path"],
+                    "/api/v1/agents/project-1/remediation-actions/regenerate_stale",
                 )
                 self.assertIn(
                     "effective_proposal_snapshot.md",

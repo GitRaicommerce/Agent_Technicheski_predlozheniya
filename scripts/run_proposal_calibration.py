@@ -287,9 +287,15 @@ def readiness_priority_actions(readiness: dict[str, Any] | None) -> list[str]:
 
 def structured_readiness_priority_actions(
     readiness: dict[str, Any] | None,
+    *,
+    project_id: str | None = None,
 ) -> list[dict[str, Any]]:
     readiness = readiness or {}
     actions: list[dict[str, Any]] = []
+
+    def api_path(action_key: str) -> str:
+        project_part = project_id or "{project_id}"
+        return f"/api/v1/agents/{project_part}/remediation-actions/{action_key}"
 
     duplicate_sections = [
         item
@@ -308,6 +314,8 @@ def structured_readiness_priority_actions(
             {
                 "blocker_code": "duplicate_selected",
                 "action_key": READINESS_ACTION_KEYS["duplicate_selected"],
+                "api_method": "POST",
+                "api_path": api_path(READINESS_ACTION_KEYS["duplicate_selected"]),
                 "ui_action": "Остави най-новите",
                 "section_count": duplicate_count,
                 "section_labels": labels,
@@ -335,6 +343,8 @@ def structured_readiness_priority_actions(
             {
                 "blocker_code": "stale_evidence",
                 "action_key": READINESS_ACTION_KEYS["stale_evidence"],
+                "api_method": "POST",
+                "api_path": api_path(READINESS_ACTION_KEYS["stale_evidence"]),
                 "ui_action": "Regenerate",
                 "section_count": stale_count,
                 "section_labels": labels,
@@ -364,6 +374,8 @@ def structured_readiness_priority_actions(
             {
                 "blocker_code": "missing_requirements",
                 "action_key": READINESS_ACTION_KEYS["missing_requirements"],
+                "api_method": "POST",
+                "api_path": api_path(READINESS_ACTION_KEYS["missing_requirements"]),
                 "ui_action": "Regenerate coverage",
                 "section_count": missing_count,
                 "section_labels": labels,
@@ -400,6 +412,8 @@ def structured_readiness_priority_actions(
             {
                 "blocker_code": "shallow_sections",
                 "action_key": READINESS_ACTION_KEYS["shallow_sections"],
+                "api_method": "POST",
+                "api_path": api_path(READINESS_ACTION_KEYS["shallow_sections"]),
                 "ui_action": "Regenerate detailed",
                 "section_count": quality_count,
                 "section_labels": labels,
@@ -610,7 +624,10 @@ def render_manifest_json(
         },
         "gap_quality_scorecard": gap_summary or {},
         "gap_calibration_focus_counts": gap_focus_counts or {},
-        "readiness_actions": structured_readiness_priority_actions(readiness),
+        "readiness_actions": structured_readiness_priority_actions(
+            readiness,
+            project_id=project_id,
+        ),
         "gap_priority_rows": gap_priority_rows or [],
     }
     return json.dumps(payload, ensure_ascii=False, indent=2) + "\n"

@@ -631,6 +631,49 @@ async def regenerate_missing_requirements_generation_job(
     return _generation_job_response(job)
 
 
+@router.post("/{project_id}/remediation-actions/{action_key}")
+async def run_generation_remediation_action(
+    project_id: str,
+    action_key: str,
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    project = await db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    if action_key == "resolve_duplicate_selected":
+        result = await resolve_duplicate_selected_generations(project_id, db)
+        return {
+            "action_key": action_key,
+            "status": result.status,
+            "result": result.model_dump(),
+        }
+
+    from app.agents.generation_jobs import (
+        create_drafting_quality_job,
+        create_drafting_requirements_job,
+        create_drafting_stale_job,
+    )
+
+    try:
+        if action_key == "regenerate_stale":
+            job = await create_drafting_stale_job(project=project, db=db)
+        elif action_key == "regenerate_missing_requirements":
+            job = await create_drafting_requirements_job(project=project, db=db)
+        elif action_key == "regenerate_quality_depth":
+            job = await create_drafting_quality_job(project=project, db=db)
+        else:
+            raise HTTPException(status_code=404, detail="Unknown remediation action")
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    return {
+        "action_key": action_key,
+        "status": "queued",
+        "result": _generation_job_response(job).model_dump(),
+    }
+
+
 @router.get(
     "/{project_id}/generation-jobs/{job_id}",
     response_model=GenerationJobResponse,

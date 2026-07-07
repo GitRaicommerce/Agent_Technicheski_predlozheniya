@@ -591,6 +591,68 @@ async def test_regenerate_missing_requirements_generation_job_ok(client, mock_db
     create_job.assert_awaited_once_with(project=project, db=mock_db)
 
 
+@pytest.mark.asyncio
+async def test_run_remediation_action_queues_stale_generation_job(client, mock_db):
+    pid = str(uuid.uuid4())
+    project = _make_project()
+    project.id = pid
+    job = MagicMock()
+    job.id = str(uuid.uuid4())
+    job.project_id = pid
+    job.job_type = "drafting_stale"
+    job.status = "queued"
+    job.total_sections = 2
+    job.completed_sections = 0
+    job.skipped_sections = 0
+    job.current_section_uid = None
+    job.current_section_title = None
+    job.error = None
+    job.result_json = {
+        "target_section_uids": ["s1", "s2"],
+        "target_reason": "stale_selected",
+    }
+    job.trace_id = str(uuid.uuid4())
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc)
+    job.created_at = now
+    job.updated_at = now
+    job.completed_at = None
+    mock_db.get = AsyncMock(return_value=project)
+
+    with patch(
+        "app.agents.generation_jobs.create_drafting_stale_job",
+        new=AsyncMock(return_value=job),
+    ) as create_job:
+        resp = await client.post(
+            f"/api/v1/agents/{pid}/remediation-actions/regenerate_stale"
+        )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["action_key"] == "regenerate_stale"
+    assert data["status"] == "queued"
+    assert data["result"]["id"] == job.id
+    assert data["result"]["job_type"] == "drafting_stale"
+    assert data["result"]["result_json"]["target_reason"] == "stale_selected"
+    create_job.assert_awaited_once_with(project=project, db=mock_db)
+
+
+@pytest.mark.asyncio
+async def test_run_remediation_action_unknown_key(client, mock_db):
+    pid = str(uuid.uuid4())
+    project = _make_project()
+    project.id = pid
+    mock_db.get = AsyncMock(return_value=project)
+
+    resp = await client.post(
+        f"/api/v1/agents/{pid}/remediation-actions/not-a-real-action"
+    )
+
+    assert resp.status_code == 404
+    assert resp.json()["detail"] == "Unknown remediation action"
+
+
 # ---------------------------------------------------------------------------
 # POST /api/v1/agents/{project_id}/outline/unlock
 # ---------------------------------------------------------------------------
@@ -921,6 +983,61 @@ async def test_resolve_duplicate_selected_generations_keeps_newest(client, mock_
     assert data["status"] == "resolved"
     assert data["resolved_count"] == 1
     assert data["sections"] == [
+        {
+            "section_uid": "sec-duplicate",
+            "generation_id": "gen-newest",
+            "previous_selected_count": 2,
+        }
+    ]
+    assert newest.selected is True
+    assert mock_db.execute.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_run_remediation_action_resolves_duplicate_selected(client, mock_db):
+    from app.core.models import Generation
+    from datetime import datetime, timezone
+
+    pid = str(uuid.uuid4())
+    project = _make_project()
+    project.id = pid
+    old = Generation(
+        id="gen-old",
+        project_id=pid,
+        section_uid="sec-duplicate",
+        variant=1,
+        text="Older selected",
+        evidence_status="ok",
+        selected=True,
+        created_at=datetime(2026, 4, 20, tzinfo=timezone.utc),
+    )
+    newest = Generation(
+        id="gen-newest",
+        project_id=pid,
+        section_uid="sec-duplicate",
+        variant=2,
+        text="Newest selected",
+        evidence_status="ok",
+        selected=True,
+        created_at=datetime(2026, 4, 21, tzinfo=timezone.utc),
+    )
+    selected_result = MagicMock()
+    selected_result.scalars = MagicMock(
+        return_value=MagicMock(all=MagicMock(return_value=[newest, old]))
+    )
+    mock_db.get = AsyncMock(return_value=project)
+    mock_db.execute = AsyncMock(return_value=selected_result)
+
+    resp = await client.post(
+        f"/api/v1/agents/{pid}/remediation-actions/resolve_duplicate_selected"
+    )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["action_key"] == "resolve_duplicate_selected"
+    assert data["status"] == "resolved"
+    assert data["result"]["resolved_count"] == 1
+    assert data["result"]["sections"] == [
         {
             "section_uid": "sec-duplicate",
             "generation_id": "gen-newest",
