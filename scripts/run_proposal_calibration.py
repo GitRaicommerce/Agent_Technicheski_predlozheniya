@@ -13,6 +13,10 @@ from proposal_gap_analysis import (
 )
 
 
+ROOT = Path(__file__).resolve().parents[1]
+API_ROOT = ROOT / "services" / "api"
+
+
 def _display_path(path: Path) -> str:
     return path.as_posix()
 
@@ -20,6 +24,7 @@ def _display_path(path: Path) -> str:
 def calibration_output_paths(out_dir: Path) -> dict[str, Path]:
     return {
         "selected_snapshot": out_dir / "selected_proposal_snapshot.md",
+        "readiness_report": out_dir / "docx_readiness_report.md",
         "gap_report": out_dir / "proposal_gap_report.md",
         "manifest": out_dir / "calibration_manifest.md",
     }
@@ -30,6 +35,7 @@ def render_manifest(
     project_id: str,
     reference: Path,
     selected_snapshot: Path,
+    readiness_report: Path,
     gap_report: Path,
     tenders: list[Path],
 ) -> str:
@@ -39,6 +45,7 @@ def render_manifest(
         f"- Project ID: `{project_id}`",
         f"- Reference proposal: `{_display_path(reference)}`",
         f"- Selected proposal snapshot: `{_display_path(selected_snapshot)}`",
+        f"- DOCX readiness report: `{_display_path(readiness_report)}`",
         f"- Gap report: `{_display_path(gap_report)}`",
         "- Mode: `non-mutating`",
         "",
@@ -55,13 +62,38 @@ def render_manifest(
             "## Recommended review order",
             "",
             "1. Open the selected proposal snapshot and check Snapshot Warnings.",
-            "2. Open the gap report and review Universal Topic Coverage.",
-            "3. Follow Calibration Recommendations before regenerating sections.",
-            "4. Rerun DOCX readiness and this calibration bundle after regeneration.",
+            "2. Open the DOCX readiness report and resolve export blockers.",
+            "3. Open the gap report and review Universal Topic Coverage.",
+            "4. Follow Calibration Recommendations before regenerating sections.",
+            "5. Rerun this calibration bundle after regeneration.",
             "",
         ]
     )
     return "\n".join(lines)
+
+
+def _api_imports() -> None:
+    api_path = str(API_ROOT)
+    if api_path not in sys.path:
+        sys.path.insert(0, api_path)
+
+
+async def export_readiness_report_markdown(project_id: str, out_path: Path) -> None:
+    _api_imports()
+    from app.core.database import AsyncSessionLocal
+    from app.core.models import Project
+    from app.export.readiness_report import render_export_readiness_report
+    from app.routers.export import _build_export_readiness, _load_selected_generations
+
+    async with AsyncSessionLocal() as db:
+        project = await db.get(Project, project_id)
+        if not project:
+            raise ValueError(f"Project {project_id} not found")
+
+        selected_generations = await _load_selected_generations(project_id, db)
+        readiness = await _build_export_readiness(project_id, selected_generations, db)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(render_export_readiness_report(readiness), encoding="utf-8")
 
 
 async def run_calibration_bundle(
@@ -75,6 +107,7 @@ async def run_calibration_bundle(
     out_dir.mkdir(parents=True, exist_ok=True)
 
     await export_markdown(project_id, paths["selected_snapshot"])
+    await export_readiness_report_markdown(project_id, paths["readiness_report"])
 
     reference_text = extract_text(reference)
     selected_text = extract_text(paths["selected_snapshot"])
@@ -93,6 +126,7 @@ async def run_calibration_bundle(
             project_id=project_id,
             reference=reference,
             selected_snapshot=paths["selected_snapshot"],
+            readiness_report=paths["readiness_report"],
             gap_report=paths["gap_report"],
             tenders=tenders,
         ),
@@ -138,6 +172,7 @@ def main(argv: list[str]) -> int:
     )
     print(f"Wrote {paths['manifest']}")
     print(f"Wrote {paths['selected_snapshot']}")
+    print(f"Wrote {paths['readiness_report']}")
     print(f"Wrote {paths['gap_report']}")
     return 0
 
