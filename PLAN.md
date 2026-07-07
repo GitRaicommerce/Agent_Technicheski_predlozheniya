@@ -109,6 +109,7 @@
 - Added a structured `calibration_manifest.json` sidecar for non-mutating calibration bundles, exposing schema version, paths, readiness gates, gap scorecard, focus counts, readiness action keys, and gap priority rows for future UI/automation; verified it on the real Pernik bundle with `resolve_duplicate_selected` and `regenerate_stale` actions for 14 sections each.
 - Added a backend bulk duplicate-selected resolver endpoint and connected the Generations panel duplicate action to it, making `resolve_duplicate_selected` an atomic API remediation path that keeps the newest selected generation per ambiguous section.
 - Added a universal remediation action dispatcher endpoint and executable API paths in `calibration_manifest.json`, so readiness blocker action keys can be invoked consistently by UI or automation across projects.
+- Added a safe calibration manifest action runner script with dry-run by default and explicit `--execute` selection, making manifest remediation paths usable in repeatable calibration workflows outside the web UI.
 
 ## Active Goals
 
@@ -119,8 +120,8 @@
 
 ## Next Recommended Steps
 
-1. Use the calibration manifest remediation API path or the Generations bulk duplicate resolver to clear Pernik's legacy duplicate selected generations, then re-run the aggregated export readiness check.
-2. Use the manifest or Generations panel bulk stale-regeneration action for Pernik after duplicate selections are resolved; then use the bulk missing-requirements and quality/depth regeneration actions for any remaining requirement-coverage or blueprint-aware shallow sections reported by export preflight.
+1. Use `scripts/run_calibration_manifest_actions.py` or the Generations bulk duplicate resolver to clear Pernik's legacy duplicate selected generations, then re-run the aggregated export readiness check.
+2. Use the calibration manifest action runner or Generations panel bulk stale-regeneration action for Pernik after duplicate selections are resolved; then use the bulk missing-requirements and quality/depth regeneration actions for any remaining requirement-coverage or blueprint-aware shallow sections reported by export preflight.
 3. After resolving Pernik's duplicate selected variants, stale selected sections, missing-requirement sections, and shallow/depth blockers, regenerate the affected sections with a target of materially improving the manifest word-volume scorecard and the section-level drafting-depth diagnostics, not only clearing export blockers.
 4. Expand generated documentation with more precise backend endpoint and workflow coverage.
 5. Continue broadening common tender regression coverage with more real-world noisy PDF extraction and DOCX readiness combinations.
