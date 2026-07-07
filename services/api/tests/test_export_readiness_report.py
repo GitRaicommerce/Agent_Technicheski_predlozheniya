@@ -63,7 +63,7 @@ def test_render_export_readiness_report_includes_blockers_and_actions():
     assert "Missing section title (`sec-missing`): 2 missing (req-1, req-2)" in report
     assert "`req-1`: Describe the detailed schedule." in report
     assert "| Shallow section title (`sec-shallow`) | 180 | 1200 | 3 | 10 | 2 | 6 | too_short_for_requirements |" in report
-    assert "Изберете точно една генерирана версия" in report
+    assert "Остави най-новите" in report
     assert "Регенерирайте избраните stale секции" in report
 
 

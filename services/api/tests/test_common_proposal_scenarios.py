@@ -13,6 +13,7 @@ from app.agents.tender_struct import (
     _build_deterministic_outline,
     _extract_explicit_numbered_outline,
 )
+from app.export.readiness_report import render_export_readiness_report
 
 
 def make_chunk(
@@ -316,3 +317,104 @@ def test_noisy_pdf_rows_do_not_inflate_common_scenario_blueprint():
 
     assert result["blueprint_group_count"] == 3
     assert result["status"] == "needs_review"
+
+
+def test_common_readiness_report_guides_mixed_blocker_remediation():
+    chunks = [
+        make_chunk(
+            "mixed-readiness-requirements",
+            (
+                "Техническото предложение следва да съдържа:\n"
+                "1. организация на изпълнението с екип, отговорности и ресурси;\n"
+                "2. линеен график с етапи, последователност и срокове;\n"
+                "3. мерки за качество, контрол и приемане на работите;\n"
+                "4. комуникация с възложителя, надзора и компетентните институции;\n"
+                "5. управление на риска при непредвидени обстоятелства."
+            ),
+            page=19,
+            section_path="Изисквания към техническото предложение",
+        )
+    ]
+
+    requirements = extract_requirement_checklist(chunks)
+    requirement_items = [item.as_dict() for item in requirements]
+    blueprint = build_drafting_blueprint(
+        section_title="Работна програма за изпълнение",
+        requirement_items=requirement_items,
+    )
+    quality_result = assess_generation_depth(
+        (
+            "Short work programme with basic organization, schedule, quality, "
+            "communication and risk notes. "
+        )
+        * 20,
+        _coverage_for(requirement_items),
+        drafting_blueprint=blueprint,
+    )
+
+    assert len(requirements) == 5
+    assert quality_result["status"] == "needs_review"
+    assert quality_result["blueprint_group_count"] == 5
+
+    missing_item = requirement_items[0]
+    report = render_export_readiness_report(
+        {
+            "project_id": "common-mixed-readiness",
+            "ready": False,
+            "status": "blocked",
+            "selected_generation_count": 5,
+            "selected_section_count": 4,
+            "blocker_count": 4,
+            "message": "Pre-export check failed.",
+            "blockers": [
+                {"code": "duplicate_selected", "count": 1, "message": "Duplicates"},
+                {"code": "stale_evidence", "count": 1, "message": "Stale"},
+                {"code": "missing_requirements", "count": 1, "message": "Missing"},
+                {"code": "shallow_sections", "count": 1, "message": "Shallow"},
+            ],
+            "duplicate_selected_sections": [
+                {
+                    "section_uid": "sec-organization",
+                    "section_title": "Организация на изпълнението",
+                    "selected_count": 2,
+                    "generation_ids": ["gen-old", "gen-new"],
+                }
+            ],
+            "stale_section_details": [
+                {
+                    "section_uid": "sec-schedule",
+                    "section_title": "Линеен график и организация във времето",
+                }
+            ],
+            "missing_requirement_sections": [
+                {
+                    "section_uid": "sec-quality",
+                    "section_title": "Мерки за осигуряване на качеството",
+                    "missing_count": 1,
+                    "missing_requirement_ids": [missing_item["id"]],
+                    "missing_items": [
+                        {"id": missing_item["id"], "text": missing_item["text"]}
+                    ],
+                }
+            ],
+            "quality_sections": [
+                {
+                    "section_uid": "sec-work-program",
+                    "section_title": "Работна програма за изпълнение",
+                    **quality_result,
+                }
+            ],
+        }
+    )
+
+    action_lines = [
+        line
+        for line in report.splitlines()
+        if line.startswith(("1. ", "2. ", "3. ", "4. "))
+    ]
+    assert "Остави най-новите" in action_lines[0]
+    assert "stale секции" in action_lines[1]
+    assert "непокрити checklist изисквания" in action_lines[2]
+    assert "плитките секции" in action_lines[3]
+    assert "Организация на изпълнението (`sec-organization`)" in report
+    assert "Работна програма за изпълнение (`sec-work-program`)" in report

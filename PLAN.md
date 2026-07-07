@@ -75,6 +75,7 @@
 - Made export warning remediation open the Generations panel already focused on attention/problem sections, reducing manual filtering when resolving readiness blockers on any project.
 - Reduced requirement-checklist noise from broad catch-all compliance clauses and PDF scoring-table joins, while preserving concrete compliance requirements and adding a common-scenario regression so noisy rows do not inflate drafting blueprint groups.
 - Added a bulk duplicate-selected remediation action in the Generations attention panel that keeps the newest selected variant per ambiguous section through the existing selection endpoint, with frontend and browser coverage.
+- Updated DOCX export readiness reports to point users to the bulk duplicate resolver and added a common mixed-blocker regression scenario covering duplicate, stale, missing-requirement, and shallow-section remediation guidance.
 
 ## Active Goals
 

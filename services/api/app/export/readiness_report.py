@@ -39,7 +39,9 @@ def _blocker_actions(readiness: dict[str, Any]) -> list[str]:
     }
     if "duplicate_selected" in blocker_codes:
         actions.append(
-            "Изберете точно една генерирана версия за всяка секция с дублирани selected варианти."
+            "В Generations attention panel използвайте Остави най-новите за "
+            "секциите с дублирани selected варианти или изберете ръчно точно "
+            "една версия."
         )
     if "stale_evidence" in blocker_codes:
         actions.append(
