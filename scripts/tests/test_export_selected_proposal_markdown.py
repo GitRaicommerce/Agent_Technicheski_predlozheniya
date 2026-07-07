@@ -16,6 +16,7 @@ SPEC.loader.exec_module(export_selected)
 
 
 GenerationSnapshot = export_selected.GenerationSnapshot
+newest_generation_per_section = export_selected.newest_generation_per_section
 render_selected_proposal_markdown = export_selected.render_selected_proposal_markdown
 
 
@@ -112,6 +113,44 @@ class ExportSelectedProposalMarkdownTests(unittest.TestCase):
         self.assertIn("Selected Generations Outside Current Outline", markdown)
         self.assertIn("Extra selected text.", markdown)
         self.assertIn("selected generation outside current outline: gen-extra", markdown)
+
+    def test_newest_generation_per_section_keeps_latest_selected_variant(self):
+        generations = [
+            GenerationSnapshot(
+                id="gen-old",
+                section_uid="sec-a",
+                variant="1",
+                text="Old text.",
+                evidence_status="stale",
+                selected=True,
+                created_at="2026-01-01T00:00:00",
+            ),
+            GenerationSnapshot(
+                id="gen-new",
+                section_uid="sec-a",
+                variant="2",
+                text="New text.",
+                evidence_status="ok",
+                selected=True,
+                created_at="2026-01-02T00:00:00",
+            ),
+            GenerationSnapshot(
+                id="gen-other",
+                section_uid="sec-b",
+                variant="1",
+                text="Other text.",
+                evidence_status="ok",
+                selected=True,
+                created_at="2026-01-01T00:00:00",
+            ),
+        ]
+
+        effective = newest_generation_per_section(generations)
+
+        self.assertEqual(
+            {generation.section_uid: generation.id for generation in effective},
+            {"sec-a": "gen-new", "sec-b": "gen-other"},
+        )
 
 
 if __name__ == "__main__":

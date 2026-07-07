@@ -6,7 +6,12 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from export_selected_proposal_markdown import export_markdown
+from export_selected_proposal_markdown import (
+    GenerationSnapshot,
+    load_snapshot,
+    newest_generation_per_section,
+    render_selected_proposal_markdown,
+)
 from proposal_gap_analysis import (
     extract_text,
     render_report,
@@ -40,6 +45,7 @@ def snapshot_warning_count(markdown: str) -> int:
 def calibration_output_paths(out_dir: Path) -> dict[str, Path]:
     return {
         "selected_snapshot": out_dir / "selected_proposal_snapshot.md",
+        "effective_snapshot": out_dir / "effective_proposal_snapshot.md",
         "readiness_report": out_dir / "docx_readiness_report.md",
         "gap_report": out_dir / "proposal_gap_report.md",
         "manifest": out_dir / "calibration_manifest.md",
@@ -51,6 +57,7 @@ def render_manifest(
     project_id: str,
     reference: Path,
     selected_snapshot: Path,
+    effective_snapshot: Path,
     readiness_report: Path,
     gap_report: Path,
     tenders: list[Path],
@@ -68,7 +75,8 @@ def render_manifest(
         "",
         f"- Project ID: `{project_id}`",
         f"- Reference proposal: `{_display_path(reference)}`",
-        f"- Selected proposal snapshot: `{_display_path(selected_snapshot)}`",
+        f"- Raw selected proposal snapshot: `{_display_path(selected_snapshot)}`",
+        f"- Effective proposal snapshot: `{_display_path(effective_snapshot)}`",
         f"- DOCX readiness report: `{_display_path(readiness_report)}`",
         f"- Gap report: `{_display_path(gap_report)}`",
         "- Mode: `non-mutating`",
@@ -78,6 +86,7 @@ def render_manifest(
         f"- Snapshot warnings: `{snapshot_warnings}`",
         f"- DOCX readiness status: `{readiness.get('status', 'unknown')}`",
         f"- DOCX readiness blockers: `{len(blockers)}`",
+        "- Gap input snapshot: `effective_proposal_snapshot.md`",
     ]
     if blockers:
         lines.extend(
@@ -110,9 +119,10 @@ def render_manifest(
             "",
             "1. Open the selected proposal snapshot and check Snapshot Warnings.",
             "2. Open the DOCX readiness report and resolve export blockers.",
-            "3. Open the gap report and review Universal Topic Coverage.",
-            "4. Follow Calibration Recommendations before regenerating sections.",
-            "5. Rerun this calibration bundle after regeneration.",
+            "3. Open the effective proposal snapshot to see the in-memory newest-per-section view.",
+            "4. Open the gap report and review Universal Topic Coverage.",
+            "5. Follow Calibration Recommendations before regenerating sections.",
+            "6. Rerun this calibration bundle after regeneration.",
             "",
         ]
     )
@@ -157,7 +167,27 @@ async def run_calibration_bundle(
     paths = calibration_output_paths(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    await export_markdown(project_id, paths["selected_snapshot"])
+    project_name, outline_sections, selected_generations = await load_snapshot(project_id)
+    paths["selected_snapshot"].write_text(
+        render_selected_proposal_markdown(
+            project_name=project_name,
+            project_id=project_id,
+            outline_sections=outline_sections,
+            selected_generations=selected_generations,
+        ),
+        encoding="utf-8",
+    )
+    effective_generations = newest_generation_per_section(selected_generations)
+    paths["effective_snapshot"].write_text(
+        render_selected_proposal_markdown(
+            project_name=project_name,
+            project_id=project_id,
+            outline_sections=outline_sections,
+            selected_generations=effective_generations,
+            snapshot_mode="effective-newest-selected-per-section",
+        ),
+        encoding="utf-8",
+    )
     readiness = await export_readiness_report_markdown(
         project_id,
         paths["readiness_report"],
@@ -165,14 +195,15 @@ async def run_calibration_bundle(
 
     reference_text = extract_text(reference)
     selected_text = extract_text(paths["selected_snapshot"])
+    effective_text = extract_text(paths["effective_snapshot"])
     warning_count = snapshot_warning_count(selected_text)
     tender_text = "\n\n".join(extract_text(path) for path in tenders)
     report = render_report(
         tender_text=tender_text,
         reference_sections=split_sections(reference_text),
-        generated_sections=split_sections(selected_text),
+        generated_sections=split_sections(effective_text),
         reference_path=reference,
-        generated_path=paths["selected_snapshot"],
+        generated_path=paths["effective_snapshot"],
         tender_paths=tenders,
     )
     paths["gap_report"].write_text(report, encoding="utf-8")
@@ -181,6 +212,7 @@ async def run_calibration_bundle(
             project_id=project_id,
             reference=reference,
             selected_snapshot=paths["selected_snapshot"],
+            effective_snapshot=paths["effective_snapshot"],
             readiness_report=paths["readiness_report"],
             gap_report=paths["gap_report"],
             tenders=tenders,
@@ -229,6 +261,7 @@ def main(argv: list[str]) -> int:
     )
     print(f"Wrote {paths['manifest']}")
     print(f"Wrote {paths['selected_snapshot']}")
+    print(f"Wrote {paths['effective_snapshot']}")
     print(f"Wrote {paths['readiness_report']}")
     print(f"Wrote {paths['gap_report']}")
     return 0

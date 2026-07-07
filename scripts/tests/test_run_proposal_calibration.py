@@ -22,6 +22,7 @@ calibration_output_paths = calibration.calibration_output_paths
 render_manifest = calibration.render_manifest
 run_calibration_bundle = calibration.run_calibration_bundle
 snapshot_warning_count = calibration.snapshot_warning_count
+GenerationSnapshot = calibration.GenerationSnapshot
 
 
 class RunProposalCalibrationTests(unittest.TestCase):
@@ -37,6 +38,10 @@ class RunProposalCalibrationTests(unittest.TestCase):
             Path("analysis/pernik/proposal_gap_report.md"),
         )
         self.assertEqual(
+            paths["effective_snapshot"],
+            Path("analysis/pernik/effective_proposal_snapshot.md"),
+        )
+        self.assertEqual(
             paths["readiness_report"],
             Path("analysis/pernik/docx_readiness_report.md"),
         )
@@ -50,6 +55,7 @@ class RunProposalCalibrationTests(unittest.TestCase):
             project_id="project-1",
             reference=Path("reference.docx"),
             selected_snapshot=Path("out/selected.md"),
+            effective_snapshot=Path("out/effective.md"),
             readiness_report=Path("out/readiness.md"),
             gap_report=Path("out/gap.md"),
             tenders=[Path("tender.pdf")],
@@ -70,6 +76,8 @@ class RunProposalCalibrationTests(unittest.TestCase):
         self.assertIn("resolve readiness blockers", manifest)
         self.assertIn("reference.docx", manifest)
         self.assertIn("out/selected.md", manifest)
+        self.assertIn("out/effective.md", manifest)
+        self.assertIn("Gap input snapshot: `effective_proposal_snapshot.md`", manifest)
         self.assertIn("out/readiness.md", manifest)
         self.assertIn("out/gap.md", manifest)
         self.assertIn("tender.pdf", manifest)
@@ -96,14 +104,37 @@ class RunProposalCalibrationTests(unittest.TestCase):
         self.assertEqual(count, 2)
 
     def test_run_calibration_bundle_writes_snapshot_readiness_gap_and_manifest(self):
-        original_export_markdown = calibration.export_markdown
+        original_load_snapshot = calibration.load_snapshot
         original_export_readiness = calibration.export_readiness_report_markdown
         original_extract_text = calibration.extract_text
         original_render_report = calibration.render_report
 
-        async def fake_export_markdown(project_id, out_path):
+        async def fake_load_snapshot(project_id):
             self.assertEqual(project_id, "project-1")
-            out_path.write_text("# Generated\n\nGenerated section", encoding="utf-8")
+            return (
+                "Calibration Project",
+                [{"uid": "sec-a", "title": "Section A"}],
+                [
+                    GenerationSnapshot(
+                        id="gen-old",
+                        section_uid="sec-a",
+                        variant="1",
+                        text="Old generated section",
+                        evidence_status="stale",
+                        selected=True,
+                        created_at="2026-01-01T00:00:00",
+                    ),
+                    GenerationSnapshot(
+                        id="gen-new",
+                        section_uid="sec-a",
+                        variant="2",
+                        text="New generated section",
+                        evidence_status="ok",
+                        selected=True,
+                        created_at="2026-01-02T00:00:00",
+                    ),
+                ],
+            )
 
         async def fake_export_readiness(project_id, out_path):
             self.assertEqual(project_id, "project-1")
@@ -123,9 +154,13 @@ class RunProposalCalibrationTests(unittest.TestCase):
         def fake_render_report(**kwargs):
             self.assertIn("Tender source text", kwargs["tender_text"])
             self.assertEqual(kwargs["reference_path"], Path("reference.md"))
+            self.assertEqual(
+                kwargs["generated_path"].name,
+                "effective_proposal_snapshot.md",
+            )
             return "# Gap report"
 
-        calibration.export_markdown = fake_export_markdown
+        calibration.load_snapshot = fake_load_snapshot
         calibration.export_readiness_report_markdown = fake_export_readiness
         calibration.extract_text = fake_extract_text
         calibration.render_report = fake_render_report
@@ -140,9 +175,16 @@ class RunProposalCalibrationTests(unittest.TestCase):
                     )
                 )
 
-                self.assertEqual(
-                    paths["selected_snapshot"].read_text(encoding="utf-8"),
-                    "# Generated\n\nGenerated section",
+                selected_snapshot = paths["selected_snapshot"].read_text(encoding="utf-8")
+                effective_snapshot = paths["effective_snapshot"].read_text(encoding="utf-8")
+                self.assertIn("Old generated section", selected_snapshot)
+                self.assertIn("New generated section", selected_snapshot)
+                self.assertIn("Selected variant 1", selected_snapshot)
+                self.assertNotIn("Old generated section", effective_snapshot)
+                self.assertIn("New generated section", effective_snapshot)
+                self.assertIn(
+                    "effective-newest-selected-per-section",
+                    effective_snapshot,
                 )
                 self.assertEqual(
                     paths["readiness_report"].read_text(encoding="utf-8"),
@@ -157,11 +199,15 @@ class RunProposalCalibrationTests(unittest.TestCase):
                     paths["manifest"].read_text(encoding="utf-8"),
                 )
                 self.assertIn(
+                    "effective_proposal_snapshot.md",
+                    paths["manifest"].read_text(encoding="utf-8"),
+                )
+                self.assertIn(
                     "`stale_evidence`: `1`",
                     paths["manifest"].read_text(encoding="utf-8"),
                 )
         finally:
-            calibration.export_markdown = original_export_markdown
+            calibration.load_snapshot = original_load_snapshot
             calibration.export_readiness_report_markdown = original_export_readiness
             calibration.extract_text = original_extract_text
             calibration.render_report = original_render_report

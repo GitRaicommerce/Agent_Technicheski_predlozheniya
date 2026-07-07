@@ -64,12 +64,24 @@ def _generation_meta_line(generation: GenerationSnapshot) -> str:
     )
 
 
+def newest_generation_per_section(
+    generations: list[GenerationSnapshot],
+) -> list[GenerationSnapshot]:
+    newest_by_section: dict[str, GenerationSnapshot] = {}
+    for generation in generations:
+        current = newest_by_section.get(generation.section_uid)
+        if current is None or generation.created_at > current.created_at:
+            newest_by_section[generation.section_uid] = generation
+    return list(newest_by_section.values())
+
+
 def render_selected_proposal_markdown(
     *,
     project_name: str,
     project_id: str,
     outline_sections: list[dict[str, Any]],
     selected_generations: list[GenerationSnapshot],
+    snapshot_mode: str = "selected-generations-markdown",
 ) -> str:
     generations_by_section: dict[str, list[GenerationSnapshot]] = {}
     for generation in selected_generations:
@@ -80,7 +92,7 @@ def render_selected_proposal_markdown(
         "",
         f"- Project ID: `{project_id}`",
         f"- Selected generations: `{len(selected_generations)}`",
-        "- Snapshot mode: `selected-generations-markdown`",
+        f"- Snapshot mode: `{snapshot_mode}`",
         "",
     ]
     warnings: list[str] = []

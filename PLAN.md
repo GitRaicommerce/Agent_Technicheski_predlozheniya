@@ -87,6 +87,7 @@
 - Made drafting blueprints and export depth checks topic-aware inside each requirement category, so sections with one broad category but many distinct tender subtopics still require developed coverage and expose topic counts in readiness diagnostics.
 - Tightened generated-text requirement coverage so scattered keyword mentions across a section no longer count as coverage unless enough requirement terms appear together in a coherent developed passage, with diagnostics and common-scenario regression coverage.
 - Added calibration bundle gates to the manifest so real-project calibration runs now show snapshot warning counts, DOCX readiness status, blocker counts, and warn that gap findings are not final until duplicate/stale readiness blockers are resolved.
+- Added an effective newest-selected-per-section calibration snapshot so gap analysis is no longer inflated by legacy duplicate selected variants, while still preserving the raw selected snapshot and readiness gates for forensic review.
 
 ## Active Goals
 
