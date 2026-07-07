@@ -79,3 +79,43 @@ def test_requirement_coverage_rejects_scattered_keyword_mentions():
     assert scattered["items"][0]["coherent_matched_ratio"] < 0.6
     assert coherent["covered_ids"] == ["req-risk-controls"]
     assert coherent["items"][0]["coherent_matched_ratio"] >= 0.6
+
+
+def test_requirement_coverage_requires_operational_evidence_for_operational_categories():
+    items = normalize_requirement_items(
+        [
+            {
+                "id": "req-environment-measures",
+                "text": (
+                    "Describe waste segregation, soil protection, dust "
+                    "suppression, and pollution prevention."
+                ),
+                "importance": "mandatory",
+                "category": "environment",
+                "category_label": "Environmental protection",
+            }
+        ]
+    )
+
+    keyword_only = assess_requirement_coverage(
+        (
+            "The proposal describes waste segregation, soil protection, dust "
+            "suppression, and pollution prevention."
+        ),
+        items,
+    )
+    operational = assess_requirement_coverage(
+        (
+            "The environmental workflow assigns a responsible role for waste "
+            "segregation, soil protection, dust suppression, and pollution "
+            "prevention, with monitoring records and corrective actions."
+        ),
+        items,
+    )
+
+    assert keyword_only["missing_ids"] == ["req-environment-measures"]
+    assert keyword_only["items"][0]["matched_ratio"] >= 0.6
+    assert keyword_only["items"][0]["requires_operational_detail"] is True
+    assert keyword_only["items"][0]["operational_signals"] == []
+    assert operational["covered_ids"] == ["req-environment-measures"]
+    assert len(operational["items"][0]["operational_signals"]) >= 2

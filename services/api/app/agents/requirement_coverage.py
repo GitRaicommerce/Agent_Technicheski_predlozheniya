@@ -45,6 +45,52 @@ STOP_WORDS = {
 }
 
 
+OPERATIONAL_COVERAGE_CATEGORIES = {
+    "communication",
+    "documentation",
+    "environment",
+    "quality",
+    "risk",
+    "safety",
+}
+
+OPERATIONAL_SIGNAL_TERMS = (
+    "action",
+    "approval",
+    "acceptance",
+    "control",
+    "corrective",
+    "document",
+    "evidence",
+    "escalation",
+    "inspection",
+    "monitoring",
+    "owner",
+    "protocol",
+    "record",
+    "reporting",
+    "responsible",
+    "role",
+    "sequence",
+    "\u0434\u0435\u0439\u0441\u0442\u0432",
+    "\u043e\u0434\u043e\u0431\u0440",
+    "\u043f\u0440\u0438\u0435\u043c",
+    "\u043a\u043e\u043d\u0442\u0440\u043e\u043b",
+    "\u043a\u043e\u0440\u0435\u043a\u0442",
+    "\u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442",
+    "\u0434\u043e\u043a\u0430\u0437\u0430\u0442",
+    "\u0435\u0441\u043a\u0430\u043b\u0430\u0446",
+    "\u043f\u0440\u043e\u0432\u0435\u0440",
+    "\u043c\u043e\u043d\u0438\u0442\u043e\u0440",
+    "\u043e\u0442\u0433\u043e\u0432\u043e\u0440",
+    "\u043f\u0440\u043e\u0442\u043e\u043a\u043e\u043b",
+    "\u0437\u0430\u043f\u0438\u0441",
+    "\u043e\u0442\u0447\u0435\u0442",
+    "\u0440\u043e\u043b",
+    "\u043f\u043e\u0441\u043b\u0435\u0434\u043e\u0432",
+)
+
+
 def _normalize(value: Any) -> str:
     return re.sub(r"\s+", " ", str(value or "").lower()).strip()
 
@@ -76,21 +122,44 @@ def _sentence_windows(text: str, *, window_size: int = 2) -> list[str]:
     return windows
 
 
+def _operational_signal_terms(text: str) -> list[str]:
+    normalized = _normalize(text)
+    return sorted(
+        {
+            signal
+            for signal in OPERATIONAL_SIGNAL_TERMS
+            if signal in normalized
+        }
+    )
+
+
+def _requires_operational_detail(item: dict[str, Any]) -> bool:
+    category = _normalize(item.get("category"))
+    category_label = _normalize(item.get("category_label"))
+    haystack = f"{category} {category_label}"
+    return any(
+        category_name in haystack
+        for category_name in OPERATIONAL_COVERAGE_CATEGORIES
+    )
+
+
 def _best_window_matches(
     requirement_tokens: list[str],
     generated_text: str,
-) -> tuple[list[str], float]:
+) -> tuple[list[str], float, str]:
     if not requirement_tokens:
-        return [], 1.0
+        return [], 1.0, str(generated_text or "")
 
     best_matches: list[str] = []
+    best_window = ""
     for window in _sentence_windows(generated_text):
         window_tokens = set(_tokens(window))
         matches = sorted(set(requirement_tokens) & window_tokens)
         if len(matches) > len(best_matches):
             best_matches = matches
+            best_window = window
 
-    return best_matches, len(best_matches) / len(requirement_tokens)
+    return best_matches, len(best_matches) / len(requirement_tokens), best_window
 
 
 def normalize_requirement_items(
@@ -195,10 +264,13 @@ def assess_requirement_coverage(
         requirement_tokens = list(dict.fromkeys(_tokens(str(item.get("text") or ""))))
         matched_terms = sorted(set(requirement_tokens) & generated_tokens)
         missing_terms = [token for token in requirement_tokens if token not in matched_terms]
-        window_terms, window_ratio = _best_window_matches(
+        window_terms, window_ratio, best_window = _best_window_matches(
             requirement_tokens,
             generated_text,
         )
+        operational_signals = _operational_signal_terms(best_window)
+        requires_operational_detail = _requires_operational_detail(item)
+        required_operational_signal_count = 2 if requires_operational_detail else 0
 
         if not requirement_tokens:
             required_matches = 0
@@ -221,7 +293,14 @@ def assess_requirement_coverage(
         )
         globally_covered = len(matched_terms) >= required_matches
         locally_coherent = len(window_terms) >= required_window_matches
-        status = "covered" if globally_covered and locally_coherent else "missing"
+        operationally_developed = (
+            len(operational_signals) >= required_operational_signal_count
+        )
+        status = (
+            "covered"
+            if globally_covered and locally_coherent and operationally_developed
+            else "missing"
+        )
         requirement_id = str(item.get("id"))
         if status == "covered":
             covered_ids.append(requirement_id)
@@ -246,6 +325,9 @@ def assess_requirement_coverage(
                 "coherent_matched_ratio": round(window_ratio, 3),
                 "required_match_count": required_matches,
                 "required_coherent_match_count": required_window_matches,
+                "operational_signals": operational_signals,
+                "requires_operational_detail": requires_operational_detail,
+                "required_operational_signal_count": required_operational_signal_count,
             }
         )
 

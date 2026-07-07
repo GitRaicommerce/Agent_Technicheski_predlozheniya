@@ -92,6 +92,7 @@
 - Added section-level gap diagnostics to proposal calibration reports, mapping weak sections to actionable calibration focus areas: outline mapping, drafting depth, or grounding/checklist coverage, while filtering formal greeting/participant sections out of content comparisons.
 - Added calibration-focus rollups to the calibration manifest, summarizing how many gap-report sections point to outline mapping, drafting depth, grounding/checklist coverage, or monitor-only follow-up.
 - Added a requirement response plan to drafting blueprints so every checklist item instructs the model to write a concrete action, responsible role, control/evidence record, and sequence or deliverable link when supported by sources.
+- Tightened deterministic requirement coverage for operational categories so keyword-complete but undeveloped text no longer counts as covered unless the coherent passage includes operational evidence such as responsible role, control, record, monitoring, acceptance, escalation, or corrective action.
 
 ## Active Goals
 
