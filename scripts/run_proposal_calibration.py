@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import re
 import sys
 from pathlib import Path
@@ -27,6 +28,12 @@ GAP_FOCUS_PRIORITY = {
     "drafting depth": 1,
     "grounding and checklist coverage": 2,
     "monitor": 3,
+}
+READINESS_ACTION_KEYS = {
+    "duplicate_selected": "resolve_duplicate_selected",
+    "stale_evidence": "regenerate_stale",
+    "missing_requirements": "regenerate_missing_requirements",
+    "shallow_sections": "regenerate_quality_depth",
 }
 
 
@@ -182,6 +189,16 @@ def _summarize_labels(labels: list[str], limit: int = 6) -> str:
     return "; ".join(visible) + suffix
 
 
+def _blocker_count(readiness: dict[str, Any], code: str) -> int:
+    for blocker in readiness.get("blockers") or []:
+        if isinstance(blocker, dict) and blocker.get("code") == code:
+            try:
+                return int(blocker.get("count") or 0)
+            except (TypeError, ValueError):
+                return 0
+    return 0
+
+
 def readiness_priority_actions(readiness: dict[str, Any] | None) -> list[str]:
     readiness = readiness or {}
     actions: list[str] = []
@@ -268,6 +285,131 @@ def readiness_priority_actions(readiness: dict[str, Any] | None) -> list[str]:
     return actions
 
 
+def structured_readiness_priority_actions(
+    readiness: dict[str, Any] | None,
+) -> list[dict[str, Any]]:
+    readiness = readiness or {}
+    actions: list[dict[str, Any]] = []
+
+    duplicate_sections = [
+        item
+        for item in readiness.get("duplicate_selected_sections") or []
+        if isinstance(item, dict)
+    ]
+    duplicate_count = len(duplicate_sections) or _blocker_count(
+        readiness,
+        "duplicate_selected",
+    )
+    if duplicate_count:
+        labels = [_section_label(item) for item in duplicate_sections] or [
+            f"{duplicate_count} duplicate selected sections"
+        ]
+        actions.append(
+            {
+                "blocker_code": "duplicate_selected",
+                "action_key": READINESS_ACTION_KEYS["duplicate_selected"],
+                "ui_action": "Остави най-новите",
+                "section_count": duplicate_count,
+                "section_labels": labels,
+                "summary": _summarize_labels(labels),
+            }
+        )
+
+    stale_sections = [
+        item
+        for item in readiness.get("stale_section_details") or []
+        if isinstance(item, dict)
+    ]
+    if not stale_sections:
+        stale_sections = [
+            {"section_uid": str(item)}
+            for item in readiness.get("stale_sections") or []
+            if item is not None
+        ]
+    stale_count = len(stale_sections) or _blocker_count(readiness, "stale_evidence")
+    if stale_count:
+        labels = [_section_label(item) for item in stale_sections] or [
+            f"{stale_count} stale selected sections"
+        ]
+        actions.append(
+            {
+                "blocker_code": "stale_evidence",
+                "action_key": READINESS_ACTION_KEYS["stale_evidence"],
+                "ui_action": "Regenerate",
+                "section_count": stale_count,
+                "section_labels": labels,
+                "summary": _summarize_labels(labels),
+            }
+        )
+
+    missing_sections = [
+        item
+        for item in readiness.get("missing_requirement_sections") or []
+        if isinstance(item, dict)
+    ]
+    missing_count = len(missing_sections) or _blocker_count(
+        readiness,
+        "missing_requirements",
+    )
+    if missing_count:
+        missing_sections.sort(
+            key=lambda item: int(item.get("missing_count") or 0),
+            reverse=True,
+        )
+        labels = [
+            f"{_section_label(item)} ({int(item.get('missing_count') or 0)} missing)"
+            for item in missing_sections
+        ] or [f"{missing_count} sections with missing requirements"]
+        actions.append(
+            {
+                "blocker_code": "missing_requirements",
+                "action_key": READINESS_ACTION_KEYS["missing_requirements"],
+                "ui_action": "Regenerate coverage",
+                "section_count": missing_count,
+                "section_labels": labels,
+                "summary": _summarize_labels(labels),
+            }
+        )
+
+    quality_sections = [
+        item
+        for item in readiness.get("quality_sections") or []
+        if isinstance(item, dict)
+    ]
+    quality_count = len(quality_sections) or _blocker_count(
+        readiness,
+        "shallow_sections",
+    )
+    if quality_count:
+        quality_sections.sort(
+            key=lambda item: (
+                int(item.get("requirement_count") or 0),
+                int(item.get("blueprint_topic_count") or 0),
+            ),
+            reverse=True,
+        )
+        labels = [
+            (
+                f"{_section_label(item)} "
+                f"({int(item.get('word_count') or 0)}/"
+                f"{int(item.get('min_words') or 0)} words)"
+            )
+            for item in quality_sections
+        ] or [f"{quality_count} shallow/depth-blocked sections"]
+        actions.append(
+            {
+                "blocker_code": "shallow_sections",
+                "action_key": READINESS_ACTION_KEYS["shallow_sections"],
+                "ui_action": "Regenerate detailed",
+                "section_count": quality_count,
+                "section_labels": labels,
+                "summary": _summarize_labels(labels),
+            }
+        )
+
+    return actions
+
+
 def calibration_output_paths(out_dir: Path) -> dict[str, Path]:
     return {
         "selected_snapshot": out_dir / "selected_proposal_snapshot.md",
@@ -275,6 +417,7 @@ def calibration_output_paths(out_dir: Path) -> dict[str, Path]:
         "readiness_report": out_dir / "docx_readiness_report.md",
         "gap_report": out_dir / "proposal_gap_report.md",
         "manifest": out_dir / "calibration_manifest.md",
+        "manifest_json": out_dir / "calibration_manifest.json",
     }
 
 
@@ -425,6 +568,54 @@ def render_manifest(
     return "\n".join(lines)
 
 
+def render_manifest_json(
+    *,
+    project_id: str,
+    reference: Path,
+    selected_snapshot: Path,
+    effective_snapshot: Path,
+    readiness_report: Path,
+    gap_report: Path,
+    tenders: list[Path],
+    readiness: dict[str, Any] | None = None,
+    snapshot_warnings: int = 0,
+    gap_summary: dict[str, int | float] | None = None,
+    gap_focus_counts: dict[str, int] | None = None,
+    gap_priority_rows: list[dict[str, Any]] | None = None,
+) -> str:
+    readiness = readiness or {}
+    blockers = [
+        item
+        for item in readiness.get("blockers") or []
+        if isinstance(item, dict)
+    ]
+    payload = {
+        "schema_version": "calibration_manifest.v1",
+        "project_id": project_id,
+        "mode": "non-mutating",
+        "paths": {
+            "reference": _display_path(reference),
+            "selected_snapshot": _display_path(selected_snapshot),
+            "effective_snapshot": _display_path(effective_snapshot),
+            "readiness_report": _display_path(readiness_report),
+            "gap_report": _display_path(gap_report),
+            "tenders": [_display_path(path) for path in tenders],
+        },
+        "calibration_gates": {
+            "snapshot_warnings": snapshot_warnings,
+            "docx_readiness_status": readiness.get("status", "unknown"),
+            "docx_readiness_blockers": len(blockers),
+            "blockers": blockers,
+            "gap_input_snapshot": "effective_proposal_snapshot.md",
+        },
+        "gap_quality_scorecard": gap_summary or {},
+        "gap_calibration_focus_counts": gap_focus_counts or {},
+        "readiness_actions": structured_readiness_priority_actions(readiness),
+        "gap_priority_rows": gap_priority_rows or [],
+    }
+    return json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
+
+
 def _api_imports() -> None:
     api_path = str(API_ROOT)
     if api_path not in sys.path:
@@ -523,6 +714,23 @@ async def run_calibration_bundle(
         ),
         encoding="utf-8",
     )
+    paths["manifest_json"].write_text(
+        render_manifest_json(
+            project_id=project_id,
+            reference=reference,
+            selected_snapshot=paths["selected_snapshot"],
+            effective_snapshot=paths["effective_snapshot"],
+            readiness_report=paths["readiness_report"],
+            gap_report=paths["gap_report"],
+            tenders=tenders,
+            readiness=readiness,
+            snapshot_warnings=warning_count,
+            gap_summary=gap_summary,
+            gap_focus_counts=gap_focus_counts,
+            gap_priority_rows=gap_priority_rows,
+        ),
+        encoding="utf-8",
+    )
     return paths
 
 
@@ -562,6 +770,7 @@ def main(argv: list[str]) -> int:
         )
     )
     print(f"Wrote {paths['manifest']}")
+    print(f"Wrote {paths['manifest_json']}")
     print(f"Wrote {paths['selected_snapshot']}")
     print(f"Wrote {paths['effective_snapshot']}")
     print(f"Wrote {paths['readiness_report']}")

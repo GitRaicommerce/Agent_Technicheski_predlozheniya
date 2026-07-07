@@ -1,6 +1,7 @@
 from pathlib import Path
 import asyncio
 import importlib.util
+import json
 import sys
 import tempfile
 import unittest
@@ -24,7 +25,9 @@ gap_regeneration_priority_rows = calibration.gap_regeneration_priority_rows
 gap_summary_metrics = calibration.gap_summary_metrics
 readiness_priority_actions = calibration.readiness_priority_actions
 render_manifest = calibration.render_manifest
+render_manifest_json = calibration.render_manifest_json
 run_calibration_bundle = calibration.run_calibration_bundle
+structured_readiness_priority_actions = calibration.structured_readiness_priority_actions
 snapshot_warning_count = calibration.snapshot_warning_count
 GenerationSnapshot = calibration.GenerationSnapshot
 
@@ -52,6 +55,10 @@ class RunProposalCalibrationTests(unittest.TestCase):
         self.assertEqual(
             paths["manifest"],
             Path("analysis/pernik/calibration_manifest.md"),
+        )
+        self.assertEqual(
+            paths["manifest_json"],
+            Path("analysis/pernik/calibration_manifest.json"),
         )
 
     def test_render_manifest_lists_bundle_files_and_review_order(self):
@@ -258,6 +265,88 @@ class RunProposalCalibrationTests(unittest.TestCase):
         self.assertIn("bulk `Regenerate detailed`", actions[3])
         self.assertIn("Environment (120/420 words)", actions[3])
 
+    def test_render_manifest_json_exposes_structured_gates_and_actions(self):
+        readiness = {
+            "status": "blocked",
+            "blockers": [
+                {"code": "duplicate_selected", "count": 1},
+                {"code": "stale_evidence", "count": 1},
+                {"code": "missing_requirements", "count": 1},
+                {"code": "shallow_sections", "count": 1},
+            ],
+            "duplicate_selected_sections": [
+                {"section_title": "Organization", "selected_count": 2}
+            ],
+            "stale_section_details": [{"section_title": "Schedule"}],
+            "missing_requirement_sections": [
+                {"section_title": "Quality", "missing_count": 3}
+            ],
+            "quality_sections": [
+                {
+                    "section_title": "Environment",
+                    "word_count": 120,
+                    "min_words": 420,
+                    "requirement_count": 5,
+                    "blueprint_topic_count": 7,
+                }
+            ],
+        }
+        manifest = json.loads(
+            render_manifest_json(
+                project_id="project-1",
+                reference=Path("reference.docx"),
+                selected_snapshot=Path("out/selected.md"),
+                effective_snapshot=Path("out/effective.md"),
+                readiness_report=Path("out/readiness.md"),
+                gap_report=Path("out/gap.md"),
+                tenders=[Path("tender.pdf")],
+                readiness=readiness,
+                snapshot_warnings=2,
+                gap_summary={
+                    "generated_reference_volume_ratio": 0.25,
+                    "content_generated_sections": 10,
+                },
+                gap_focus_counts={"drafting depth": 4},
+                gap_priority_rows=[
+                    {
+                        "reference_section": "A",
+                        "generated_section": "A generated",
+                        "coverage": 0.2,
+                        "volume": 0.1,
+                        "reasons": "too short",
+                        "focus": "drafting depth",
+                    }
+                ],
+            )
+        )
+
+        self.assertEqual(manifest["schema_version"], "calibration_manifest.v1")
+        self.assertEqual(manifest["project_id"], "project-1")
+        self.assertEqual(manifest["mode"], "non-mutating")
+        self.assertEqual(
+            manifest["calibration_gates"]["docx_readiness_status"],
+            "blocked",
+        )
+        self.assertEqual(manifest["calibration_gates"]["snapshot_warnings"], 2)
+        self.assertEqual(
+            manifest["gap_quality_scorecard"]["generated_reference_volume_ratio"],
+            0.25,
+        )
+        self.assertEqual(
+            [action["action_key"] for action in manifest["readiness_actions"]],
+            [
+                "resolve_duplicate_selected",
+                "regenerate_stale",
+                "regenerate_missing_requirements",
+                "regenerate_quality_depth",
+            ],
+        )
+        self.assertEqual(
+            manifest["readiness_actions"][2]["ui_action"],
+            "Regenerate coverage",
+        )
+        self.assertEqual(manifest["gap_priority_rows"][0]["focus"], "drafting depth")
+
     def test_snapshot_warning_count_reads_warning_section_only(self):
         count = snapshot_warning_count(
             "\n".join(
@@ -384,6 +473,17 @@ class RunProposalCalibrationTests(unittest.TestCase):
                 self.assertIn(
                     "docx_readiness_report.md",
                     paths["manifest"].read_text(encoding="utf-8"),
+                )
+                manifest_json = json.loads(
+                    paths["manifest_json"].read_text(encoding="utf-8")
+                )
+                self.assertEqual(
+                    manifest_json["paths"]["readiness_report"],
+                    str(paths["readiness_report"]).replace("\\", "/"),
+                )
+                self.assertEqual(
+                    manifest_json["readiness_actions"][0]["action_key"],
+                    "regenerate_stale",
                 )
                 self.assertIn(
                     "effective_proposal_snapshot.md",
