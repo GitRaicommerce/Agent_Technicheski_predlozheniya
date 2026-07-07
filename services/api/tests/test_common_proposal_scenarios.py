@@ -320,6 +320,63 @@ def test_noisy_pdf_rows_do_not_inflate_common_scenario_blueprint():
     assert result["status"] == "needs_review"
 
 
+def test_common_single_category_with_many_topics_still_requires_developed_depth():
+    requirement_items = [
+        {
+            "id": "req-dust",
+            "text": "Describe dust suppression measures during execution.",
+            "importance": "mandatory",
+            "category": "environment",
+            "category_label": "Environmental protection",
+            "topic": "dust",
+        },
+        {
+            "id": "req-waste",
+            "text": "Describe waste segregation, storage, transport, and handover.",
+            "importance": "mandatory",
+            "category": "environment",
+            "category_label": "Environmental protection",
+            "topic": "waste",
+        },
+        {
+            "id": "req-soil",
+            "text": "Describe soil protection and clean-up controls.",
+            "importance": "mandatory",
+            "category": "environment",
+            "category_label": "Environmental protection",
+            "topic": "soil",
+        },
+        {
+            "id": "req-water",
+            "text": "Describe water and pollution prevention controls.",
+            "importance": "mandatory",
+            "category": "environment",
+            "category_label": "Environmental protection",
+            "topic": "water",
+        },
+    ]
+    blueprint = build_drafting_blueprint(
+        section_title="Environmental protection",
+        requirement_items=requirement_items,
+    )
+    shallow_result = assess_generation_depth(
+        (
+            "The proposal includes environmental protection with responsible "
+            "roles, monitoring, records, and corrective actions. "
+        )
+        * 25,
+        _coverage_for(requirement_items),
+        drafting_blueprint=blueprint,
+    )
+
+    assert len(blueprint["groups"]) == 1
+    assert blueprint["groups"][0]["topics"] == ["dust", "waste", "soil", "water"]
+    assert shallow_result["blueprint_group_count"] == 1
+    assert shallow_result["blueprint_topic_count"] == 4
+    assert shallow_result["status"] == "needs_review"
+    assert shallow_result["min_words"] >= 800
+
+
 def test_common_readiness_report_guides_mixed_blocker_remediation():
     chunks = [
         make_chunk(

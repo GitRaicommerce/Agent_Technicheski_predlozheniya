@@ -343,6 +343,12 @@ async def test_export_docx_uses_drafting_blueprint_for_quality_gate(client, mock
                     "category": f"category-{index}",
                     "label": f"Category {index}",
                     "requirements": [{"id": f"req-{index}"}],
+                    "topic_details": [
+                        {
+                            "topic": f"topic-{index}",
+                            "requirement_ids": [f"req-{index}"],
+                        }
+                    ],
                 }
                 for index in range(1, 7)
             ]
@@ -363,6 +369,7 @@ async def test_export_docx_uses_drafting_blueprint_for_quality_gate(client, mock
     assert quality_section["section_uid"] == "sec-blueprint"
     assert quality_section["requirement_count"] == 2
     assert quality_section["blueprint_group_count"] == 6
+    assert quality_section["blueprint_topic_count"] == 6
     assert quality_section["min_words"] >= 1200
 
 

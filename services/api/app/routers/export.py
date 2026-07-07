@@ -199,6 +199,7 @@ def _quality_review_issue(
         "sentence_count": assessment["sentence_count"],
         "requirement_count": assessment["requirement_count"],
         "blueprint_group_count": assessment["blueprint_group_count"],
+        "blueprint_topic_count": assessment["blueprint_topic_count"],
         "min_words": assessment["min_words"],
         "min_sentences": assessment["min_sentences"],
         "issues": assessment["issues"],

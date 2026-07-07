@@ -94,6 +94,10 @@ def _group_key(item: dict[str, Any]) -> str:
     return _clean(item.get("category")) or _group_label(item).lower()
 
 
+def _topic_key(item: dict[str, Any]) -> str:
+    return _clean(item.get("topic"), limit=120) or _clean(item.get("text"), limit=80)
+
+
 def _guidance_for_group(category: str) -> list[str]:
     return CATEGORY_GUIDANCE.get(category, DEFAULT_GUIDANCE)
 
@@ -151,12 +155,14 @@ def build_drafting_blueprint(
                 "label": _group_label(item),
                 "requirements": [],
                 "topics": [],
+                "topic_details": [],
                 "guidance": _guidance_for_group(_clean(item.get("category"))),
             },
         )
-        topic = _clean(item.get("topic"), limit=120)
+        topic = _topic_key(item)
         if topic and topic not in group["topics"]:
             group["topics"].append(topic)
+            group["topic_details"].append({"topic": topic, "requirement_ids": []})
         if len(group["requirements"]) < max_items_per_group:
             group["requirements"].append(
                 {
@@ -165,6 +171,13 @@ def build_drafting_blueprint(
                     "importance": _clean(item.get("importance")) or "mandatory",
                 }
             )
+        for topic_detail in group["topic_details"]:
+            if (
+                topic_detail["topic"] == topic
+                and requirement_id not in topic_detail["requirement_ids"]
+            ):
+                topic_detail["requirement_ids"].append(requirement_id)
+                break
 
     groups = list(groups_by_key.values())[:max_groups]
     return {
@@ -200,6 +213,21 @@ def format_drafting_blueprint_for_prompt(blueprint: dict[str, Any]) -> str:
         lines.append(f"{index}. Suggested subheading: {label}{suffix}")
         for guidance in group.get("guidance") or []:
             lines.append(f"   - develop: {guidance}")
+        topic_details = [
+            topic
+            for topic in group.get("topic_details") or []
+            if isinstance(topic, dict) and topic.get("topic")
+        ]
+        if topic_details:
+            lines.append("   - required topic coverage:")
+            for topic in topic_details:
+                requirement_ids = ", ".join(
+                    str(item)
+                    for item in topic.get("requirement_ids") or []
+                    if item
+                )
+                suffix = f" ({requirement_ids})" if requirement_ids else ""
+                lines.append(f"     - {topic.get('topic')}{suffix}")
         for item in group.get("requirements") or []:
             lines.append(
                 "   - requirement "
