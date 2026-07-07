@@ -42,6 +42,27 @@ def snapshot_warning_count(markdown: str) -> int:
     return count
 
 
+def gap_calibration_focus_counts(markdown: str) -> dict[str, int]:
+    in_diagnostics = False
+    counts: dict[str, int] = {}
+    for line in markdown.splitlines():
+        stripped = line.strip()
+        if stripped == "## Section Gap Diagnostics":
+            in_diagnostics = True
+            continue
+        if in_diagnostics and stripped.startswith("## "):
+            break
+        if not in_diagnostics or not stripped.startswith("|"):
+            continue
+        cells = [cell.strip() for cell in stripped.strip("|").split("|")]
+        if len(cells) < 6 or cells[0] in {"Reference section", "---"}:
+            continue
+        focus = cells[5]
+        if focus:
+            counts[focus] = counts.get(focus, 0) + 1
+    return counts
+
+
 def calibration_output_paths(out_dir: Path) -> dict[str, Path]:
     return {
         "selected_snapshot": out_dir / "selected_proposal_snapshot.md",
@@ -63,6 +84,7 @@ def render_manifest(
     tenders: list[Path],
     readiness: dict[str, Any] | None = None,
     snapshot_warnings: int = 0,
+    gap_focus_counts: dict[str, int] | None = None,
 ) -> str:
     readiness = readiness or {}
     blockers = [
@@ -70,6 +92,7 @@ def render_manifest(
         for item in readiness.get("blockers") or []
         if isinstance(item, dict)
     ]
+    gap_focus_counts = gap_focus_counts or {}
     lines = [
         "# Proposal calibration bundle",
         "",
@@ -101,6 +124,15 @@ def render_manifest(
         lines.append(
             "- Gap report interpretation: readiness is clear enough for calibration review."
         )
+    lines.extend(["", "## Gap calibration focus summary", ""])
+    if gap_focus_counts:
+        for focus, count in sorted(
+            gap_focus_counts.items(),
+            key=lambda item: (-item[1], item[0]),
+        ):
+            lines.append(f"- `{focus}`: `{count}` sections")
+    else:
+        lines.append("- `none`: Section Gap Diagnostics not found or no section rows.")
     lines.extend(
         [
             "",
@@ -207,6 +239,7 @@ async def run_calibration_bundle(
         tender_paths=tenders,
     )
     paths["gap_report"].write_text(report, encoding="utf-8")
+    gap_focus_counts = gap_calibration_focus_counts(report)
     paths["manifest"].write_text(
         render_manifest(
             project_id=project_id,
@@ -218,6 +251,7 @@ async def run_calibration_bundle(
             tenders=tenders,
             readiness=readiness,
             snapshot_warnings=warning_count,
+            gap_focus_counts=gap_focus_counts,
         ),
         encoding="utf-8",
     )

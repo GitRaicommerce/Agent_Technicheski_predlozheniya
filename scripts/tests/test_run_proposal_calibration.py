@@ -19,6 +19,7 @@ SPEC.loader.exec_module(calibration)
 
 
 calibration_output_paths = calibration.calibration_output_paths
+gap_calibration_focus_counts = calibration.gap_calibration_focus_counts
 render_manifest = calibration.render_manifest
 run_calibration_bundle = calibration.run_calibration_bundle
 snapshot_warning_count = calibration.snapshot_warning_count
@@ -67,6 +68,10 @@ class RunProposalCalibrationTests(unittest.TestCase):
                 ],
             },
             snapshot_warnings=3,
+            gap_focus_counts={
+                "drafting depth": 5,
+                "outline mapping": 2,
+            },
         )
 
         self.assertIn("Mode: `non-mutating`", manifest)
@@ -84,6 +89,39 @@ class RunProposalCalibrationTests(unittest.TestCase):
         self.assertIn("Snapshot Warnings", manifest)
         self.assertIn("resolve export blockers", manifest)
         self.assertIn("Universal Topic Coverage", manifest)
+        self.assertIn("Gap calibration focus summary", manifest)
+        self.assertIn("`drafting depth`: `5` sections", manifest)
+        self.assertIn("`outline mapping`: `2` sections", manifest)
+
+    def test_gap_calibration_focus_counts_reads_diagnostics_table_only(self):
+        counts = gap_calibration_focus_counts(
+            "\n".join(
+                [
+                    "# Gap report",
+                    "",
+                    "## Section Gap Diagnostics",
+                    "",
+                    "| Reference section | Best generated section | Coverage | Volume | Gap reasons | Calibration focus |",
+                    "| --- | --- | ---: | ---: | --- | --- |",
+                    "| A | A generated | 0.20 | 0.10 | too short | drafting depth |",
+                    "| B | C generated | 0.10 | 0.80 | structure mismatch | outline mapping |",
+                    "| C | C generated | 0.40 | 0.90 | weak lexical coverage | grounding and checklist coverage |",
+                    "| D | D generated | 0.30 | 0.20 | too short | drafting depth |",
+                    "",
+                    "## Other",
+                    "| ignored | ignored | ignored | ignored | ignored | monitor |",
+                ]
+            )
+        )
+
+        self.assertEqual(
+            counts,
+            {
+                "drafting depth": 2,
+                "outline mapping": 1,
+                "grounding and checklist coverage": 1,
+            },
+        )
 
     def test_snapshot_warning_count_reads_warning_section_only(self):
         count = snapshot_warning_count(
@@ -158,7 +196,17 @@ class RunProposalCalibrationTests(unittest.TestCase):
                 kwargs["generated_path"].name,
                 "effective_proposal_snapshot.md",
             )
-            return "# Gap report"
+            return "\n".join(
+                [
+                    "# Gap report",
+                    "",
+                    "## Section Gap Diagnostics",
+                    "",
+                    "| Reference section | Best generated section | Coverage | Volume | Gap reasons | Calibration focus |",
+                    "| --- | --- | ---: | ---: | --- | --- |",
+                    "| A | A generated | 0.20 | 0.10 | too short | drafting depth |",
+                ]
+            )
 
         calibration.load_snapshot = fake_load_snapshot
         calibration.export_readiness_report_markdown = fake_export_readiness
@@ -190,10 +238,9 @@ class RunProposalCalibrationTests(unittest.TestCase):
                     paths["readiness_report"].read_text(encoding="utf-8"),
                     "# DOCX export readiness report",
                 )
-                self.assertEqual(
-                    paths["gap_report"].read_text(encoding="utf-8"),
-                    "# Gap report",
-                )
+                gap_report = paths["gap_report"].read_text(encoding="utf-8")
+                self.assertIn("# Gap report", gap_report)
+                self.assertIn("Section Gap Diagnostics", gap_report)
                 self.assertIn(
                     "docx_readiness_report.md",
                     paths["manifest"].read_text(encoding="utf-8"),
@@ -204,6 +251,10 @@ class RunProposalCalibrationTests(unittest.TestCase):
                 )
                 self.assertIn(
                     "`stale_evidence`: `1`",
+                    paths["manifest"].read_text(encoding="utf-8"),
+                )
+                self.assertIn(
+                    "`drafting depth`: `1` sections",
                     paths["manifest"].read_text(encoding="utf-8"),
                 )
         finally:
