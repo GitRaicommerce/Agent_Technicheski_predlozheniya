@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -88,6 +89,32 @@ def gap_calibration_focus_counts(markdown: str) -> dict[str, int]:
         if focus:
             counts[focus] = counts.get(focus, 0) + 1
     return counts
+
+
+def gap_summary_metrics(markdown: str) -> dict[str, int | float]:
+    metrics: dict[str, int | float] = {}
+    line_patterns = {
+        "raw_reference_sections": r"Raw recognized sections in reference TP:\s*`(\d+)`",
+        "raw_generated_sections": r"Raw recognized sections in generated TP:\s*`(\d+)`",
+        "content_reference_sections": r"Content sections compared in reference TP:\s*`(\d+)`",
+        "content_generated_sections": r"Content sections compared in generated TP:\s*`(\d+)`",
+        "reference_word_tokens": r"Word-like tokens .*?референтното ТП:\s*`(\d+)`",
+        "generated_word_tokens": r"Word-like tokens .*?генерираното ТП:\s*`(\d+)`",
+    }
+    for line in markdown.splitlines():
+        for key, pattern in line_patterns.items():
+            match = re.search(pattern, line)
+            if match:
+                metrics[key] = int(match.group(1))
+
+    reference_words = metrics.get("reference_word_tokens")
+    generated_words = metrics.get("generated_word_tokens")
+    if isinstance(reference_words, int) and isinstance(generated_words, int):
+        metrics["generated_reference_volume_ratio"] = (
+            generated_words / reference_words if reference_words else 0.0
+        )
+
+    return metrics
 
 
 def gap_regeneration_priority_rows(
@@ -257,6 +284,7 @@ def render_manifest(
     tenders: list[Path],
     readiness: dict[str, Any] | None = None,
     snapshot_warnings: int = 0,
+    gap_summary: dict[str, int | float] | None = None,
     gap_focus_counts: dict[str, int] | None = None,
     gap_priority_rows: list[dict[str, Any]] | None = None,
 ) -> str:
@@ -267,6 +295,7 @@ def render_manifest(
         if isinstance(item, dict)
     ]
     gap_focus_counts = gap_focus_counts or {}
+    gap_summary = gap_summary or {}
     gap_priority_rows = gap_priority_rows or []
     readiness_actions = readiness_priority_actions(readiness)
     lines = [
@@ -300,6 +329,29 @@ def render_manifest(
         lines.append(
             "- Gap report interpretation: readiness is clear enough for calibration review."
         )
+    lines.extend(["", "## Gap quality scorecard", ""])
+    if gap_summary:
+        content_reference = gap_summary.get("content_reference_sections", "n/a")
+        content_generated = gap_summary.get("content_generated_sections", "n/a")
+        reference_words = gap_summary.get("reference_word_tokens", "n/a")
+        generated_words = gap_summary.get("generated_word_tokens", "n/a")
+        volume_ratio = gap_summary.get("generated_reference_volume_ratio")
+        lines.extend(
+            [
+                (
+                    "- Content sections compared: "
+                    f"`{content_generated}` generated / `{content_reference}` reference"
+                ),
+                (
+                    "- Word-like tokens compared: "
+                    f"`{generated_words}` generated / `{reference_words}` reference"
+                ),
+            ]
+        )
+        if isinstance(volume_ratio, float):
+            lines.append(f"- Generated/reference volume ratio: `{volume_ratio:.2f}`")
+    else:
+        lines.append("- `n/a`: Gap summary metrics were not found in the report.")
     lines.extend(["", "## Gap calibration focus summary", ""])
     if gap_focus_counts:
         for focus, count in sorted(
@@ -446,6 +498,7 @@ async def run_calibration_bundle(
         tender_paths=tenders,
     )
     paths["gap_report"].write_text(report, encoding="utf-8")
+    gap_summary = gap_summary_metrics(report)
     gap_focus_counts = gap_calibration_focus_counts(report)
     gap_priority_rows = gap_regeneration_priority_rows(report)
     paths["manifest"].write_text(
@@ -459,6 +512,7 @@ async def run_calibration_bundle(
             tenders=tenders,
             readiness=readiness,
             snapshot_warnings=warning_count,
+            gap_summary=gap_summary,
             gap_focus_counts=gap_focus_counts,
             gap_priority_rows=gap_priority_rows,
         ),

@@ -96,6 +96,7 @@
 - Surfaced missing-requirement diagnostics in export readiness payloads and Markdown reports so blockers distinguish missing key terms, incoherent scattered coverage, and missing operational evidence.
 - Surfaced missing-requirement diagnostic reasons in the Generations panel so users can see when a selected section needs operational evidence, a coherent passage, or key-term coverage before export.
 - Added a non-mutating regeneration-priority shortlist to calibration manifests, combining DOCX readiness blockers with section gap diagnostics so reviewers can see which concrete sections to resolve or regenerate first on any project.
+- Added a gap quality scorecard to calibration manifests and re-ran the Pernik non-mutating calibration bundle; the current effective generated proposal compares 22 content sections against 23 reference sections but only reaches a 0.15 generated/reference word-volume ratio, confirming that the remaining quality gap is primarily drafting depth and operational detail after readiness blockers are resolved.
 
 ## Active Goals
 
@@ -108,7 +109,7 @@
 
 1. Use the export warning remediation button and the Generations bulk duplicate resolver to clear Pernik's legacy duplicate selected generations, then re-run the aggregated export readiness check.
 2. Use the Generations panel bulk stale-regeneration action for Pernik after duplicate selections are resolved; the same attention filter will also surface any blueprint-aware shallow/depth sections reported by the next export preflight.
-3. Re-run export readiness and the content-filtered proposal gap analysis against the winning technical proposal, then use the manifest calibration-focus rollup, regeneration-priority shortlist, and section-level diagnostics to calibrate outline mapping, drafting blueprint depth, and grounding/checklist coverage against the regenerated Pernik output.
+3. After resolving Pernik's duplicate selected variants and stale selected sections, regenerate the affected sections with a target of materially improving the manifest word-volume scorecard and the section-level drafting-depth diagnostics, not only clearing export blockers.
 4. Expand generated documentation with more precise backend endpoint and workflow coverage.
 5. Continue broadening common tender regression coverage with more real-world noisy PDF extraction and DOCX readiness combinations.
 6. Use the readiness Markdown report during the next Pernik calibration, then compare the regenerated output against the winning proposal after duplicate selected variants and stale generations are resolved.

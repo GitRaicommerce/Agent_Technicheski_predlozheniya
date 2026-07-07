@@ -21,6 +21,7 @@ SPEC.loader.exec_module(calibration)
 calibration_output_paths = calibration.calibration_output_paths
 gap_calibration_focus_counts = calibration.gap_calibration_focus_counts
 gap_regeneration_priority_rows = calibration.gap_regeneration_priority_rows
+gap_summary_metrics = calibration.gap_summary_metrics
 readiness_priority_actions = calibration.readiness_priority_actions
 render_manifest = calibration.render_manifest
 run_calibration_bundle = calibration.run_calibration_bundle
@@ -78,6 +79,13 @@ class RunProposalCalibrationTests(unittest.TestCase):
                 "drafting depth": 5,
                 "outline mapping": 2,
             },
+            gap_summary={
+                "content_reference_sections": 12,
+                "content_generated_sections": 10,
+                "reference_word_tokens": 8000,
+                "generated_word_tokens": 2400,
+                "generated_reference_volume_ratio": 0.30,
+            },
             gap_priority_rows=[
                 {
                     "reference_section": "Organization",
@@ -103,6 +111,10 @@ class RunProposalCalibrationTests(unittest.TestCase):
         self.assertIn("out/gap.md", manifest)
         self.assertIn("tender.pdf", manifest)
         self.assertIn("Snapshot Warnings", manifest)
+        self.assertIn("Gap quality scorecard", manifest)
+        self.assertIn("`10` generated / `12` reference", manifest)
+        self.assertIn("`2400` generated / `8000` reference", manifest)
+        self.assertIn("Generated/reference volume ratio: `0.30`", manifest)
         self.assertIn("resolve export blockers", manifest)
         self.assertIn("Universal Topic Coverage", manifest)
         self.assertIn("Gap calibration focus summary", manifest)
@@ -114,11 +126,40 @@ class RunProposalCalibrationTests(unittest.TestCase):
         self.assertIn("Gap `outline mapping`: regenerate/reference-align", manifest)
         self.assertIn("Organization", manifest)
 
+    def test_gap_summary_metrics_reads_report_summary(self):
+        metrics = gap_summary_metrics(
+            "\n".join(
+                [
+                    "- Raw recognized sections in reference TP: `26`",
+                    "- Raw recognized sections in generated TP: `24`",
+                    "- Content sections compared in reference TP: `23`",
+                    "- Content sections compared in generated TP: `22`",
+                    "- Word-like tokens в референтното ТП: `62445`",
+                    "- Word-like tokens в генерираното ТП: `9122`",
+                ]
+            )
+        )
+
+        self.assertEqual(metrics["raw_reference_sections"], 26)
+        self.assertEqual(metrics["raw_generated_sections"], 24)
+        self.assertEqual(metrics["content_reference_sections"], 23)
+        self.assertEqual(metrics["content_generated_sections"], 22)
+        self.assertEqual(metrics["reference_word_tokens"], 62445)
+        self.assertEqual(metrics["generated_word_tokens"], 9122)
+        self.assertAlmostEqual(
+            metrics["generated_reference_volume_ratio"],
+            9122 / 62445,
+        )
+
     def test_gap_calibration_focus_counts_reads_diagnostics_table_only(self):
         counts = gap_calibration_focus_counts(
             "\n".join(
                 [
                     "# Gap report",
+                    "- Content sections compared in reference TP: `1`",
+                    "- Content sections compared in generated TP: `1`",
+                    "- Word-like tokens в референтното ТП: `1000`",
+                    "- Word-like tokens в генерираното ТП: `250`",
                     "",
                     "## Section Gap Diagnostics",
                     "",
@@ -149,6 +190,10 @@ class RunProposalCalibrationTests(unittest.TestCase):
             "\n".join(
                 [
                     "# Gap report",
+                    "- Content sections compared in reference TP: `1`",
+                    "- Content sections compared in generated TP: `1`",
+                    "- Word-like tokens в референтното ТП: `1000`",
+                    "- Word-like tokens в генерираното ТП: `250`",
                     "",
                     "## Section Gap Diagnostics",
                     "",
@@ -277,6 +322,10 @@ class RunProposalCalibrationTests(unittest.TestCase):
             return "\n".join(
                 [
                     "# Gap report",
+                    "- Content sections compared in reference TP: `1`",
+                    "- Content sections compared in generated TP: `1`",
+                    "- Word-like tokens в референтното ТП: `1000`",
+                    "- Word-like tokens в генерираното ТП: `250`",
                     "",
                     "## Section Gap Diagnostics",
                     "",
@@ -334,6 +383,10 @@ class RunProposalCalibrationTests(unittest.TestCase):
                 )
                 self.assertIn(
                     "`drafting depth`: `1` sections",
+                    paths["manifest"].read_text(encoding="utf-8"),
+                )
+                self.assertIn(
+                    "Generated/reference volume ratio: `0.25`",
                     paths["manifest"].read_text(encoding="utf-8"),
                 )
                 self.assertIn(
