@@ -61,6 +61,38 @@ def _tokens(value: str) -> list[str]:
     ]
 
 
+def _sentence_windows(text: str, *, window_size: int = 2) -> list[str]:
+    sentences = [
+        sentence.strip()
+        for sentence in re.split(r"(?<=[.!?])\s+|\n+", str(text or ""))
+        if sentence.strip()
+    ]
+    if not sentences:
+        return [str(text or "")]
+
+    windows: list[str] = []
+    for index in range(len(sentences)):
+        windows.append(" ".join(sentences[index : index + window_size]))
+    return windows
+
+
+def _best_window_matches(
+    requirement_tokens: list[str],
+    generated_text: str,
+) -> tuple[list[str], float]:
+    if not requirement_tokens:
+        return [], 1.0
+
+    best_matches: list[str] = []
+    for window in _sentence_windows(generated_text):
+        window_tokens = set(_tokens(window))
+        matches = sorted(set(requirement_tokens) & window_tokens)
+        if len(matches) > len(best_matches):
+            best_matches = matches
+
+    return best_matches, len(best_matches) / len(requirement_tokens)
+
+
 def normalize_requirement_items(
     items: list[dict[str, Any]] | None,
     *,
@@ -163,6 +195,10 @@ def assess_requirement_coverage(
         requirement_tokens = list(dict.fromkeys(_tokens(str(item.get("text") or ""))))
         matched_terms = sorted(set(requirement_tokens) & generated_tokens)
         missing_terms = [token for token in requirement_tokens if token not in matched_terms]
+        window_terms, window_ratio = _best_window_matches(
+            requirement_tokens,
+            generated_text,
+        )
 
         if not requirement_tokens:
             required_matches = 0
@@ -178,7 +214,14 @@ def assess_requirement_coverage(
             if requirement_tokens
             else 1.0
         )
-        status = "covered" if len(matched_terms) >= required_matches else "missing"
+        required_window_matches = (
+            0
+            if required_matches <= 1
+            else max(2, math.ceil(required_matches * 0.7))
+        )
+        globally_covered = len(matched_terms) >= required_matches
+        locally_coherent = len(window_terms) >= required_window_matches
+        status = "covered" if globally_covered and locally_coherent else "missing"
         requirement_id = str(item.get("id"))
         if status == "covered":
             covered_ids.append(requirement_id)
@@ -199,7 +242,10 @@ def assess_requirement_coverage(
                 "matched_terms": matched_terms,
                 "missing_terms": missing_terms,
                 "matched_ratio": round(matched_ratio, 3),
+                "coherent_matched_terms": window_terms,
+                "coherent_matched_ratio": round(window_ratio, 3),
                 "required_match_count": required_matches,
+                "required_coherent_match_count": required_window_matches,
             }
         )
 

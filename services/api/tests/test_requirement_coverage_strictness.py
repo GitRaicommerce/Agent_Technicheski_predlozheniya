@@ -36,3 +36,46 @@ def test_requirement_coverage_rejects_superficial_keyword_mentions():
     assert superficial["items"][0]["matched_ratio"] < 0.6
     assert developed["covered_ids"] == ["req-quality-acceptance"]
     assert developed["items"][0]["matched_ratio"] >= 0.6
+
+
+def test_requirement_coverage_rejects_scattered_keyword_mentions():
+    items = normalize_requirement_items(
+        [
+            {
+                "id": "req-risk-controls",
+                "text": (
+                    "Describe risk trigger, prevention action, response owner, "
+                    "monitoring signal, escalation path, and corrective record."
+                ),
+                "importance": "mandatory",
+                "category_label": "Risk management",
+            }
+        ]
+    )
+
+    scattered = assess_requirement_coverage(
+        (
+            "The proposal has a risk register. "
+            "The schedule includes a trigger milestone. "
+            "Prevention is mentioned in the quality plan. "
+            "The project manager is the response owner. "
+            "Monitoring appears in weekly reports. "
+            "Escalation is available through management. "
+            "Corrective records are archived."
+        ),
+        items,
+    )
+    coherent = assess_requirement_coverage(
+        (
+            "For each risk, the proposal identifies the trigger, prevention "
+            "action, response owner, monitoring signal, escalation path, and "
+            "corrective record in one control workflow."
+        ),
+        items,
+    )
+
+    assert scattered["missing_ids"] == ["req-risk-controls"]
+    assert scattered["items"][0]["matched_ratio"] >= 0.6
+    assert scattered["items"][0]["coherent_matched_ratio"] < 0.6
+    assert coherent["covered_ids"] == ["req-risk-controls"]
+    assert coherent["items"][0]["coherent_matched_ratio"] >= 0.6

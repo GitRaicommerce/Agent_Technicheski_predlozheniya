@@ -507,3 +507,43 @@ def test_common_requirement_coverage_requires_developed_operational_detail():
 
     assert superficial["missing_ids"] == ["req-environment-controls"]
     assert developed["covered_ids"] == ["req-environment-controls"]
+
+
+def test_common_requirement_coverage_rejects_scattered_keyword_coverage():
+    requirement_items = [
+        {
+            "id": "req-communication-workflow",
+            "text": (
+                "Describe communication channel, meeting cadence, reporting "
+                "record, approval interface, escalation path, and responsible role."
+            ),
+            "importance": "mandatory",
+            "category": "communication",
+            "category_label": "Communication and coordination",
+        }
+    ]
+
+    scattered = assess_requirement_coverage(
+        (
+            "The proposal names the communication channel. "
+            "A separate paragraph mentions meeting cadence. "
+            "Reporting records are referenced later. "
+            "The approval interface is named in another list. "
+            "Escalation path appears in the risk chapter. "
+            "The responsible role is stated at the end."
+        ),
+        requirement_items,
+    )
+    coherent = assess_requirement_coverage(
+        (
+            "The communication workflow defines the channel, meeting cadence, "
+            "reporting record, approval interface, escalation path, and "
+            "responsible role for each coordination point."
+        ),
+        requirement_items,
+    )
+
+    assert scattered["missing_ids"] == ["req-communication-workflow"]
+    assert scattered["items"][0]["matched_ratio"] >= 0.6
+    assert scattered["items"][0]["coherent_matched_ratio"] < 0.6
+    assert coherent["covered_ids"] == ["req-communication-workflow"]
