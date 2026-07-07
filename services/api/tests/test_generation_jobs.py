@@ -284,6 +284,10 @@ async def test_generation_job_targets_requested_sections(mock_db):
                     "uid": target_uid,
                     "title": "Selected stale",
                     "requirements": [],
+                    "drafting_guidance": {
+                        "requirement_count": 2,
+                        "required_subtopics": ["organization", "controls"],
+                    },
                     "subsections": [],
                 },
             ]
@@ -348,6 +352,10 @@ async def test_generation_job_targets_requested_sections(mock_db):
     assert job.completed_sections == 1
     assert run_drafting.await_count == 1
     assert run_drafting.await_args.kwargs["section_uid"] == target_uid
+    assert run_drafting.await_args.kwargs["section_drafting_guidance"] == {
+        "requirement_count": 2,
+        "required_subtopics": ["organization", "controls"],
+    }
     assert job.result_json["target_section_uids"] == [target_uid]
     assert job.result_json["target_reason"] == "stale_selected"
 

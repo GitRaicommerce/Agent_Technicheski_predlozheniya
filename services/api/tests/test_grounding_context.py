@@ -218,12 +218,22 @@ async def test_drafting_prompt_and_saved_generation_include_requirement_coverage
             trace_id=str(uuid.uuid4()),
             project_grounding_context=None,
             section_requirement_items=requirement_items,
+            section_drafting_guidance={
+                "requirement_count": 1,
+                "required_subtopics": ["Detailed linear schedule"],
+                "source_refs": ["chunk-req-schedule"],
+                "instructions": [
+                    "Use the required subtopics as explicit subheadings or developed paragraphs."
+                ],
+            },
         )
 
     prompt = llm_call.await_args.kwargs["user_message"]
     saved_generation = mock_db.add.call_args.args[0]
 
     assert "SECTION REQUIREMENT CHECKLIST" in prompt
+    assert "SECTION STRUCTURE PLAN" in prompt
+    assert "Detailed linear schedule" in prompt
     assert "DRAFTING BLUEPRINT" in prompt
     assert "SECTION DEPTH TARGET" in prompt
     assert "response plan:" in prompt
@@ -235,6 +245,12 @@ async def test_drafting_prompt_and_saved_generation_include_requirement_coverage
     assert (
         saved_generation.used_sources_json["section_requirement_items"][0]["id"]
         == "req-schedule"
+    )
+    assert (
+        saved_generation.used_sources_json["section_drafting_guidance"][
+            "required_subtopics"
+        ][0]
+        == "Detailed linear schedule"
     )
     assert (
         saved_generation.used_sources_json["drafting_blueprint"]["groups"][0][

@@ -194,6 +194,50 @@ def _needs_quality_repair(
     )
 
 
+def _format_section_drafting_guidance(guidance: dict[str, Any] | None) -> str:
+    if not isinstance(guidance, dict):
+        return ""
+
+    lines = ["SECTION STRUCTURE PLAN:"]
+    requirement_count = int(guidance.get("requirement_count") or 0)
+    if requirement_count:
+        lines.append(f"- Mapped checklist requirements: {requirement_count}.")
+
+    subtopics = [
+        str(item).strip()
+        for item in guidance.get("required_subtopics") or []
+        if str(item).strip()
+    ]
+    if subtopics:
+        lines.append("- Required subtopics:")
+        lines.extend(
+            f"  {index}. {topic}"
+            for index, topic in enumerate(subtopics[:30], start=1)
+        )
+
+    instructions = [
+        str(item).strip()
+        for item in guidance.get("instructions") or []
+        if str(item).strip()
+    ]
+    if instructions:
+        lines.append("- Writing plan:")
+        lines.extend(f"  - {instruction}" for instruction in instructions[:12])
+
+    source_refs = [
+        str(item).strip()
+        for item in guidance.get("source_refs") or []
+        if str(item).strip()
+    ]
+    if source_refs:
+        lines.append(
+            "- Source refs to keep visible while drafting: "
+            + ", ".join(source_refs[:20])
+        )
+
+    return "\n".join(lines) if len(lines) > 1 else ""
+
+
 async def run_drafting(
     project_id: str,
     section_uid: str,
@@ -206,6 +250,7 @@ async def run_drafting(
     trace_id: str | None = None,
     project_grounding_context: dict[str, Any] | None = None,
     section_requirement_items: list[dict[str, Any]] | None = None,
+    section_drafting_guidance: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     trace_id = trace_id or str(uuid.uuid4())
     section_uid = _safe_section_uuid(section_uid)
@@ -246,6 +291,9 @@ async def run_drafting(
     drafting_blueprint_text = format_drafting_blueprint_for_prompt(
         drafting_blueprint
     )
+    section_guidance_text = _format_section_drafting_guidance(
+        section_drafting_guidance
+    )
     depth_target = build_generation_depth_target(
         requirement_coverage={
             "total": len(normalized_requirement_items),
@@ -260,6 +308,7 @@ async def run_drafting(
         for part in [
             f"SECTION: {section_title}\nREQUIREMENTS:\n{requirements_text}",
             requirement_checklist_text,
+            section_guidance_text,
             drafting_blueprint_text,
             depth_target_text,
             (
@@ -366,6 +415,8 @@ async def run_drafting(
                 used_sources["grounding_context"] = project_grounding_context
             if normalized_requirement_items:
                 used_sources["section_requirement_items"] = normalized_requirement_items
+            if section_drafting_guidance:
+                used_sources["section_drafting_guidance"] = section_drafting_guidance
             if drafting_blueprint.get("groups") or drafting_blueprint.get("context_cues"):
                 used_sources["drafting_blueprint"] = drafting_blueprint
             gen = Generation(

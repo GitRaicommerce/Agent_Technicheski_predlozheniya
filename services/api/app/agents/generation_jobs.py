@@ -336,6 +336,7 @@ async def _run_drafting_all_job(job: GenerationJob, db) -> None:
         title = section.get("title", "")
         requirements = section.get("requirements", [])
         requirement_items = section.get("requirement_checklist_items", [])
+        drafting_guidance = section.get("drafting_guidance")
 
         job.current_section_uid = uid
         job.current_section_title = title
@@ -409,6 +410,7 @@ async def _run_drafting_all_job(job: GenerationJob, db) -> None:
                 trace_id=job.trace_id,
                 project_grounding_context=project_grounding_context,
                 section_requirement_items=requirement_items,
+                section_drafting_guidance=drafting_guidance,
             )
         except Exception as exc:
             await db.rollback()
