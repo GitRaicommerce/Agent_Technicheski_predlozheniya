@@ -237,8 +237,16 @@ describe("ExportButton", () => {
       .toHaveTextContent("1200 думи");
     expect(screen.getByTestId("export-quality-warning"))
       .toHaveTextContent("260 думи на група/тема");
-    expect(qualitySectionsBlockedMock).toHaveBeenNthCalledWith(1, []);
-    expect(qualitySectionsBlockedMock).toHaveBeenLastCalledWith(["s1"]);
+    expect(qualitySectionsBlockedMock).toHaveBeenNthCalledWith(1, [], []);
+    expect(qualitySectionsBlockedMock).toHaveBeenLastCalledWith(
+      ["s1"],
+      [
+        expect.objectContaining({
+          section_uid: "s1",
+          suggested_words_per_structure: 260,
+        }),
+      ],
+    );
 
     await userEvent.click(screen.getByRole("button", { name: "Отвори Генерации" }));
 

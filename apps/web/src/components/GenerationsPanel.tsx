@@ -5,6 +5,7 @@ import {
   api,
   Generation,
   GenerationJob,
+  ExportQualitySection,
   RequirementCoverage,
   RequirementCoverageItem,
   SectionGenerations,
@@ -16,6 +17,7 @@ interface Props {
   refreshKey?: number;
   focusAttentionKey?: number;
   qualityAttentionSectionUids?: string[];
+  qualityAttentionSections?: ExportQualitySection[];
 }
 
 export default function GenerationsPanel({
@@ -23,6 +25,7 @@ export default function GenerationsPanel({
   refreshKey = 0,
   focusAttentionKey = 0,
   qualityAttentionSectionUids = [],
+  qualityAttentionSections = [],
 }: Props) {
   const [sections, setSections] = useState<SectionGenerations[]>([]);
   const [loading, setLoading] = useState(true);
@@ -221,6 +224,9 @@ export default function GenerationsPanel({
   }
 
   const qualityAttentionSectionSet = new Set(qualityAttentionSectionUids);
+  const qualityAttentionSectionMap = new Map(
+    qualityAttentionSections.map((section) => [section.section_uid, section]),
+  );
   const attentionSummary = summarizeGenerationAttention(
     sections,
     qualityAttentionSectionSet,
@@ -287,6 +293,7 @@ export default function GenerationsPanel({
           selectedVariants[0] ?? section.variants[0];
         const requirementCoverage = getRequirementCoverage(displayVariant);
         const attention = getSectionAttention(section, qualityAttentionSectionSet);
+        const qualityDetail = qualityAttentionSectionMap.get(section.section_uid);
 
         return (
           <div
@@ -363,6 +370,7 @@ export default function GenerationsPanel({
                 <SectionText
                   variant={displayVariant}
                   requirementCoverage={requirementCoverage}
+                  qualityDetail={qualityDetail}
                 />
               </div>
             )}
@@ -800,9 +808,11 @@ function GenerationJobProgress({
 function SectionText({
   variant,
   requirementCoverage,
+  qualityDetail,
 }: {
   variant: Generation;
   requirementCoverage: RequirementCoverage | null;
+  qualityDetail?: ExportQualitySection;
 }) {
   const [expanded, setExpanded] = useState(false);
   const previewLen = 400;
@@ -815,6 +825,7 @@ function SectionText({
         sectionUid={variant.section_uid}
         coverage={requirementCoverage}
       />
+      <QualityDepthDetails sectionUid={variant.section_uid} detail={qualityDetail} />
       <p className="whitespace-pre-wrap text-xs leading-relaxed text-gray-700">
         {expanded || !isLong ? text : `${text.slice(0, previewLen)}...`}
       </p>
@@ -828,6 +839,58 @@ function SectionText({
       )}
     </div>
   );
+}
+
+function QualityDepthDetails({
+  sectionUid,
+  detail,
+}: {
+  sectionUid: string;
+  detail?: ExportQualitySection;
+}) {
+  if (!detail) return null;
+
+  const diagnostics = qualityDepthDiagnostics(detail);
+  if (!diagnostics.length) return null;
+
+  return (
+    <div
+      data-testid={`generation-quality-depth-${sectionUid}`}
+      className="mb-3 rounded border border-blue-200 bg-blue-50 px-2.5 py-2 text-xs text-blue-900"
+    >
+      <p className="font-medium">Дълбочина за export readiness</p>
+      <p className="mt-0.5 text-[11px] opacity-80">{diagnostics.join(" · ")}</p>
+    </div>
+  );
+}
+
+function qualityDepthDiagnostics(detail: ExportQualitySection): string[] {
+  const diagnostics: string[] = [];
+  if (
+    typeof detail.word_count === "number" &&
+    typeof detail.min_words === "number"
+  ) {
+    diagnostics.push(`${detail.word_count}/${detail.min_words} думи`);
+  } else if (typeof detail.min_words === "number") {
+    diagnostics.push(`минимум ${detail.min_words} думи`);
+  }
+  if (
+    typeof detail.sentence_count === "number" &&
+    typeof detail.min_sentences === "number" &&
+    detail.min_sentences > 0
+  ) {
+    diagnostics.push(`${detail.sentence_count}/${detail.min_sentences} развити изречения`);
+  }
+  if (typeof detail.blueprint_group_count === "number") {
+    diagnostics.push(`${detail.blueprint_group_count} групи`);
+  }
+  if (typeof detail.blueprint_topic_count === "number") {
+    diagnostics.push(`${detail.blueprint_topic_count} теми`);
+  }
+  if (typeof detail.suggested_words_per_structure === "number") {
+    diagnostics.push(`${detail.suggested_words_per_structure} думи на група/тема`);
+  }
+  return diagnostics;
 }
 
 function getRequirementCoverage(

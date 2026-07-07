@@ -100,6 +100,7 @@
 - Raised adaptive drafting-depth targets for blueprint-heavy sections and added prompt guidance to distribute the required volume across every major group/topic, so complex technical proposal sections are pushed toward developed operational substance instead of short generic summaries.
 - Strengthened common-scenario regressions and DOCX readiness reports for complex blueprint-heavy sections by exposing the suggested words-per-group/topic diagnostic, making shallow-section blockers easier to interpret and harder to regress.
 - Surfaced the words-per-group/topic depth diagnostic in the web DOCX export warning so users can see the expected structural depth before opening the Markdown readiness report.
+- Passed shallow-section depth details from DOCX export warnings into the Generations panel, so opening the remediation view shows each affected section's current/minimum words, developed sentence target, blueprint groups/topics, and words-per-group/topic guidance.
 
 ## Active Goals
 

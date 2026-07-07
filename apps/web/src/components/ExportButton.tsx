@@ -8,7 +8,10 @@ interface Props {
   projectId: string;
   projectName: string;
   onOpenGenerations?: () => void;
-  onQualitySectionsBlocked?: (sectionUids: string[]) => void;
+  onQualitySectionsBlocked?: (
+    sectionUids: string[],
+    sections?: ExportQualitySection[],
+  ) => void;
 }
 
 interface QualityWarningSummary {
@@ -68,7 +71,10 @@ export default function ExportButton({
       setQualityWarning(true);
       setQualitySectionCount(getQualitySectionCount(source));
       setQualityWarningSummary(getQualityWarningSummary(source));
-      onQualitySectionsBlocked?.(getQualitySectionUids(source));
+      onQualitySectionsBlocked?.(
+        getQualitySectionUids(source),
+        getQualitySections(source),
+      );
       handled = true;
     }
 
@@ -87,7 +93,7 @@ export default function ExportButton({
     setQualityWarning(false);
     setQualitySectionCount(null);
     setQualityWarningSummary(null);
-    onQualitySectionsBlocked?.([]);
+    onQualitySectionsBlocked?.([], []);
 
     try {
       const readiness = await api.export.readiness(projectId);
@@ -432,22 +438,25 @@ function getQualityWarningSummary(err: unknown): QualityWarningSummary | null {
   };
 }
 
-function getQualitySectionUids(err: unknown): string[] {
+function getQualitySections(err: unknown): ExportQualitySection[] {
   const payload = getReadinessPayload(err);
   if (!payload || typeof payload !== "object") return [];
 
   const sections = (payload as { quality_sections?: unknown }).quality_sections;
   if (!Array.isArray(sections)) return [];
 
-  const sectionUids = sections
-    .map((section) =>
-      section && typeof section === "object"
-        ? (section as ExportQualitySection).section_uid
-        : null,
-    )
-    .filter((sectionUid): sectionUid is string =>
-      typeof sectionUid === "string" && sectionUid.length > 0,
-    );
+  return sections.filter(
+    (section): section is ExportQualitySection =>
+      !!section &&
+      typeof section === "object" &&
+      typeof (section as ExportQualitySection).section_uid === "string",
+  );
+}
+
+function getQualitySectionUids(err: unknown): string[] {
+  const sectionUids = getQualitySections(err).map(
+    (section) => section.section_uid,
+  );
   return [...new Set(sectionUids)];
 }
 

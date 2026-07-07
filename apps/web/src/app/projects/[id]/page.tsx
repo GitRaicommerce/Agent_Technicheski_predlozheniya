@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { api, LegislationStatusResponse, Project } from "@/lib/api";
+import { api, type ExportQualitySection, type LegislationStatusResponse, type Project } from "@/lib/api";
 import { useToast } from "@/components/ToastProvider";
 import ChatPanel from "@/components/ChatPanel";
 import ExportButton from "@/components/ExportButton";
@@ -54,6 +54,9 @@ export default function ProjectPage() {
     useState(0);
   const [qualityAttentionSectionUids, setQualityAttentionSectionUids] =
     useState<string[]>([]);
+  const [qualityAttentionSections, setQualityAttentionSections] = useState<
+    ExportQualitySection[]
+  >([]);
   const [showEdit, setShowEdit] = useState(false);
   const [editData, setEditData] = useState({ name: "", location: "", description: "", contracting_authority: "", tender_date: "" });
   const [saving, setSaving] = useState(false);
@@ -383,7 +386,10 @@ export default function ProjectPage() {
                 setGenerationAttentionFocusKey((value) => value + 1);
                 setGenerationsRefreshKey((value) => value + 1);
               }}
-              onQualitySectionsBlocked={setQualityAttentionSectionUids}
+              onQualitySectionsBlocked={(sectionUids, sections = []) => {
+                setQualityAttentionSectionUids(sectionUids);
+                setQualityAttentionSections(sections);
+              }}
             />
           </div>
         )}
@@ -507,6 +513,7 @@ export default function ProjectPage() {
                   refreshKey={generationsRefreshKey}
                   focusAttentionKey={generationAttentionFocusKey}
                   qualityAttentionSectionUids={qualityAttentionSectionUids}
+                  qualityAttentionSections={qualityAttentionSections}
                 />
               </div>
             )}

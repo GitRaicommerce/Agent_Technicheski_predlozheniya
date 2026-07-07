@@ -621,6 +621,18 @@ describe("GenerationsPanel", () => {
       <GenerationsPanel
         projectId="project-1"
         qualityAttentionSectionUids={["sec-quality"]}
+        qualityAttentionSections={[
+          {
+            section_uid: "sec-quality",
+            word_count: 180,
+            min_words: 1400,
+            sentence_count: 3,
+            min_sentences: 10,
+            blueprint_group_count: 5,
+            blueprint_topic_count: 6,
+            suggested_words_per_structure: 280,
+          },
+        ]}
       />,
     );
 
@@ -653,6 +665,13 @@ describe("GenerationsPanel", () => {
     expect(screen.getByText("4 / 5 секции")).toBeInTheDocument();
     expect(screen.getByTestId("generation-attention-filter-toggle"))
       .toHaveTextContent("Покажи всички");
+
+    await userEvent.click(screen.getByTestId("generation-section-sec-quality"));
+
+    expect(await screen.findByTestId("generation-quality-depth-sec-quality"))
+      .toHaveTextContent("180/1400 думи");
+    expect(screen.getByTestId("generation-quality-depth-sec-quality"))
+      .toHaveTextContent("280 думи на група/тема");
   });
 
   it("focuses the attention filter when requested by export remediation", async () => {

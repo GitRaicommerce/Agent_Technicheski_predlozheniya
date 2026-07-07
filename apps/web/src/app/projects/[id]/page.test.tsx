@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import ProjectPage from "./page";
-import { api } from "@/lib/api";
+import { api, type ExportQualitySection } from "@/lib/api";
 
 const pushMock = vi.fn();
 const toastMock = vi.fn();
@@ -44,7 +44,10 @@ vi.mock("@/components/ExportButton", () => ({
     onQualitySectionsBlocked,
   }: {
     onOpenGenerations?: () => void;
-    onQualitySectionsBlocked?: (sectionUids: string[]) => void;
+    onQualitySectionsBlocked?: (
+      sectionUids: string[],
+      sections?: ExportQualitySection[],
+    ) => void;
   }) => (
     <div>
       Export Button
@@ -56,7 +59,15 @@ vi.mock("@/components/ExportButton", () => ({
       </div>
       <div
         data-testid="mock-quality-blockers"
-        onClick={() => onQualitySectionsBlocked?.(["sec-quality"])}
+        onClick={() =>
+          onQualitySectionsBlocked?.(["sec-quality"], [
+            {
+              section_uid: "sec-quality",
+              min_words: 1400,
+              suggested_words_per_structure: 280,
+            },
+          ])
+        }
       >
         Set Quality Blockers
       </div>
@@ -84,13 +95,18 @@ vi.mock("@/components/GenerationsPanel", () => ({
   default: ({
     focusAttentionKey = 0,
     qualityAttentionSectionUids = [],
+    qualityAttentionSections = [],
   }: {
     focusAttentionKey?: number;
     qualityAttentionSectionUids?: string[];
+    qualityAttentionSections?: ExportQualitySection[];
   }) => (
     <div data-testid="mock-generations-panel">
       Generations Panel focus={focusAttentionKey}{" "}
-      {qualityAttentionSectionUids.join(",")}
+      {qualityAttentionSectionUids.join(",")} details=
+      {qualityAttentionSections
+        .map((section) => section.suggested_words_per_structure)
+        .join(",")}
     </div>
   ),
 }));
@@ -243,6 +259,8 @@ describe("ProjectPage", () => {
 
     expect(screen.getByTestId("mock-generations-panel"))
       .toHaveTextContent("sec-quality");
+    expect(screen.getByTestId("mock-generations-panel"))
+      .toHaveTextContent("details=280");
     expect(screen.getByTestId("mock-generations-panel"))
       .toHaveTextContent("focus=1");
   });
