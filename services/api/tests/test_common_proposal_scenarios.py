@@ -9,6 +9,7 @@ from app.agents.requirements import (
     SUGGESTED_SECTIONS,
     extract_requirement_checklist,
 )
+from app.agents.requirement_coverage import assess_requirement_coverage
 from app.agents.tender_struct import (
     _build_deterministic_outline,
     _extract_explicit_numbered_outline,
@@ -418,3 +419,34 @@ def test_common_readiness_report_guides_mixed_blocker_remediation():
     assert "плитките секции" in action_lines[3]
     assert "Организация на изпълнението (`sec-organization`)" in report
     assert "Работна програма за изпълнение (`sec-work-program`)" in report
+
+
+def test_common_requirement_coverage_requires_developed_operational_detail():
+    requirement_items = [
+        {
+            "id": "req-environment-controls",
+            "text": (
+                "Describe dust control, waste segregation, soil protection, "
+                "responsible role, monitoring records, and corrective actions."
+            ),
+            "importance": "scored",
+            "category": "environment",
+            "category_label": "Environmental protection",
+        }
+    ]
+
+    superficial = assess_requirement_coverage(
+        "The work programme includes environmental protection and dust control.",
+        requirement_items,
+    )
+    developed = assess_requirement_coverage(
+        (
+            "The work programme describes dust control, waste segregation, "
+            "soil protection, the responsible role, monitoring records, and "
+            "corrective actions during execution."
+        ),
+        requirement_items,
+    )
+
+    assert superficial["missing_ids"] == ["req-environment-controls"]
+    assert developed["covered_ids"] == ["req-environment-controls"]

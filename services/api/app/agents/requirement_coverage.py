@@ -168,9 +168,16 @@ def assess_requirement_coverage(
             required_matches = 0
         elif len(requirement_tokens) <= 2:
             required_matches = 1
+        elif len(requirement_tokens) <= 5:
+            required_matches = max(2, math.ceil(len(requirement_tokens) * 0.6))
         else:
-            required_matches = max(2, math.ceil(len(requirement_tokens) * 0.35))
+            required_matches = max(3, math.ceil(len(requirement_tokens) * 0.4))
 
+        matched_ratio = (
+            len(matched_terms) / len(requirement_tokens)
+            if requirement_tokens
+            else 1.0
+        )
         status = "covered" if len(matched_terms) >= required_matches else "missing"
         requirement_id = str(item.get("id"))
         if status == "covered":
@@ -191,6 +198,7 @@ def assess_requirement_coverage(
                 "status": status,
                 "matched_terms": matched_terms,
                 "missing_terms": missing_terms,
+                "matched_ratio": round(matched_ratio, 3),
                 "required_match_count": required_matches,
             }
         )
