@@ -97,6 +97,7 @@
 - Surfaced missing-requirement diagnostic reasons in the Generations panel so users can see when a selected section needs operational evidence, a coherent passage, or key-term coverage before export.
 - Added a non-mutating regeneration-priority shortlist to calibration manifests, combining DOCX readiness blockers with section gap diagnostics so reviewers can see which concrete sections to resolve or regenerate first on any project.
 - Added a gap quality scorecard to calibration manifests and re-ran the Pernik non-mutating calibration bundle; the current effective generated proposal compares 22 content sections against 23 reference sections but only reaches a 0.15 generated/reference word-volume ratio, confirming that the remaining quality gap is primarily drafting depth and operational detail after readiness blockers are resolved.
+- Raised adaptive drafting-depth targets for blueprint-heavy sections and added prompt guidance to distribute the required volume across every major group/topic, so complex technical proposal sections are pushed toward developed operational substance instead of short generic summaries.
 
 ## Active Goals
 

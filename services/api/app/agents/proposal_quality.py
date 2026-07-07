@@ -1,16 +1,17 @@
 from __future__ import annotations
 
 import re
+from math import ceil
 from typing import Any
 
 
 BASE_MIN_WORDS = 120
-MIN_WORDS_PER_REQUIREMENT = 80
+MIN_WORDS_PER_REQUIREMENT = 100
 MIN_WORDS_WITH_REQUIREMENTS = 220
-MAX_MIN_WORDS = 900
-BLUEPRINT_BASE_MIN_WORDS = 180
-MIN_WORDS_PER_BLUEPRINT_GROUP = 170
-MAX_BLUEPRINT_MIN_WORDS = 1600
+MAX_MIN_WORDS = 1400
+BLUEPRINT_BASE_MIN_WORDS = 260
+MIN_WORDS_PER_BLUEPRINT_GROUP = 220
+MAX_BLUEPRINT_MIN_WORDS = 2400
 
 
 def _word_count(text: str) -> int:
@@ -211,8 +212,14 @@ def build_generation_depth_target(
         "requirement_count": requirement_count,
         "blueprint_group_count": blueprint_group_count,
         "blueprint_topic_count": blueprint_topic_count,
+        "blueprint_structure_count": blueprint_structure_count,
         "min_words": min_words,
         "min_sentences": min_sentences,
+        "suggested_words_per_structure": (
+            ceil(min_words / blueprint_structure_count)
+            if blueprint_structure_count > 1 and min_words > 0
+            else 0
+        ),
         "required": requirement_count > 0 or blueprint_structure_count > 1,
     }
 
@@ -224,10 +231,27 @@ def format_generation_depth_target_for_prompt(target: dict[str, Any]) -> str:
     requirement_count = int(target.get("requirement_count") or 0)
     blueprint_group_count = int(target.get("blueprint_group_count") or 0)
     blueprint_topic_count = int(target.get("blueprint_topic_count") or 0)
+    blueprint_structure_count = int(target.get("blueprint_structure_count") or 0)
     min_words = int(target.get("min_words") or 0)
     min_sentences = int(target.get("min_sentences") or 0)
+    suggested_words_per_structure = int(
+        target.get("suggested_words_per_structure") or 0
+    )
     sentence_target = (
         f" and {min_sentences} developed sentences" if min_sentences > 0 else ""
+    )
+    distribution_hint = (
+        (
+            "- Distribute the depth across the blueprint structure: write roughly "
+            f"{suggested_words_per_structure}+ words for each major group/topic "
+            "when the sources support it, instead of spending the whole section "
+            "on introductory text."
+        )
+        if blueprint_structure_count > 1 and suggested_words_per_structure > 0
+        else (
+            "- Write at least one developed operational paragraph for each mapped "
+            "checklist requirement."
+        )
     )
 
     return "\n".join(
@@ -245,6 +269,7 @@ def format_generation_depth_target_for_prompt(target: dict[str, Any]) -> str:
                 f"{blueprint_group_count} drafting blueprint groups "
                 f"with {blueprint_topic_count} required topics."
             ),
+            distribution_hint,
             (
                 "- Meet the target through concrete actions, roles, controls, "
                 "documents, sequence, acceptance evidence, and tender-specific "

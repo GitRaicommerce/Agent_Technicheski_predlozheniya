@@ -106,7 +106,7 @@ def test_generation_depth_uses_blueprint_groups_for_complex_sections():
     assert result["status"] == "needs_review"
     assert result["requirement_count"] == 2
     assert result["blueprint_group_count"] == 6
-    assert result["min_words"] >= 1200
+    assert result["min_words"] >= 1500
     assert result["word_count"] < result["min_words"]
     assert "too_short_for_requirements" in {
         issue["code"] for issue in result["issues"]
@@ -134,7 +134,7 @@ def test_generation_depth_uses_blueprint_topics_for_complex_single_category_sect
     assert result["status"] == "needs_review"
     assert result["blueprint_group_count"] == 1
     assert result["blueprint_topic_count"] == 6
-    assert result["min_words"] >= 1200
+    assert result["min_words"] >= 1500
     assert "too_short_for_requirements" in {
         issue["code"] for issue in result["issues"]
     }
@@ -180,12 +180,16 @@ def test_generation_depth_target_prompt_matches_export_gate_thresholds():
     prompt = format_generation_depth_target_for_prompt(target)
 
     assert target["required"] is True
-    assert target["min_words"] >= 1200
+    assert target["min_words"] >= 1500
     assert target["min_sentences"] >= 10
     assert target["blueprint_topic_count"] == 0
+    assert target["blueprint_structure_count"] == 6
+    assert target["suggested_words_per_structure"] >= 250
     assert "SECTION DEPTH TARGET" in prompt
     assert "2 mapped checklist requirements" in prompt
     assert "6 drafting blueprint groups with 0 required topics" in prompt
+    assert "Distribute the depth across the blueprint structure" in prompt
+    assert "for each major group/topic" in prompt
     assert str(target["min_words"]) in prompt
 
 
@@ -198,8 +202,10 @@ def test_generation_depth_target_prompt_reports_topic_rich_blueprint():
 
     assert target["blueprint_group_count"] == 1
     assert target["blueprint_topic_count"] == 6
-    assert target["min_words"] >= 1200
+    assert target["min_words"] >= 1500
+    assert target["suggested_words_per_structure"] >= 250
     assert "1 drafting blueprint groups with 6 required topics" in prompt
+    assert "for each major group/topic" in prompt
 
 
 def test_generation_depth_target_prompt_omits_zero_sentence_target():
@@ -212,3 +218,4 @@ def test_generation_depth_target_prompt_omits_zero_sentence_target():
     assert target["min_sentences"] == 0
     assert "0 developed sentences" not in prompt
     assert f"{target['min_words']} words" in prompt
+    assert "one developed operational paragraph" in prompt
