@@ -46,7 +46,6 @@ STOPWORDS = {
     "with",
 }
 
-
 @dataclass
 class Section:
     title: str
@@ -227,6 +226,7 @@ NON_CONTENT_TITLE_HINTS = (
     "form",
     "participant",
     "bidder",
+    "greeting",
     "price",
     "financial",
     "address",
@@ -239,12 +239,22 @@ NON_CONTENT_TITLE_HINTS = (
     "\u043e\u0431\u0440\u0430\u0437\u0435\u0446",
     "\u0443\u0447\u0430\u0441\u0442\u043d\u0438\u043a",
     "\u043a\u0430\u043d\u0434\u0438\u0434\u0430\u0442",
+    "\u0443\u0432\u0430\u0436\u0430\u0435\u043c\u0438",
+    "\u0433\u043e\u0441\u043f\u043e\u0434\u0430",
     "\u043e\u0444\u0435\u0440\u0442\u0430",
     "\u0446\u0435\u043d\u043e\u0432",
     "\u0444\u0438\u043d\u0430\u043d\u0441",
     "\u0430\u0434\u0440\u0435\u0441",
     "\u043a\u043e\u043d\u0442\u0430\u043a\u0442",
 )
+
+ADMINISTRATIVE_EXACT_TITLE_HINTS = {
+    "participant",
+    "bidder",
+    "candidate",
+    "\u0443\u0447\u0430\u0441\u0442\u043d\u0438\u043a",
+    "\u043a\u0430\u043d\u0434\u0438\u0434\u0430\u0442",
+}
 
 
 def normalize_text(value: str) -> str:
@@ -388,22 +398,102 @@ def is_content_section(section: Section) -> bool:
         hint in title for hint in NON_CONTENT_TITLE_HINTS
     )
 
-    if topic_hit_count >= 2 or has_content_hint:
-        return True
-    if word_count >= 160 and topic_hit_count >= 1:
-        return True
+    if title.strip(" :.-") in ADMINISTRATIVE_EXACT_TITLE_HINTS:
+        return False
     if has_non_content_title_hint and topic_hit_count == 0:
+        return False
+    if has_non_content_title_hint and word_count < 160 and topic_hit_count < 2:
         return False
     if word_count < 45 and topic_hit_count == 0:
         return False
     if word_count < 90 and has_non_content_title_hint:
         return False
+    if topic_hit_count >= 2 or has_content_hint:
+        return True
+    if word_count >= 160 and topic_hit_count >= 1:
+        return True
     return True
 
 
 def content_sections(sections: list[Section]) -> list[Section]:
     filtered = [section for section in sections if is_content_section(section)]
     return filtered or sections
+
+
+def section_gap_reasons(
+    title_score: float,
+    coverage: float,
+    length_ratio: float,
+    missing_keywords: list[str],
+) -> list[str]:
+    reasons: list[str] = []
+    if title_score < 0.12:
+        reasons.append("structure mismatch")
+    if length_ratio < 0.35:
+        reasons.append("too short")
+    elif length_ratio < 0.65:
+        reasons.append("thin detail")
+    if coverage < 0.35 and missing_keywords:
+        reasons.append("missing key terms")
+    elif coverage < 0.55:
+        reasons.append("weak lexical coverage")
+    return reasons or ["acceptable alignment"]
+
+
+def calibration_focus_for_reasons(reasons: list[str]) -> str:
+    if "structure mismatch" in reasons:
+        return "outline mapping"
+    if "too short" in reasons or "thin detail" in reasons:
+        return "drafting depth"
+    if "missing key terms" in reasons or "weak lexical coverage" in reasons:
+        return "grounding and checklist coverage"
+    return "monitor"
+
+
+def render_section_gap_diagnostics_lines(
+    reference_sections: list[Section],
+    generated_sections: list[Section],
+) -> list[str]:
+    lines = [
+        "",
+        "## Section Gap Diagnostics",
+        "",
+        "| Reference section | Best generated section | Coverage | Volume | Gap reasons | Calibration focus |",
+        "| --- | --- | ---: | ---: | --- | --- |",
+    ]
+
+    for reference in reference_sections:
+        generated, title_score = best_generated_match(reference, generated_sections)
+        reference_keywords = top_keywords([reference], limit=35)
+        generated_keywords = set(top_keywords([generated], limit=60))
+        missing = [word for word in reference_keywords if word not in generated_keywords][:12]
+        coverage = score_overlap(reference.words, generated.words)
+        if title_score < 0.12:
+            coverage *= 0.75
+        length_ratio = len(generated.words) / max(1, len(reference.words))
+        reasons = section_gap_reasons(
+            title_score=title_score,
+            coverage=coverage,
+            length_ratio=length_ratio,
+            missing_keywords=missing,
+        )
+        focus = calibration_focus_for_reasons(reasons)
+        lines.append(
+            "| "
+            + " | ".join(
+                [
+                    reference.title.replace("|", "\\|")[:90],
+                    generated.title.replace("|", "\\|")[:90],
+                    f"{coverage:.2f}",
+                    f"{length_ratio:.2f}",
+                    ", ".join(reasons).replace("|", "\\|"),
+                    focus,
+                ]
+            )
+            + " |"
+        )
+
+    return lines
 
 
 def score_overlap(reference_words: list[str], generated_words: list[str]) -> float:
@@ -659,6 +749,10 @@ def render_report(
     lines[section_coverage_start:section_coverage_start] = (
         render_topic_coverage_lines(reference_sections, generated_sections)
         + render_calibration_recommendation_lines(
+            reference_sections,
+            generated_sections,
+        )
+        + render_section_gap_diagnostics_lines(
             reference_sections,
             generated_sections,
         )

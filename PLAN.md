@@ -89,6 +89,7 @@
 - Added calibration bundle gates to the manifest so real-project calibration runs now show snapshot warning counts, DOCX readiness status, blocker counts, and warn that gap findings are not final until duplicate/stale readiness blockers are resolved.
 - Added an effective newest-selected-per-section calibration snapshot so gap analysis is no longer inflated by legacy duplicate selected variants, while still preserving the raw selected snapshot and readiness gates for forensic review.
 - Added universal content-section filtering and Markdown subsection grouping to proposal gap analysis so calibration compares substantive work-program/methodology sections separately from formal front matter, declarations, signatures, forms, and internal generated-text subheadings.
+- Added section-level gap diagnostics to proposal calibration reports, mapping weak sections to actionable calibration focus areas: outline mapping, drafting depth, or grounding/checklist coverage, while filtering formal greeting/participant sections out of content comparisons.
 
 ## Active Goals
 
@@ -101,7 +102,7 @@
 
 1. Use the export warning remediation button and the Generations bulk duplicate resolver to clear Pernik's legacy duplicate selected generations, then re-run the aggregated export readiness check.
 2. Use the Generations panel bulk stale-regeneration action for Pernik after duplicate selections are resolved; the same attention filter will also surface any blueprint-aware shallow/depth sections reported by the next export preflight.
-3. Re-run export readiness and the content-filtered proposal gap analysis against the winning technical proposal, then calibrate the drafting blueprint and blueprint-aware depth thresholds against the regenerated Pernik output.
+3. Re-run export readiness and the content-filtered proposal gap analysis against the winning technical proposal, then use the section-level diagnostics to calibrate outline mapping, drafting blueprint depth, and grounding/checklist coverage against the regenerated Pernik output.
 4. Expand generated documentation with more precise backend endpoint and workflow coverage.
 5. Continue broadening common tender regression coverage with more real-world noisy PDF extraction and DOCX readiness combinations.
 6. Use the readiness Markdown report during the next Pernik calibration, then compare the regenerated output against the winning proposal after duplicate selected variants and stale generations are resolved.
