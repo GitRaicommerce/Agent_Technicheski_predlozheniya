@@ -115,7 +115,16 @@ async def test_export_readiness_aggregates_multiple_blockers(client, mock_db):
             "missing_ids": ["req-1", "req-2"],
             "items": [
                 {"id": "req-1", "text": "First missing", "status": "missing"},
-                {"id": "req-2", "text": "Second missing", "status": "missing"},
+                {
+                    "id": "req-2",
+                    "text": "Second missing",
+                    "status": "missing",
+                    "matched_ratio": 0.8,
+                    "coherent_matched_ratio": 0.8,
+                    "requires_operational_detail": True,
+                    "operational_signals": ["record"],
+                    "required_operational_signal_count": 2,
+                },
             ],
         }
     }
@@ -166,6 +175,11 @@ async def test_export_readiness_aggregates_multiple_blockers(client, mock_db):
     assert detail["duplicate_selected_count"] == 1
     assert detail["stale_section_count"] == 1
     assert detail["missing_requirement_count"] == 2
+    missing_items = detail["missing_requirement_sections"][0]["missing_items"]
+    assert missing_items[0]["reason"] == "missing requirement coverage"
+    assert missing_items[1]["reason"] == "needs operational evidence"
+    assert missing_items[1]["operational_signals"] == ["record"]
+    assert missing_items[1]["required_operational_signal_count"] == 2
     assert detail["quality_section_count"] == 1
 
 

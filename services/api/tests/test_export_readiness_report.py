@@ -36,7 +36,15 @@ def test_render_export_readiness_report_includes_blockers_and_actions():
                     "missing_count": 2,
                     "missing_requirement_ids": ["req-1", "req-2"],
                     "missing_items": [
-                        {"id": "req-1", "text": "Describe the detailed schedule."}
+                        {
+                            "id": "req-1",
+                            "text": "Describe the detailed schedule.",
+                            "reason": "needs operational evidence",
+                            "matched_ratio": 0.8,
+                            "coherent_matched_ratio": 0.75,
+                            "operational_signals": ["record"],
+                            "required_operational_signal_count": 2,
+                        }
                     ],
                 }
             ],
@@ -62,7 +70,8 @@ def test_render_export_readiness_report_includes_blockers_and_actions():
     assert "Duplicate section title (`sec-duplicate`): 2 selected variants (gen-1, gen-2)" in report
     assert "Stale section title (`sec-stale`)" in report
     assert "Missing section title (`sec-missing`): 2 missing (req-1, req-2)" in report
-    assert "`req-1`: Describe the detailed schedule." in report
+    assert "`req-1` [needs operational evidence]: Describe the detailed schedule." in report
+    assert "diagnostics: matched_ratio=0.8, coherent_ratio=0.75, operational_signals=1/2" in report
     assert "| Section | Words | Min words | Sentences | Min sentences | Requirements | Blueprint groups | Topics | Issues |" in report
     assert "| Shallow section title (`sec-shallow`) | 180 | 1200 | 3 | 10 | 2 | 6 | 8 | too_short_for_requirements |" in report
     assert "Остави най-новите" in report

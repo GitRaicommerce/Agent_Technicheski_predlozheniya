@@ -156,7 +156,34 @@ def render_export_readiness_report(readiness: dict[str, Any]) -> str:
             )
             for item in section.get("missing_items") or []:
                 if isinstance(item, dict):
-                    lines.append(f"  - `{item.get('id', 'n/a')}`: {_truncate(item.get('text'))}")
+                    reason = _truncate(item.get("reason") or "")
+                    suffix = f" [{reason}]" if reason else ""
+                    lines.append(
+                        f"  - `{item.get('id', 'n/a')}`{suffix}: "
+                        f"{_truncate(item.get('text'))}"
+                    )
+                    diagnostics: list[str] = []
+                    matched_ratio = item.get("matched_ratio")
+                    coherent_ratio = item.get("coherent_matched_ratio")
+                    operational_signals = [
+                        str(signal)
+                        for signal in item.get("operational_signals") or []
+                        if signal
+                    ]
+                    required_operational = item.get(
+                        "required_operational_signal_count"
+                    )
+                    if isinstance(matched_ratio, (int, float)):
+                        diagnostics.append(f"matched_ratio={matched_ratio}")
+                    if isinstance(coherent_ratio, (int, float)):
+                        diagnostics.append(f"coherent_ratio={coherent_ratio}")
+                    if isinstance(required_operational, int) and required_operational:
+                        diagnostics.append(
+                            "operational_signals="
+                            f"{len(operational_signals)}/{required_operational}"
+                        )
+                    if diagnostics:
+                        lines.append(f"    - diagnostics: {', '.join(diagnostics)}")
 
     quality_sections = [
         item

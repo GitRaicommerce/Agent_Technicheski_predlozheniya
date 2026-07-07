@@ -11,6 +11,33 @@ from app.export.readiness_report import render_export_readiness_report
 router = APIRouter()
 
 
+def _missing_requirement_reason(item: dict) -> str:
+    matched_terms = item.get("matched_terms")
+    coherent_terms = item.get("coherent_matched_terms")
+    operational_signals = item.get("operational_signals")
+    required_match_count = item.get("required_match_count")
+    required_coherent_match_count = item.get("required_coherent_match_count")
+    required_operational_signal_count = item.get("required_operational_signal_count")
+
+    matched_count = len(matched_terms) if isinstance(matched_terms, list) else 0
+    coherent_count = len(coherent_terms) if isinstance(coherent_terms, list) else 0
+    operational_count = (
+        len(operational_signals) if isinstance(operational_signals, list) else 0
+    )
+
+    if (
+        item.get("requires_operational_detail")
+        and isinstance(required_operational_signal_count, int)
+        and operational_count < required_operational_signal_count
+    ):
+        return "needs operational evidence"
+    if isinstance(required_coherent_match_count, int) and coherent_count < required_coherent_match_count:
+        return "needs coherent passage"
+    if isinstance(required_match_count, int) and matched_count < required_match_count:
+        return "missing key terms"
+    return "missing requirement coverage"
+
+
 def _missing_requirement_coverage(generation: Generation) -> dict | None:
     raw_flags = getattr(generation, "flags_json", None)
     flags = raw_flags if isinstance(raw_flags, dict) else {}
@@ -32,6 +59,13 @@ def _missing_requirement_coverage(generation: Generation) -> dict | None:
                 "id": str(item.get("id")),
                 "text": item.get("text"),
                 "importance": item.get("importance"),
+                "reason": _missing_requirement_reason(item),
+                "matched_ratio": item.get("matched_ratio"),
+                "coherent_matched_ratio": item.get("coherent_matched_ratio"),
+                "operational_signals": item.get("operational_signals") or [],
+                "required_operational_signal_count": item.get(
+                    "required_operational_signal_count"
+                ),
             }
             for item in items
             if isinstance(item, dict) and str(item.get("id")) in missing_ids_set
