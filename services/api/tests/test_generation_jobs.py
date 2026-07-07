@@ -9,6 +9,7 @@ import pytest
 from app.agents.generation_jobs import (
     _run_drafting_all_job,
     _sections_pending_generation,
+    create_drafting_quality_job,
     create_drafting_stale_job,
 )
 from app.core.models import TpOutline
@@ -367,5 +368,47 @@ async def test_create_drafting_stale_job_targets_selected_stale_sections(mock_db
         "target_section_uids": [stale_uid],
         "target_reason": "stale_selected",
     }
+    mock_db.add.assert_called_once_with(job)
+    enqueue.assert_called_once_with(job.id)
+
+
+@pytest.mark.asyncio
+async def test_create_drafting_quality_job_targets_quality_sections(mock_db):
+    project = _make_project()
+    selected_generations = [SimpleNamespace(section_uid="sec-quality")]
+    mock_db.flush = AsyncMock()
+    mock_db.commit = AsyncMock()
+
+    with (
+        patch("app.agents.generation_jobs._enqueue_generation_job") as enqueue,
+        patch(
+            "app.routers.export._load_selected_generations",
+            new=AsyncMock(return_value=selected_generations),
+        ) as load_selected,
+        patch(
+            "app.routers.export._build_export_readiness",
+            new=AsyncMock(
+                return_value={
+                    "quality_sections": [
+                        {"section_uid": "sec-quality"},
+                        {"section_uid": "sec-quality"},
+                    ]
+                }
+            ),
+        ) as build_readiness,
+    ):
+        job = await create_drafting_quality_job(project, mock_db)
+
+    assert job.job_type == "drafting_quality"
+    assert job.result_json == {
+        "target_section_uids": ["sec-quality"],
+        "target_reason": "quality_review",
+    }
+    load_selected.assert_awaited_once_with(project.id, mock_db)
+    build_readiness.assert_awaited_once_with(
+        project.id,
+        selected_generations,
+        mock_db,
+    )
     mock_db.add.assert_called_once_with(job)
     enqueue.assert_called_once_with(job.id)

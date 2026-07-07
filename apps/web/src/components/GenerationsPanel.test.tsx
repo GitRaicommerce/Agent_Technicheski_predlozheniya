@@ -18,6 +18,7 @@ vi.mock("@/lib/api", async () => {
         latestGenerationJob: vi.fn(),
         retryGenerationJob: vi.fn(),
         regenerateStaleGenerationJob: vi.fn(),
+        regenerateQualityGenerationJob: vi.fn(),
         regenerateSection: vi.fn(),
         selectGeneration: vi.fn(),
       },
@@ -30,6 +31,9 @@ const latestGenerationJobMock = vi.mocked(api.agents.latestGenerationJob);
 const retryGenerationJobMock = vi.mocked(api.agents.retryGenerationJob);
 const regenerateStaleGenerationJobMock = vi.mocked(
   api.agents.regenerateStaleGenerationJob,
+);
+const regenerateQualityGenerationJobMock = vi.mocked(
+  api.agents.regenerateQualityGenerationJob,
 );
 const regenerateSectionMock = vi.mocked(api.agents.regenerateSection);
 const selectGenerationMock = vi.mocked(api.agents.selectGeneration);
@@ -779,6 +783,69 @@ describe("GenerationsPanel", () => {
 
     await waitFor(() => {
       expect(regenerateStaleGenerationJobMock).toHaveBeenCalledWith("project-1");
+    });
+    await waitFor(() => {
+      expect(listGenerationsMock).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it("starts a quality selected sections generation job", async () => {
+    listGenerationsMock.mockResolvedValue([
+      {
+        section_uid: "sec-quality",
+        section_title: "Quality Section",
+        variants: [
+          {
+            id: "gen-quality",
+            section_uid: "sec-quality",
+            variant: 1,
+            text: "Short text",
+            evidence_status: "ok",
+            selected: true,
+            created_at: "2026-04-20T10:00:00.000Z",
+          },
+        ],
+      },
+    ]);
+    regenerateQualityGenerationJobMock.mockResolvedValue({
+      id: "job-quality",
+      project_id: "project-1",
+      job_type: "drafting_quality",
+      status: "queued",
+      total_sections: 1,
+      completed_sections: 0,
+      skipped_sections: 0,
+      current_section_uid: null,
+      current_section_title: null,
+      error: null,
+      result_json: {
+        target_section_uids: ["sec-quality"],
+        target_reason: "quality_review",
+      },
+      trace_id: "trace-quality",
+      created_at: "2026-04-20T10:02:00.000Z",
+      updated_at: "2026-04-20T10:02:00.000Z",
+      completed_at: null,
+    });
+
+    render(
+      <GenerationsPanel
+        projectId="project-1"
+        qualityAttentionSectionUids={["sec-quality"]}
+      />,
+    );
+
+    expect(await screen.findByTestId("generation-quality-selected-action"))
+      .toHaveTextContent("1 short/depth-blocked section");
+
+    await userEvent.click(
+      screen.getByTestId("generation-quality-regenerate-button"),
+    );
+
+    await waitFor(() => {
+      expect(regenerateQualityGenerationJobMock).toHaveBeenCalledWith(
+        "project-1",
+      );
     });
     await waitFor(() => {
       expect(listGenerationsMock).toHaveBeenCalledTimes(2);

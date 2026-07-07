@@ -134,6 +134,31 @@ async def create_drafting_stale_job(project: Project, db) -> GenerationJob:
     )
 
 
+async def create_drafting_quality_job(project: Project, db) -> GenerationJob:
+    from app.routers.export import _build_export_readiness, _load_selected_generations
+
+    selected_generations = await _load_selected_generations(project.id, db)
+    readiness = await _build_export_readiness(project.id, selected_generations, db)
+    quality_sections = [
+        section
+        for section in readiness.get("quality_sections") or []
+        if isinstance(section, dict) and section.get("section_uid")
+    ]
+    section_uids = list(
+        dict.fromkeys(str(section["section_uid"]) for section in quality_sections)
+    )
+    if not section_uids:
+        raise ValueError("No shallow selected sections to regenerate.")
+
+    return await create_drafting_job(
+        project=project,
+        db=db,
+        target_section_uids=section_uids,
+        target_reason="quality_review",
+        job_type="drafting_quality",
+    )
+
+
 async def create_drafting_job(
     project: Project,
     db,

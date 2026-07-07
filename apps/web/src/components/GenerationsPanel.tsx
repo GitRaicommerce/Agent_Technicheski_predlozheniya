@@ -37,6 +37,7 @@ export default function GenerationsPanel({
   );
   const [retryingJob, setRetryingJob] = useState(false);
   const [regeneratingStaleJob, setRegeneratingStaleJob] = useState(false);
+  const [regeneratingQualityJob, setRegeneratingQualityJob] = useState(false);
   const [showOnlyAttention, setShowOnlyAttention] = useState(false);
   const [resolvingDuplicateSelections, setResolvingDuplicateSelections] =
     useState(false);
@@ -155,6 +156,22 @@ export default function GenerationsPanel({
     }
   };
 
+  const handleRegenerateQualitySections = async () => {
+    setRegeneratingQualityJob(true);
+    setError(null);
+    try {
+      const nextJob = await api.agents.regenerateQualityGenerationJob(projectId);
+      setGenerationJob(nextJob);
+      await load();
+    } catch (e: unknown) {
+      setError(
+        e instanceof Error ? e.message : "Quality regeneration job failed.",
+      );
+    } finally {
+      setRegeneratingQualityJob(false);
+    }
+  };
+
   const handleResolveDuplicateSelections = async () => {
     const targets = duplicateSelectionResolutionTargets(sections);
     if (targets.length === 0) return;
@@ -256,6 +273,14 @@ export default function GenerationsPanel({
         regenerating={regeneratingStaleJob}
         onRegenerate={() => {
           void handleRegenerateStaleSections();
+        }}
+      />
+      <QualityRegenerationAction
+        qualitySectionCount={qualityAttentionSectionSet.size}
+        generationJob={generationJob}
+        regenerating={regeneratingQualityJob}
+        onRegenerate={() => {
+          void handleRegenerateQualitySections();
         }}
       />
       <GenerationAttentionSummary
@@ -502,6 +527,46 @@ function StaleRegenerationAction({
           className="shrink-0 rounded border border-amber-300 bg-white px-2 py-1 font-medium text-amber-800 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {regenerating ? "..." : "Regenerate"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function QualityRegenerationAction({
+  qualitySectionCount,
+  generationJob,
+  regenerating,
+  onRegenerate,
+}: {
+  qualitySectionCount: number;
+  generationJob: GenerationJob | null;
+  regenerating: boolean;
+  onRegenerate: () => void;
+}) {
+  const isActive =
+    generationJob?.status === "queued" || generationJob?.status === "processing";
+
+  if (qualitySectionCount <= 0) return null;
+
+  return (
+    <div
+      data-testid="generation-quality-selected-action"
+      className="mb-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-900"
+    >
+      <div className="flex items-center justify-between gap-2">
+        <span>
+          {qualitySectionCount} short/depth-blocked{" "}
+          {qualitySectionCount === 1 ? "section" : "sections"}
+        </span>
+        <button
+          type="button"
+          onClick={onRegenerate}
+          disabled={regenerating || isActive}
+          data-testid="generation-quality-regenerate-button"
+          className="shrink-0 rounded border border-blue-300 bg-white px-2 py-1 font-medium text-blue-800 transition hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {regenerating ? "..." : "Regenerate detailed"}
         </button>
       </div>
     </div>
