@@ -175,6 +175,77 @@ TOPIC_RULES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ),
 )
 
+CONTENT_SECTION_HINTS = (
+    "approach",
+    "method",
+    "methodology",
+    "organization",
+    "programme",
+    "program",
+    "schedule",
+    "sequence",
+    "quality",
+    "risk",
+    "environment",
+    "safety",
+    "communication",
+    "coordination",
+    "resource",
+    "control",
+    "documentation",
+    "\u043f\u043e\u0434\u0445\u043e\u0434",
+    "\u043c\u0435\u0442\u043e\u0434",
+    "\u043c\u0435\u0442\u043e\u0434\u0438\u043a",
+    "\u043e\u0440\u0433\u0430\u043d\u0438\u0437\u0430\u0446",
+    "\u0440\u0430\u0431\u043e\u0442\u043d\u0430 \u043f\u0440\u043e\u0433\u0440\u0430\u043c",
+    "\u043f\u0440\u043e\u0433\u0440\u0430\u043c\u0430",
+    "\u0433\u0440\u0430\u0444\u0438\u043a",
+    "\u0435\u0442\u0430\u043f",
+    "\u043f\u043e\u0441\u043b\u0435\u0434\u043e\u0432\u0430\u0442\u0435\u043b\u043d",
+    "\u043a\u0430\u0447\u0435\u0441\u0442\u0432",
+    "\u0440\u0438\u0441\u043a",
+    "\u043e\u043a\u043e\u043b\u043d\u0430 \u0441\u0440\u0435\u0434\u0430",
+    "\u0431\u0435\u0437\u043e\u043f\u0430\u0441",
+    "\u0437\u0434\u0440\u0430\u0432",
+    "\u043f\u043e\u0436\u0430\u0440",
+    "\u043a\u043e\u043c\u0443\u043d\u0438\u043a\u0430\u0446",
+    "\u043a\u043e\u043e\u0440\u0434\u0438\u043d\u0430\u0446",
+    "\u0440\u0435\u0441\u0443\u0440\u0441",
+    "\u043a\u043e\u043d\u0442\u0440\u043e\u043b",
+    "\u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442",
+)
+
+NON_CONTENT_TITLE_HINTS = (
+    "cover",
+    "contents",
+    "table of contents",
+    "signature",
+    "signed",
+    "declaration",
+    "appendix",
+    "annex",
+    "form",
+    "participant",
+    "bidder",
+    "price",
+    "financial",
+    "address",
+    "contact",
+    "\u0441\u044a\u0434\u044a\u0440\u0436\u0430\u043d\u0438\u0435",
+    "\u0434\u0435\u043a\u043b\u0430\u0440\u0430\u0446",
+    "\u043f\u043e\u0434\u043f\u0438\u0441",
+    "\u043f\u0435\u0447\u0430\u0442",
+    "\u043f\u0440\u0438\u043b\u043e\u0436\u0435\u043d\u0438\u0435",
+    "\u043e\u0431\u0440\u0430\u0437\u0435\u0446",
+    "\u0443\u0447\u0430\u0441\u0442\u043d\u0438\u043a",
+    "\u043a\u0430\u043d\u0434\u0438\u0434\u0430\u0442",
+    "\u043e\u0444\u0435\u0440\u0442\u0430",
+    "\u0446\u0435\u043d\u043e\u0432",
+    "\u0444\u0438\u043d\u0430\u043d\u0441",
+    "\u0430\u0434\u0440\u0435\u0441",
+    "\u043a\u043e\u043d\u0442\u0430\u043a\u0442",
+)
+
 
 def normalize_text(value: str) -> str:
     value = html.unescape(value)
@@ -263,7 +334,13 @@ def split_sections(text: str) -> list[Section]:
 
     for line in lines:
         raw_line = line.lstrip("\ufeff").strip()
-        is_heading = looks_like_heading(raw_line)
+        markdown_heading = re.match(r"^(#{1,6})\s+\S+", raw_line)
+        is_nested_markdown_heading = (
+            bool(markdown_heading)
+            and len(markdown_heading.group(1)) >= 3
+            and current_title != "Р”РѕРєСѓРјРµРЅС‚"
+        )
+        is_heading = looks_like_heading(raw_line) and not is_nested_markdown_heading
         line = re.sub(r"^#{1,6}\s+", "", raw_line).strip()
         if not line:
             if current_lines:
@@ -289,6 +366,44 @@ def top_keywords(sections: Iterable[Section], limit: int = 80) -> list[str]:
     for section in sections:
         counts.update(section.words)
     return [word for word, _ in counts.most_common(limit)]
+
+
+def section_topic_hit_count(section: Section) -> int:
+    text = normalize_text(f"{section.title}\n{section.text}").lower()
+    hits = 0
+    for _, _, keywords in TOPIC_RULES:
+        if any(keyword in text for keyword in keywords):
+            hits += 1
+    return hits
+
+
+def is_content_section(section: Section) -> bool:
+    title = normalize_text(section.title).lower()
+    text = normalize_text(section.text).lower()
+    combined = f"{title}\n{text}"
+    word_count = len(section.words)
+    topic_hit_count = section_topic_hit_count(section)
+    has_content_hint = any(hint in combined for hint in CONTENT_SECTION_HINTS)
+    has_non_content_title_hint = any(
+        hint in title for hint in NON_CONTENT_TITLE_HINTS
+    )
+
+    if topic_hit_count >= 2 or has_content_hint:
+        return True
+    if word_count >= 160 and topic_hit_count >= 1:
+        return True
+    if has_non_content_title_hint and topic_hit_count == 0:
+        return False
+    if word_count < 45 and topic_hit_count == 0:
+        return False
+    if word_count < 90 and has_non_content_title_hint:
+        return False
+    return True
+
+
+def content_sections(sections: list[Section]) -> list[Section]:
+    filtered = [section for section in sections if is_content_section(section)]
+    return filtered or sections
 
 
 def score_overlap(reference_words: list[str], generated_words: list[str]) -> float:
@@ -491,6 +606,11 @@ def render_report(
     generated_path: Path,
     tender_paths: list[Path],
 ) -> str:
+    raw_reference_count = len(reference_sections)
+    raw_generated_count = len(generated_sections)
+    reference_sections = content_sections(reference_sections)
+    generated_sections = content_sections(generated_sections)
+
     lines: list[str] = [
         "# Анализ на пропуските в техническото предложение",
         "",
@@ -506,6 +626,14 @@ def render_report(
 
     reference_words = sum(len(section.words) for section in reference_sections)
     generated_words = sum(len(section.words) for section in generated_sections)
+    lines.extend(
+        [
+            f"- Raw recognized sections in reference TP: `{raw_reference_count}`",
+            f"- Raw recognized sections in generated TP: `{raw_generated_count}`",
+            f"- Content sections compared in reference TP: `{len(reference_sections)}`",
+            f"- Content sections compared in generated TP: `{len(generated_sections)}`",
+        ]
+    )
     lines.extend(
         [
             f"- Разпознати секции в референтното ТП: `{len(reference_sections)}`",
