@@ -20,6 +20,8 @@ SPEC.loader.exec_module(calibration)
 
 calibration_output_paths = calibration.calibration_output_paths
 gap_calibration_focus_counts = calibration.gap_calibration_focus_counts
+gap_regeneration_priority_rows = calibration.gap_regeneration_priority_rows
+readiness_priority_actions = calibration.readiness_priority_actions
 render_manifest = calibration.render_manifest
 run_calibration_bundle = calibration.run_calibration_bundle
 snapshot_warning_count = calibration.snapshot_warning_count
@@ -66,12 +68,26 @@ class RunProposalCalibrationTests(unittest.TestCase):
                     {"code": "duplicate_selected", "count": 2},
                     {"code": "stale_evidence", "count": 1},
                 ],
+                "duplicate_selected_sections": [
+                    {"section_title": "Organization", "selected_count": 2}
+                ],
+                "stale_section_details": [{"section_title": "Schedule"}],
             },
             snapshot_warnings=3,
             gap_focus_counts={
                 "drafting depth": 5,
                 "outline mapping": 2,
             },
+            gap_priority_rows=[
+                {
+                    "reference_section": "Organization",
+                    "generated_section": "Work programme",
+                    "coverage": 0.20,
+                    "volume": 0.40,
+                    "reasons": "structure mismatch, thin detail",
+                    "focus": "outline mapping",
+                }
+            ],
         )
 
         self.assertIn("Mode: `non-mutating`", manifest)
@@ -92,6 +108,11 @@ class RunProposalCalibrationTests(unittest.TestCase):
         self.assertIn("Gap calibration focus summary", manifest)
         self.assertIn("`drafting depth`: `5` sections", manifest)
         self.assertIn("`outline mapping`: `2` sections", manifest)
+        self.assertIn("Regeneration priority shortlist", manifest)
+        self.assertIn("Readiness blockers come first", manifest)
+        self.assertIn("`duplicate_selected`: resolve selection ambiguity", manifest)
+        self.assertIn("Gap `outline mapping`: regenerate/reference-align", manifest)
+        self.assertIn("Organization", manifest)
 
     def test_gap_calibration_focus_counts_reads_diagnostics_table_only(self):
         counts = gap_calibration_focus_counts(
@@ -122,6 +143,63 @@ class RunProposalCalibrationTests(unittest.TestCase):
                 "grounding and checklist coverage": 1,
             },
         )
+
+    def test_gap_regeneration_priority_rows_rank_non_monitor_sections(self):
+        rows = gap_regeneration_priority_rows(
+            "\n".join(
+                [
+                    "# Gap report",
+                    "",
+                    "## Section Gap Diagnostics",
+                    "",
+                    "| Reference section | Best generated section | Coverage | Volume | Gap reasons | Calibration focus |",
+                    "| --- | --- | ---: | ---: | --- | --- |",
+                    "| Quality | Quality generated | 0.40 | 0.30 | thin detail | drafting depth |",
+                    "| Organization | Generic generated | 0.60 | 0.90 | structure mismatch | outline mapping |",
+                    "| Environment | Environment generated | 0.10 | 0.80 | missing key terms | grounding and checklist coverage |",
+                    "| Acceptable | Acceptable generated | 0.90 | 1.10 | acceptable alignment | monitor |",
+                    "",
+                    "## Other",
+                ]
+            )
+        )
+
+        self.assertEqual(
+            [row["reference_section"] for row in rows],
+            ["Organization", "Quality", "Environment"],
+        )
+        self.assertEqual(rows[0]["focus"], "outline mapping")
+        self.assertEqual(rows[1]["focus"], "drafting depth")
+        self.assertEqual(rows[2]["focus"], "grounding and checklist coverage")
+
+    def test_readiness_priority_actions_summarize_specific_sections(self):
+        actions = readiness_priority_actions(
+            {
+                "duplicate_selected_sections": [
+                    {"section_title": "Organization", "selected_count": 2}
+                ],
+                "stale_section_details": [{"section_title": "Schedule"}],
+                "missing_requirement_sections": [
+                    {"section_title": "Quality", "missing_count": 3},
+                    {"section_title": "Safety", "missing_count": 1},
+                ],
+                "quality_sections": [
+                    {
+                        "section_title": "Environment",
+                        "word_count": 120,
+                        "min_words": 420,
+                        "requirement_count": 5,
+                        "blueprint_topic_count": 7,
+                    }
+                ],
+            }
+        )
+
+        self.assertEqual(len(actions), 4)
+        self.assertIn("Organization", actions[0])
+        self.assertIn("Schedule", actions[1])
+        self.assertIn("Quality (3 missing)", actions[2])
+        self.assertIn("Environment (120/420 words)", actions[3])
 
     def test_snapshot_warning_count_reads_warning_section_only(self):
         count = snapshot_warning_count(
@@ -205,6 +283,7 @@ class RunProposalCalibrationTests(unittest.TestCase):
                     "| Reference section | Best generated section | Coverage | Volume | Gap reasons | Calibration focus |",
                     "| --- | --- | ---: | ---: | --- | --- |",
                     "| A | A generated | 0.20 | 0.10 | too short | drafting depth |",
+                    "| B | B generated | 0.10 | 0.20 | missing key terms | grounding and checklist coverage |",
                 ]
             )
 
@@ -255,6 +334,14 @@ class RunProposalCalibrationTests(unittest.TestCase):
                 )
                 self.assertIn(
                     "`drafting depth`: `1` sections",
+                    paths["manifest"].read_text(encoding="utf-8"),
+                )
+                self.assertIn(
+                    "Regeneration priority shortlist",
+                    paths["manifest"].read_text(encoding="utf-8"),
+                )
+                self.assertIn(
+                    "Gap `drafting depth`: regenerate/reference-align `A`",
                     paths["manifest"].read_text(encoding="utf-8"),
                 )
         finally:

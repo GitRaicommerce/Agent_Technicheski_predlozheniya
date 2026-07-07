@@ -21,6 +21,12 @@ from proposal_gap_analysis import (
 
 ROOT = Path(__file__).resolve().parents[1]
 API_ROOT = ROOT / "services" / "api"
+GAP_FOCUS_PRIORITY = {
+    "outline mapping": 0,
+    "drafting depth": 1,
+    "grounding and checklist coverage": 2,
+    "monitor": 3,
+}
 
 
 def _display_path(path: Path) -> str:
@@ -42,6 +48,27 @@ def snapshot_warning_count(markdown: str) -> int:
     return count
 
 
+def _split_markdown_table_row(line: str) -> list[str]:
+    stripped = line.strip()
+    if not stripped.startswith("|"):
+        return []
+    cells: list[str] = []
+    current: list[str] = []
+    escaped = False
+    for char in stripped.strip("|"):
+        if char == "|" and not escaped:
+            cells.append("".join(current).strip().replace("\\|", "|"))
+            current = []
+            escaped = False
+            continue
+        current.append(char)
+        escaped = char == "\\" and not escaped
+        if char != "\\":
+            escaped = False
+    cells.append("".join(current).strip().replace("\\|", "|"))
+    return cells
+
+
 def gap_calibration_focus_counts(markdown: str) -> dict[str, int]:
     in_diagnostics = False
     counts: dict[str, int] = {}
@@ -54,13 +81,159 @@ def gap_calibration_focus_counts(markdown: str) -> dict[str, int]:
             break
         if not in_diagnostics or not stripped.startswith("|"):
             continue
-        cells = [cell.strip() for cell in stripped.strip("|").split("|")]
+        cells = _split_markdown_table_row(stripped)
         if len(cells) < 6 or cells[0] in {"Reference section", "---"}:
             continue
         focus = cells[5]
         if focus:
             counts[focus] = counts.get(focus, 0) + 1
     return counts
+
+
+def gap_regeneration_priority_rows(
+    markdown: str,
+    *,
+    limit: int = 8,
+) -> list[dict[str, Any]]:
+    in_diagnostics = False
+    rows: list[dict[str, Any]] = []
+    for line in markdown.splitlines():
+        stripped = line.strip()
+        if stripped == "## Section Gap Diagnostics":
+            in_diagnostics = True
+            continue
+        if in_diagnostics and stripped.startswith("## "):
+            break
+        if not in_diagnostics or not stripped.startswith("|"):
+            continue
+        cells = _split_markdown_table_row(stripped)
+        if len(cells) < 6 or cells[0] in {"Reference section", "---"}:
+            continue
+        focus = cells[5]
+        if not focus or focus == "monitor":
+            continue
+        try:
+            coverage = float(cells[2])
+        except ValueError:
+            coverage = 1.0
+        try:
+            volume = float(cells[3])
+        except ValueError:
+            volume = 1.0
+        rows.append(
+            {
+                "reference_section": cells[0],
+                "generated_section": cells[1],
+                "coverage": coverage,
+                "volume": volume,
+                "reasons": cells[4],
+                "focus": focus,
+            }
+        )
+    rows.sort(
+        key=lambda row: (
+            GAP_FOCUS_PRIORITY.get(str(row["focus"]), 9),
+            float(row["coverage"]),
+            float(row["volume"]),
+            str(row["reference_section"]),
+        )
+    )
+    return rows[:limit]
+
+
+def _section_label(section: dict[str, Any]) -> str:
+    for key in ("section_title", "title", "section_uid"):
+        value = section.get(key)
+        if value:
+            return str(value)
+    return "unknown section"
+
+
+def _summarize_labels(labels: list[str], limit: int = 6) -> str:
+    visible = labels[:limit]
+    suffix = f" (+{len(labels) - limit} more)" if len(labels) > limit else ""
+    return "; ".join(visible) + suffix
+
+
+def readiness_priority_actions(readiness: dict[str, Any] | None) -> list[str]:
+    readiness = readiness or {}
+    actions: list[str] = []
+    duplicate_sections = [
+        item
+        for item in readiness.get("duplicate_selected_sections") or []
+        if isinstance(item, dict)
+    ]
+    if duplicate_sections:
+        labels = [_section_label(item) for item in duplicate_sections]
+        actions.append(
+            "`duplicate_selected`: resolve selection ambiguity before regeneration - "
+            + _summarize_labels(labels)
+        )
+
+    stale_sections = [
+        item
+        for item in readiness.get("stale_section_details") or []
+        if isinstance(item, dict)
+    ]
+    if not stale_sections:
+        stale_sections = [
+            {"section_uid": str(item)}
+            for item in readiness.get("stale_sections") or []
+            if item is not None
+        ]
+    if stale_sections:
+        labels = [_section_label(item) for item in stale_sections]
+        actions.append(
+            "`stale_evidence`: regenerate selected sections with fresh evidence - "
+            + _summarize_labels(labels)
+        )
+
+    missing_sections = [
+        item
+        for item in readiness.get("missing_requirement_sections") or []
+        if isinstance(item, dict)
+    ]
+    if missing_sections:
+        missing_sections.sort(
+            key=lambda item: int(item.get("missing_count") or 0),
+            reverse=True,
+        )
+        labels = [
+            f"{_section_label(item)} ({int(item.get('missing_count') or 0)} missing)"
+            for item in missing_sections
+        ]
+        actions.append(
+            "`missing_requirements`: regenerate with explicit checklist coverage - "
+            + _summarize_labels(labels)
+        )
+
+    quality_sections = [
+        item
+        for item in readiness.get("quality_sections") or []
+        if isinstance(item, dict)
+    ]
+    if quality_sections:
+        quality_sections.sort(
+            key=lambda item: (
+                int(item.get("requirement_count") or 0),
+                int(item.get("blueprint_topic_count") or 0),
+            ),
+            reverse=True,
+        )
+        labels = [
+            (
+                f"{_section_label(item)} "
+                f"({int(item.get('word_count') or 0)}/"
+                f"{int(item.get('min_words') or 0)} words)"
+            )
+            for item in quality_sections
+        ]
+        actions.append(
+            "`shallow_sections`: regenerate with deeper narrative and controls - "
+            + _summarize_labels(labels)
+        )
+
+    return actions
 
 
 def calibration_output_paths(out_dir: Path) -> dict[str, Path]:
@@ -85,6 +258,7 @@ def render_manifest(
     readiness: dict[str, Any] | None = None,
     snapshot_warnings: int = 0,
     gap_focus_counts: dict[str, int] | None = None,
+    gap_priority_rows: list[dict[str, Any]] | None = None,
 ) -> str:
     readiness = readiness or {}
     blockers = [
@@ -93,6 +267,8 @@ def render_manifest(
         if isinstance(item, dict)
     ]
     gap_focus_counts = gap_focus_counts or {}
+    gap_priority_rows = gap_priority_rows or []
+    readiness_actions = readiness_priority_actions(readiness)
     lines = [
         "# Proposal calibration bundle",
         "",
@@ -133,6 +309,37 @@ def render_manifest(
             lines.append(f"- `{focus}`: `{count}` sections")
     else:
         lines.append("- `none`: Section Gap Diagnostics not found or no section rows.")
+    lines.extend(["", "## Regeneration priority shortlist", ""])
+    if readiness_actions:
+        lines.append(
+            "- Readiness blockers come first because they affect exportability and "
+            "can distort reference-gap interpretation."
+        )
+        lines.extend(
+            f"{index}. {action}"
+            for index, action in enumerate(readiness_actions, start=1)
+        )
+        next_index = len(readiness_actions) + 1
+    else:
+        lines.append(
+            "- No readiness blockers found; use the gap diagnostics to choose the "
+            "first regeneration targets."
+        )
+        next_index = 1
+    if gap_priority_rows:
+        for row in gap_priority_rows:
+            lines.append(
+                f"{next_index}. Gap `{row['focus']}`: regenerate/reference-align "
+                f"`{row['reference_section']}` using generated section "
+                f"`{row['generated_section']}` as the nearest current base "
+                f"(coverage `{row['coverage']:.2f}`, volume `{row['volume']:.2f}`, "
+                f"reasons: {row['reasons']})."
+            )
+            next_index += 1
+    elif not readiness_actions:
+        lines.append(
+            "1. No concrete regeneration targets were found in readiness or gap diagnostics."
+        )
     lines.extend(
         [
             "",
@@ -240,6 +447,7 @@ async def run_calibration_bundle(
     )
     paths["gap_report"].write_text(report, encoding="utf-8")
     gap_focus_counts = gap_calibration_focus_counts(report)
+    gap_priority_rows = gap_regeneration_priority_rows(report)
     paths["manifest"].write_text(
         render_manifest(
             project_id=project_id,
@@ -252,6 +460,7 @@ async def run_calibration_bundle(
             readiness=readiness,
             snapshot_warnings=warning_count,
             gap_focus_counts=gap_focus_counts,
+            gap_priority_rows=gap_priority_rows,
         ),
         encoding="utf-8",
     )
