@@ -362,8 +362,10 @@ export interface ExportQualitySection {
   requirement_count?: number;
   blueprint_group_count?: number;
   blueprint_topic_count?: number;
+  blueprint_structure_count?: number;
   min_words?: number;
   min_sentences?: number;
+  suggested_words_per_structure?: number;
   issues?: Array<Record<string, unknown>>;
 }
 

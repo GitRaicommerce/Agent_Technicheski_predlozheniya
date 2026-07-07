@@ -14,6 +14,7 @@ interface Props {
 interface QualityWarningSummary {
   maxBlueprintGroupCount: number | null;
   maxMinWords: number | null;
+  maxWordsPerGroupOrTopic: number | null;
 }
 
 export default function ExportButton({
@@ -398,6 +399,7 @@ function getQualityWarningSummary(err: unknown): QualityWarningSummary | null {
 
   let maxBlueprintGroupCount = 0;
   let maxMinWords = 0;
+  let maxWordsPerGroupOrTopic = 0;
   for (const rawSection of sections) {
     if (!rawSection || typeof rawSection !== "object") continue;
     const section = rawSection as ExportQualitySection;
@@ -410,12 +412,23 @@ function getQualityWarningSummary(err: unknown): QualityWarningSummary | null {
     if (typeof section.min_words === "number") {
       maxMinWords = Math.max(maxMinWords, section.min_words);
     }
+    if (typeof section.suggested_words_per_structure === "number") {
+      maxWordsPerGroupOrTopic = Math.max(
+        maxWordsPerGroupOrTopic,
+        section.suggested_words_per_structure,
+      );
+    }
   }
 
-  if (maxBlueprintGroupCount <= 0 && maxMinWords <= 0) return null;
+  if (
+    maxBlueprintGroupCount <= 0 &&
+    maxMinWords <= 0 &&
+    maxWordsPerGroupOrTopic <= 0
+  ) return null;
   return {
     maxBlueprintGroupCount: maxBlueprintGroupCount || null,
     maxMinWords: maxMinWords || null,
+    maxWordsPerGroupOrTopic: maxWordsPerGroupOrTopic || null,
   };
 }
 
@@ -442,12 +455,21 @@ function formatQualityWarningSummary(
   summary: QualityWarningSummary | null,
 ): string | null {
   const groupCount = summary?.maxBlueprintGroupCount ?? 0;
-  if (groupCount <= 0) return null;
+  const wordsPerGroupOrTopic = summary?.maxWordsPerGroupOrTopic ?? 0;
+  if (groupCount <= 0 && wordsPerGroupOrTopic <= 0) return null;
 
   const minWords = summary?.maxMinWords ?? 0;
   const minWordsText =
     minWords > 0 ? ` и ориентир поне ${formatWordCount(minWords)}` : "";
-  return `Най-сложната засечена секция има ${formatBlueprintGroupCount(groupCount)}${minWordsText}.`;
+  const groupText =
+    groupCount > 0
+      ? `има ${formatBlueprintGroupCount(groupCount)}`
+      : "изисква развита структура";
+  const wordsPerGroupText =
+    wordsPerGroupOrTopic > 0
+      ? `, ориентир ${formatWordCount(wordsPerGroupOrTopic)} на група/тема`
+      : "";
+  return `Най-сложната засечена секция ${groupText}${minWordsText}${wordsPerGroupText}.`;
 }
 
 function getReadinessPayload(source: unknown): unknown {
