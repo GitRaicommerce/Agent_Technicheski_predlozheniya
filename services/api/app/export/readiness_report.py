@@ -194,8 +194,8 @@ def render_export_readiness_report(readiness: dict[str, Any]) -> str:
         lines.extend(["", "## Shallow Or Underdeveloped Sections", ""])
         lines.extend(
             [
-                "| Section | Words | Min words | Sentences | Min sentences | Requirements | Blueprint groups | Topics | Issues |",
-                "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
+                "| Section | Words | Min words | Words per group/topic | Sentences | Min sentences | Requirements | Blueprint groups | Topics | Issues |",
+                "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
             ]
         )
         for section in quality_sections:
@@ -211,6 +211,7 @@ def render_export_readiness_report(readiness: dict[str, Any]) -> str:
                         _table_cell(_section_label(section)),
                         str(_as_int(section.get("word_count"))),
                         str(_as_int(section.get("min_words"))),
+                        str(_as_int(section.get("suggested_words_per_structure"))),
                         str(_as_int(section.get("sentence_count"))),
                         str(_as_int(section.get("min_sentences"))),
                         str(_as_int(section.get("requirement_count"))),

@@ -59,6 +59,7 @@ def test_render_export_readiness_report_includes_blockers_and_actions():
                     "requirement_count": 2,
                     "blueprint_group_count": 6,
                     "blueprint_topic_count": 8,
+                    "suggested_words_per_structure": 270,
                     "issues": [{"code": "too_short_for_requirements"}],
                 }
             ],
@@ -72,8 +73,8 @@ def test_render_export_readiness_report_includes_blockers_and_actions():
     assert "Missing section title (`sec-missing`): 2 missing (req-1, req-2)" in report
     assert "`req-1` [needs operational evidence]: Describe the detailed schedule." in report
     assert "diagnostics: matched_ratio=0.8, coherent_ratio=0.75, operational_signals=1/2" in report
-    assert "| Section | Words | Min words | Sentences | Min sentences | Requirements | Blueprint groups | Topics | Issues |" in report
-    assert "| Shallow section title (`sec-shallow`) | 180 | 1200 | 3 | 10 | 2 | 6 | 8 | too_short_for_requirements |" in report
+    assert "| Section | Words | Min words | Words per group/topic | Sentences | Min sentences | Requirements | Blueprint groups | Topics | Issues |" in report
+    assert "| Shallow section title (`sec-shallow`) | 180 | 1200 | 270 | 3 | 10 | 2 | 6 | 8 | too_short_for_requirements |" in report
     assert "Остави най-новите" in report
     assert "Регенерирайте избраните stale секции" in report
 

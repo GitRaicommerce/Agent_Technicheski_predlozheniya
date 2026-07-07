@@ -185,8 +185,10 @@ def assess_generation_depth(
         "requirement_count": requirement_count,
         "blueprint_group_count": blueprint_group_count,
         "blueprint_topic_count": blueprint_topic_count,
+        "blueprint_structure_count": target["blueprint_structure_count"],
         "min_words": min_words,
         "min_sentences": min_sentences,
+        "suggested_words_per_structure": target["suggested_words_per_structure"],
         "issues": issues,
     }
 

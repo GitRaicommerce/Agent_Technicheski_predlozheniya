@@ -136,7 +136,9 @@ def test_no_outline_complex_tender_gets_checklist_outline_blueprint_and_depth_ga
     )
     assert shallow_result["status"] == "needs_review"
     assert shallow_result["blueprint_group_count"] == 5
-    assert shallow_result["min_words"] >= 1000
+    assert shallow_result["blueprint_topic_count"] == 5
+    assert shallow_result["min_words"] >= 1300
+    assert shallow_result["suggested_words_per_structure"] >= 250
 
     developed_sentence = (
         "The proposal identifies the concrete action, responsible role, "
@@ -467,6 +469,8 @@ def test_common_readiness_report_guides_mixed_blocker_remediation():
     assert len(requirements) == 5
     assert quality_result["status"] == "needs_review"
     assert quality_result["blueprint_group_count"] == 5
+    assert quality_result["min_words"] >= 1300
+    assert quality_result["suggested_words_per_structure"] >= 250
 
     missing_item = requirement_items[0]
     report = render_export_readiness_report(
