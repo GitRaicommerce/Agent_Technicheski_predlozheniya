@@ -82,12 +82,15 @@ vi.mock("@/components/SchedulePanel", () => ({
 
 vi.mock("@/components/GenerationsPanel", () => ({
   default: ({
+    focusAttentionKey = 0,
     qualityAttentionSectionUids = [],
   }: {
+    focusAttentionKey?: number;
     qualityAttentionSectionUids?: string[];
   }) => (
     <div data-testid="mock-generations-panel">
-      Generations Panel {qualityAttentionSectionUids.join(",")}
+      Generations Panel focus={focusAttentionKey}{" "}
+      {qualityAttentionSectionUids.join(",")}
     </div>
   ),
 }));
@@ -240,6 +243,8 @@ describe("ProjectPage", () => {
 
     expect(screen.getByTestId("mock-generations-panel"))
       .toHaveTextContent("sec-quality");
+    expect(screen.getByTestId("mock-generations-panel"))
+      .toHaveTextContent("focus=1");
   });
 
   it("shows automatic Lex.bg status and allows manual refresh", async () => {

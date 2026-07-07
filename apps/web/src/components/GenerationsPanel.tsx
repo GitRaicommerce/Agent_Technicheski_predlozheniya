@@ -14,12 +14,14 @@ import { repairLikelyMojibake } from "@/lib/text";
 interface Props {
   projectId: string;
   refreshKey?: number;
+  focusAttentionKey?: number;
   qualityAttentionSectionUids?: string[];
 }
 
 export default function GenerationsPanel({
   projectId,
   refreshKey = 0,
+  focusAttentionKey = 0,
   qualityAttentionSectionUids = [],
 }: Props) {
   const [sections, setSections] = useState<SectionGenerations[]>([]);
@@ -63,6 +65,12 @@ export default function GenerationsPanel({
   useEffect(() => {
     void load();
   }, [load, refreshKey]);
+
+  useEffect(() => {
+    if (focusAttentionKey > 0) {
+      setShowOnlyAttention(true);
+    }
+  }, [focusAttentionKey]);
 
   useEffect(() => {
     if (

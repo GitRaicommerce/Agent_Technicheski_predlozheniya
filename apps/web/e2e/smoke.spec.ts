@@ -563,7 +563,9 @@ test.describe("smoke", () => {
       await expect(page.getByTestId("generation-attention-summary")).toContainText(
         "дублиран избор: 1",
       );
-      await page.getByTestId("generation-attention-filter-toggle").click();
+      await expect(
+        page.getByTestId("generation-attention-filter-toggle"),
+      ).toContainText("Покажи всички");
       await expect(
         page.getByTestId(`generation-section-${sectionUid}`),
       ).toBeVisible();

@@ -50,6 +50,8 @@ export default function ProjectPage() {
   const [outlineRefreshKey, setOutlineRefreshKey] = useState(0);
   const [scheduleRefreshKey, setScheduleRefreshKey] = useState(0);
   const [generationsRefreshKey, setGenerationsRefreshKey] = useState(0);
+  const [generationAttentionFocusKey, setGenerationAttentionFocusKey] =
+    useState(0);
   const [qualityAttentionSectionUids, setQualityAttentionSectionUids] =
     useState<string[]>([]);
   const [showEdit, setShowEdit] = useState(false);
@@ -378,6 +380,7 @@ export default function ProjectPage() {
               projectName={project.name}
               onOpenGenerations={() => {
                 setShowGenerations(true);
+                setGenerationAttentionFocusKey((value) => value + 1);
                 setGenerationsRefreshKey((value) => value + 1);
               }}
               onQualitySectionsBlocked={setQualityAttentionSectionUids}
@@ -502,6 +505,7 @@ export default function ProjectPage() {
                 <GenerationsPanel
                   projectId={project.id}
                   refreshKey={generationsRefreshKey}
+                  focusAttentionKey={generationAttentionFocusKey}
                   qualityAttentionSectionUids={qualityAttentionSectionUids}
                 />
               </div>

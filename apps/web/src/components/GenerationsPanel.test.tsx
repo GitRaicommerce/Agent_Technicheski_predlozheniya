@@ -525,6 +525,63 @@ describe("GenerationsPanel", () => {
       .toHaveTextContent("Покажи всички");
   });
 
+  it("focuses the attention filter when requested by export remediation", async () => {
+    listGenerationsMock.mockResolvedValue([
+      {
+        section_uid: "sec-clean",
+        section_title: "Clean Section",
+        variants: [
+          {
+            id: "gen-clean",
+            section_uid: "sec-clean",
+            variant: 1,
+            text: "Clean text",
+            evidence_status: "ok",
+            selected: true,
+            created_at: "2026-04-20T10:00:00.000Z",
+          },
+        ],
+      },
+      {
+        section_uid: "sec-duplicate",
+        section_title: "Duplicate Section",
+        variants: [
+          {
+            id: "gen-duplicate-1",
+            section_uid: "sec-duplicate",
+            variant: 1,
+            text: "First duplicate text",
+            evidence_status: "ok",
+            selected: true,
+            created_at: "2026-04-20T10:00:00.000Z",
+          },
+          {
+            id: "gen-duplicate-2",
+            section_uid: "sec-duplicate",
+            variant: 2,
+            text: "Second duplicate text",
+            evidence_status: "ok",
+            selected: true,
+            created_at: "2026-04-21T10:00:00.000Z",
+          },
+        ],
+      },
+    ]);
+
+    render(<GenerationsPanel projectId="project-1" focusAttentionKey={1} />);
+
+    expect(await screen.findByTestId("generation-attention-summary"))
+      .toHaveTextContent("1 секция изисква внимание");
+    await waitFor(() => {
+      expect(screen.queryByTestId("generation-section-sec-clean"))
+        .not.toBeInTheDocument();
+    });
+    expect(screen.getByTestId("generation-section-sec-duplicate"))
+      .toBeInTheDocument();
+    expect(screen.getByTestId("generation-attention-filter-toggle"))
+      .toHaveTextContent("Покажи всички");
+  });
+
   it("starts a stale selected sections generation job", async () => {
     listGenerationsMock.mockResolvedValue([
       {
