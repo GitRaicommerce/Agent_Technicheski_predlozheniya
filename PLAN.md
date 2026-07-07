@@ -105,6 +105,7 @@
 - Added a universal bulk missing-requirements regeneration flow: sections whose selected generation fails deterministic requirement coverage can now enqueue a targeted drafting job, so export blockers for uncovered tender requirements are actionable from the Generations panel.
 - Updated calibration manifests to point each DOCX readiness blocker to the corresponding Generations bulk remediation action: duplicate resolver, stale `Regenerate`, missing-requirement `Regenerate coverage`, and shallow/depth `Regenerate detailed`.
 - Added stable remediation `action_key` markers to calibration manifest readiness priorities so duplicate, stale, missing-requirement, and quality/depth blockers can be reviewed or automated consistently across projects.
+- Re-ran the Pernik non-mutating calibration bundle through the API container after adding remediation action keys; the real manifest now includes `resolve_duplicate_selected` and `regenerate_stale` actions, while the current project remains blocked by 14 duplicate selected sections and 14 stale selected sections, with the generated/reference volume ratio still at 0.15.
 
 ## Active Goals
 
