@@ -122,7 +122,10 @@ class RunProposalCalibrationTests(unittest.TestCase):
         self.assertIn("`outline mapping`: `2` sections", manifest)
         self.assertIn("Regeneration priority shortlist", manifest)
         self.assertIn("Readiness blockers come first", manifest)
-        self.assertIn("`duplicate_selected`: use Generations attention action", manifest)
+        self.assertIn(
+            "`duplicate_selected` action_key=`resolve_duplicate_selected`",
+            manifest,
+        )
         self.assertIn("`Остави най-новите`", manifest)
         self.assertIn("Gap `outline mapping`: regenerate/reference-align", manifest)
         self.assertIn("Organization", manifest)
@@ -242,12 +245,16 @@ class RunProposalCalibrationTests(unittest.TestCase):
         )
 
         self.assertEqual(len(actions), 4)
+        self.assertIn("action_key=`resolve_duplicate_selected`", actions[0])
         self.assertIn("`Остави най-новите`", actions[0])
         self.assertIn("Organization", actions[0])
+        self.assertIn("action_key=`regenerate_stale`", actions[1])
         self.assertIn("bulk `Regenerate`", actions[1])
         self.assertIn("Schedule", actions[1])
+        self.assertIn("action_key=`regenerate_missing_requirements`", actions[2])
         self.assertIn("bulk `Regenerate coverage`", actions[2])
         self.assertIn("Quality (3 missing)", actions[2])
+        self.assertIn("action_key=`regenerate_quality_depth`", actions[3])
         self.assertIn("bulk `Regenerate detailed`", actions[3])
         self.assertIn("Environment (120/420 words)", actions[3])
 

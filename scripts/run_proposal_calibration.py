@@ -193,7 +193,7 @@ def readiness_priority_actions(readiness: dict[str, Any] | None) -> list[str]:
     if duplicate_sections:
         labels = [_section_label(item) for item in duplicate_sections]
         actions.append(
-            "`duplicate_selected`: use Generations attention action "
+            "`duplicate_selected` action_key=`resolve_duplicate_selected`: use Generations attention action "
             "`Остави най-новите` or manually keep one selected variant before "
             "regeneration - "
             + _summarize_labels(labels)
@@ -213,7 +213,7 @@ def readiness_priority_actions(readiness: dict[str, Any] | None) -> list[str]:
     if stale_sections:
         labels = [_section_label(item) for item in stale_sections]
         actions.append(
-            "`stale_evidence`: use Generations bulk `Regenerate` for selected "
+            "`stale_evidence` action_key=`regenerate_stale`: use Generations bulk `Regenerate` for selected "
             "stale sections with fresh evidence - "
             + _summarize_labels(labels)
         )
@@ -233,7 +233,7 @@ def readiness_priority_actions(readiness: dict[str, Any] | None) -> list[str]:
             for item in missing_sections
         ]
         actions.append(
-            "`missing_requirements`: use Generations bulk `Regenerate coverage` "
+            "`missing_requirements` action_key=`regenerate_missing_requirements`: use Generations bulk `Regenerate coverage` "
             "to rewrite selected sections with explicit checklist coverage - "
             + _summarize_labels(labels)
         )
@@ -260,7 +260,7 @@ def readiness_priority_actions(readiness: dict[str, Any] | None) -> list[str]:
             for item in quality_sections
         ]
         actions.append(
-            "`shallow_sections`: use Generations bulk `Regenerate detailed` "
+            "`shallow_sections` action_key=`regenerate_quality_depth`: use Generations bulk `Regenerate detailed` "
             "for deeper narrative, controls, records, roles, and sequencing - "
             + _summarize_labels(labels)
         )

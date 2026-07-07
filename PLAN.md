@@ -104,6 +104,7 @@
 - Added a universal bulk quality/depth regeneration flow: DOCX readiness shallow-section blockers can now enqueue a targeted drafting job for only the selected sections that fail blueprint-aware depth checks, with backend and frontend regression coverage.
 - Added a universal bulk missing-requirements regeneration flow: sections whose selected generation fails deterministic requirement coverage can now enqueue a targeted drafting job, so export blockers for uncovered tender requirements are actionable from the Generations panel.
 - Updated calibration manifests to point each DOCX readiness blocker to the corresponding Generations bulk remediation action: duplicate resolver, stale `Regenerate`, missing-requirement `Regenerate coverage`, and shallow/depth `Regenerate detailed`.
+- Added stable remediation `action_key` markers to calibration manifest readiness priorities so duplicate, stale, missing-requirement, and quality/depth blockers can be reviewed or automated consistently across projects.
 
 ## Active Goals
 
