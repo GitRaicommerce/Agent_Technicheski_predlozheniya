@@ -4,6 +4,7 @@ import argparse
 import asyncio
 import sys
 from pathlib import Path
+from typing import Any
 
 from export_selected_proposal_markdown import export_markdown
 from proposal_gap_analysis import (
@@ -19,6 +20,21 @@ API_ROOT = ROOT / "services" / "api"
 
 def _display_path(path: Path) -> str:
     return path.as_posix()
+
+
+def snapshot_warning_count(markdown: str) -> int:
+    in_warnings = False
+    count = 0
+    for line in markdown.splitlines():
+        stripped = line.strip()
+        if stripped == "## Snapshot Warnings":
+            in_warnings = True
+            continue
+        if in_warnings and stripped.startswith("## "):
+            break
+        if in_warnings and stripped.startswith("- "):
+            count += 1
+    return count
 
 
 def calibration_output_paths(out_dir: Path) -> dict[str, Path]:
@@ -38,7 +54,15 @@ def render_manifest(
     readiness_report: Path,
     gap_report: Path,
     tenders: list[Path],
+    readiness: dict[str, Any] | None = None,
+    snapshot_warnings: int = 0,
 ) -> str:
+    readiness = readiness or {}
+    blockers = [
+        item
+        for item in readiness.get("blockers") or []
+        if isinstance(item, dict)
+    ]
     lines = [
         "# Proposal calibration bundle",
         "",
@@ -49,9 +73,32 @@ def render_manifest(
         f"- Gap report: `{_display_path(gap_report)}`",
         "- Mode: `non-mutating`",
         "",
-        "## Tender/source documents",
+        "## Calibration gates",
         "",
+        f"- Snapshot warnings: `{snapshot_warnings}`",
+        f"- DOCX readiness status: `{readiness.get('status', 'unknown')}`",
+        f"- DOCX readiness blockers: `{len(blockers)}`",
     ]
+    if blockers:
+        lines.extend(
+            f"  - `{blocker.get('code', 'unknown')}`: `{blocker.get('count', 0)}`"
+            for blocker in blockers
+        )
+        lines.append(
+            "- Gap report interpretation: resolve readiness blockers before treating "
+            "reference-gap findings as final generation-quality evidence."
+        )
+    else:
+        lines.append(
+            "- Gap report interpretation: readiness is clear enough for calibration review."
+        )
+    lines.extend(
+        [
+            "",
+            "## Tender/source documents",
+            "",
+        ]
+    )
     if tenders:
         lines.extend(f"- `{_display_path(path)}`" for path in tenders)
     else:
@@ -78,7 +125,10 @@ def _api_imports() -> None:
         sys.path.insert(0, api_path)
 
 
-async def export_readiness_report_markdown(project_id: str, out_path: Path) -> None:
+async def export_readiness_report_markdown(
+    project_id: str,
+    out_path: Path,
+) -> dict[str, Any]:
     _api_imports()
     from app.core.database import AsyncSessionLocal
     from app.core.models import Project
@@ -94,6 +144,7 @@ async def export_readiness_report_markdown(project_id: str, out_path: Path) -> N
         readiness = await _build_export_readiness(project_id, selected_generations, db)
         out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_text(render_export_readiness_report(readiness), encoding="utf-8")
+        return readiness
 
 
 async def run_calibration_bundle(
@@ -107,10 +158,14 @@ async def run_calibration_bundle(
     out_dir.mkdir(parents=True, exist_ok=True)
 
     await export_markdown(project_id, paths["selected_snapshot"])
-    await export_readiness_report_markdown(project_id, paths["readiness_report"])
+    readiness = await export_readiness_report_markdown(
+        project_id,
+        paths["readiness_report"],
+    )
 
     reference_text = extract_text(reference)
     selected_text = extract_text(paths["selected_snapshot"])
+    warning_count = snapshot_warning_count(selected_text)
     tender_text = "\n\n".join(extract_text(path) for path in tenders)
     report = render_report(
         tender_text=tender_text,
@@ -129,6 +184,8 @@ async def run_calibration_bundle(
             readiness_report=paths["readiness_report"],
             gap_report=paths["gap_report"],
             tenders=tenders,
+            readiness=readiness,
+            snapshot_warnings=warning_count,
         ),
         encoding="utf-8",
     )

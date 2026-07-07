@@ -86,6 +86,7 @@
 - Extended the calibration bundle with the same DOCX readiness Markdown report used by the export flow, so calibration runs now connect reference-gap findings with duplicate, stale, missing-requirement, and shallow-section blockers in one repeatable package.
 - Made drafting blueprints and export depth checks topic-aware inside each requirement category, so sections with one broad category but many distinct tender subtopics still require developed coverage and expose topic counts in readiness diagnostics.
 - Tightened generated-text requirement coverage so scattered keyword mentions across a section no longer count as coverage unless enough requirement terms appear together in a coherent developed passage, with diagnostics and common-scenario regression coverage.
+- Added calibration bundle gates to the manifest so real-project calibration runs now show snapshot warning counts, DOCX readiness status, blocker counts, and warn that gap findings are not final until duplicate/stale readiness blockers are resolved.
 
 ## Active Goals
 

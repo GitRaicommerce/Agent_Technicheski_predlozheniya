@@ -21,6 +21,7 @@ SPEC.loader.exec_module(calibration)
 calibration_output_paths = calibration.calibration_output_paths
 render_manifest = calibration.render_manifest
 run_calibration_bundle = calibration.run_calibration_bundle
+snapshot_warning_count = calibration.snapshot_warning_count
 
 
 class RunProposalCalibrationTests(unittest.TestCase):
@@ -52,9 +53,21 @@ class RunProposalCalibrationTests(unittest.TestCase):
             readiness_report=Path("out/readiness.md"),
             gap_report=Path("out/gap.md"),
             tenders=[Path("tender.pdf")],
+            readiness={
+                "status": "blocked",
+                "blockers": [
+                    {"code": "duplicate_selected", "count": 2},
+                    {"code": "stale_evidence", "count": 1},
+                ],
+            },
+            snapshot_warnings=3,
         )
 
         self.assertIn("Mode: `non-mutating`", manifest)
+        self.assertIn("Snapshot warnings: `3`", manifest)
+        self.assertIn("DOCX readiness status: `blocked`", manifest)
+        self.assertIn("`duplicate_selected`: `2`", manifest)
+        self.assertIn("resolve readiness blockers", manifest)
         self.assertIn("reference.docx", manifest)
         self.assertIn("out/selected.md", manifest)
         self.assertIn("out/readiness.md", manifest)
@@ -63,6 +76,24 @@ class RunProposalCalibrationTests(unittest.TestCase):
         self.assertIn("Snapshot Warnings", manifest)
         self.assertIn("resolve export blockers", manifest)
         self.assertIn("Universal Topic Coverage", manifest)
+
+    def test_snapshot_warning_count_reads_warning_section_only(self):
+        count = snapshot_warning_count(
+            "\n".join(
+                [
+                    "# Snapshot",
+                    "- regular bullet",
+                    "## Snapshot Warnings",
+                    "- duplicate selected generations for section one",
+                    "- missing selected generation for section two",
+                    "",
+                    "## Other Section",
+                    "- not a warning",
+                ]
+            )
+        )
+
+        self.assertEqual(count, 2)
 
     def test_run_calibration_bundle_writes_snapshot_readiness_gap_and_manifest(self):
         original_export_markdown = calibration.export_markdown
@@ -77,6 +108,10 @@ class RunProposalCalibrationTests(unittest.TestCase):
         async def fake_export_readiness(project_id, out_path):
             self.assertEqual(project_id, "project-1")
             out_path.write_text("# DOCX export readiness report", encoding="utf-8")
+            return {
+                "status": "blocked",
+                "blockers": [{"code": "stale_evidence", "count": 1}],
+            }
 
         def fake_extract_text(path):
             if path.name == "reference.md":
@@ -119,6 +154,10 @@ class RunProposalCalibrationTests(unittest.TestCase):
                 )
                 self.assertIn(
                     "docx_readiness_report.md",
+                    paths["manifest"].read_text(encoding="utf-8"),
+                )
+                self.assertIn(
+                    "`stale_evidence`: `1`",
                     paths["manifest"].read_text(encoding="utf-8"),
                 )
         finally:

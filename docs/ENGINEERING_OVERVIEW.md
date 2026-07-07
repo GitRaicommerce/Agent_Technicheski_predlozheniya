@@ -193,10 +193,10 @@ TP AI is a monorepo for an AI-assisted workflow that prepares technical proposal
 
 ## Script Test Inventory
 
-- Total script tests discovered: `9`
+- Total script tests discovered: `10`
 - `scripts/tests/test_export_selected_proposal_markdown.py`: `3`
 - `scripts/tests/test_proposal_gap_analysis.py`: `3`
-- `scripts/tests/test_run_proposal_calibration.py`: `3`
+- `scripts/tests/test_run_proposal_calibration.py`: `4`
 
 ## Automation
 
