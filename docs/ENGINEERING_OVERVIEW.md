@@ -191,6 +191,11 @@ TP AI is a monorepo for an AI-assisted workflow that prepares technical proposal
 - `test_verifier.py`: `1`
 - `test_worker.py`: `1`
 
+## Script Test Inventory
+
+- Total script tests discovered: `3`
+- `scripts/tests/test_proposal_gap_analysis.py`: `3`
+
 ## Automation
 
 - Local hooks: `.githooks/pre-commit`, `.githooks/pre-push`

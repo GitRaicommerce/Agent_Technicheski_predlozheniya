@@ -80,6 +80,7 @@
 - Tightened deterministic generated-text requirement coverage so superficial keyword mentions no longer count as coverage for operational requirements, while storing matched ratios for diagnostics and adding common-scenario regression coverage.
 - Expanded the local proposal gap analysis script with universal topic coverage diagnostics for organization, schedule, quality, risk, environment, communication, safety, and documentation, with a runnable script-level regression test for calibration reports.
 - Added actionable calibration recommendations to the proposal gap analysis report so missing or partial topic coverage points back to outline extraction, drafting blueprint grouping, grounding chunks, prompt specificity, and rerunning readiness plus gap analysis after regeneration.
+- Updated generated engineering documentation to include script-level regression test inventory so calibration tooling tests are visible alongside backend coverage.
 
 ## Active Goals
 
