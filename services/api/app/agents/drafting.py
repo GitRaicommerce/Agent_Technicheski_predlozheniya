@@ -17,6 +17,7 @@ from app.agents.drafting_blueprint import (
     format_drafting_blueprint_for_prompt,
 )
 from app.agents.proposal_quality import (
+    assess_generation_depth,
     build_generation_depth_target,
     format_generation_depth_target_for_prompt,
 )
@@ -114,6 +115,85 @@ def _safe_section_uuid(raw: str) -> str:
         return str(uuid.uuid5(uuid.NAMESPACE_DNS, raw))
 
 
+def _quality_repair_feedback(
+    *,
+    requirement_coverage: dict[str, Any],
+    depth_assessment: dict[str, Any],
+) -> str:
+    missing_items = [
+        item
+        for item in requirement_coverage.get("items") or []
+        if isinstance(item, dict) and item.get("status") != "covered"
+    ]
+    depth_issues = [
+        item
+        for item in depth_assessment.get("issues") or []
+        if isinstance(item, dict)
+    ]
+    if not missing_items and not depth_issues:
+        return ""
+
+    lines = [
+        "QUALITY REPAIR REQUIRED:",
+        (
+            "Rewrite variant_1 before finalizing it. Keep the same JSON shape, "
+            "but return a fuller text that fixes the diagnostics below."
+        ),
+    ]
+    if missing_items:
+        lines.append("Missing or underdeveloped checklist items:")
+        for item in missing_items[:20]:
+            reason_bits = []
+            if item.get("missing_terms"):
+                reason_bits.append(
+                    "missing terms: " + ", ".join(map(str, item["missing_terms"][:8]))
+                )
+            if item.get("coherent_matched_ratio") is not None:
+                reason_bits.append(
+                    f"coherent ratio: {item.get('coherent_matched_ratio')}"
+                )
+            if item.get("requires_operational_detail") and item.get(
+                "required_operational_signal_count"
+            ):
+                reason_bits.append("needs operational evidence")
+            reason = "; ".join(reason_bits) or "not covered"
+            lines.append(f"- id={item.get('id')}: {item.get('text')} ({reason})")
+    if depth_issues:
+        lines.append("Depth diagnostics:")
+        for issue in depth_issues:
+            lines.append(f"- {issue.get('code')}: {issue.get('message')}")
+        lines.append(
+            "- Current/minimum words: "
+            f"{depth_assessment.get('word_count')}/"
+            f"{depth_assessment.get('min_words')}; "
+            "current/minimum developed sentences: "
+            f"{depth_assessment.get('sentence_count')}/"
+            f"{depth_assessment.get('min_sentences')}."
+        )
+        if depth_assessment.get("suggested_words_per_structure"):
+            lines.append(
+                "- Distribute the revised text across every major blueprint "
+                "group/topic with roughly "
+                f"{depth_assessment['suggested_words_per_structure']}+ words "
+                "per structure when the sources support it."
+            )
+    lines.append(
+        "Do not add unsupported facts. Expand with concrete actions, roles, "
+        "controls, records, sequence, acceptance evidence, escalation and "
+        "corrective actions from the supplied sources."
+    )
+    return "\n".join(lines)
+
+
+def _needs_quality_repair(
+    requirement_coverage: dict[str, Any],
+    depth_assessment: dict[str, Any],
+) -> bool:
+    return bool(requirement_coverage.get("missing_ids")) or (
+        depth_assessment.get("status") == "needs_review"
+    )
+
+
 async def run_drafting(
     project_id: str,
     section_uid: str,
@@ -206,6 +286,51 @@ async def run_drafting(
         trace_id=trace_id,
     )
 
+    variant_data = llm_result.get("variant_1") or {}
+    variant_text = variant_data.get("text", "")
+    repair_attempted = False
+    repair_error: str | None = None
+    if variant_text:
+        requirement_coverage = assess_requirement_coverage(
+            variant_text,
+            normalized_requirement_items,
+        )
+        depth_assessment = assess_generation_depth(
+            variant_text,
+            requirement_coverage,
+            drafting_blueprint=drafting_blueprint,
+        )
+        repair_feedback = _quality_repair_feedback(
+            requirement_coverage=requirement_coverage,
+            depth_assessment=depth_assessment,
+        )
+        if repair_feedback and _needs_quality_repair(
+            requirement_coverage,
+            depth_assessment,
+        ):
+            repair_attempted = True
+            try:
+                repaired_result = await llm_gateway.call(
+                    system_prompt=SYSTEM_PROMPT,
+                    user_message=f"{user_message}\n\n{repair_feedback}",
+                    agent="drafting",
+                    trace_id=trace_id,
+                )
+                repaired_variant = repaired_result.get("variant_1") or {}
+                if repaired_variant.get("text"):
+                    llm_result = repaired_result
+                    variant_data = repaired_variant
+                    variant_text = repaired_variant.get("text", "")
+            except Exception as exc:  # pragma: no cover - defensive fallback
+                repair_error = str(exc)
+                log.warning(
+                    "agent_drafting_quality_repair_failed",
+                    project_id=project_id,
+                    section_uid=section_uid,
+                    trace_id=trace_id,
+                    error=repair_error,
+                )
+
     saved_ids: dict[str, str] = {}
     for variant_key in ("variant_1",):
         variant_data = llm_result.get(variant_key) or {}
@@ -223,10 +348,18 @@ async def run_drafting(
                 variant_text,
                 normalized_requirement_items,
             )
+            depth_assessment = assess_generation_depth(
+                variant_text,
+                requirement_coverage,
+                drafting_blueprint=drafting_blueprint,
+            )
             flags_payload = {
                 "flags": llm_result.get("flags", []),
                 "requirement_coverage": requirement_coverage,
                 "llm_requirement_coverage": variant_data.get("requirement_coverage", []),
+                "generation_depth": depth_assessment,
+                "quality_repair_attempted": repair_attempted,
+                "quality_repair_error": repair_error,
             }
             used_sources: dict[str, Any] = {}
             if project_grounding_context:

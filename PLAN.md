@@ -110,6 +110,7 @@
 - Added a backend bulk duplicate-selected resolver endpoint and connected the Generations panel duplicate action to it, making `resolve_duplicate_selected` an atomic API remediation path that keeps the newest selected generation per ambiguous section.
 - Added a universal remediation action dispatcher endpoint and executable API paths in `calibration_manifest.json`, so readiness blocker action keys can be invoked consistently by UI or automation across projects.
 - Added a safe calibration manifest action runner script with dry-run by default and explicit `--execute` selection, making manifest remediation paths usable in repeatable calibration workflows outside the web UI.
+- Added a universal drafting quality-repair pass before saving generations: if the first draft misses checklist coverage or fails the same depth diagnostics used by export readiness, the drafting agent asks for one targeted rewrite and stores generation-depth diagnostics with the saved variant.
 
 ## Active Goals
 
@@ -122,10 +123,10 @@
 
 1. Use `scripts/run_calibration_manifest_actions.py` or the Generations bulk duplicate resolver to clear Pernik's legacy duplicate selected generations, then re-run the aggregated export readiness check.
 2. Use the calibration manifest action runner or Generations panel bulk stale-regeneration action for Pernik after duplicate selections are resolved; then use the bulk missing-requirements and quality/depth regeneration actions for any remaining requirement-coverage or blueprint-aware shallow sections reported by export preflight.
-3. After resolving Pernik's duplicate selected variants, stale selected sections, missing-requirement sections, and shallow/depth blockers, regenerate the affected sections with a target of materially improving the manifest word-volume scorecard and the section-level drafting-depth diagnostics, not only clearing export blockers.
-4. Expand generated documentation with more precise backend endpoint and workflow coverage.
-5. Continue broadening common tender regression coverage with more real-world noisy PDF extraction and DOCX readiness combinations.
-6. Use the readiness Markdown report during the next Pernik calibration, then compare the regenerated output against the winning proposal after duplicate selected variants and stale generations are resolved.
+3. After resolving Pernik's duplicate selected variants and stale selected sections, regenerate affected sections so the new drafting quality-repair pass can improve checklist coverage and depth before export readiness is checked again.
+4. Re-run the Pernik calibration bundle after remediation and compare the regenerated output against the winning proposal, focusing on the manifest word-volume scorecard and section-level drafting-depth diagnostics.
+5. Expand generated documentation with more precise backend endpoint and workflow coverage.
+6. Continue broadening common tender regression coverage with more real-world noisy PDF extraction and DOCX readiness combinations.
 
 ## Notes
 

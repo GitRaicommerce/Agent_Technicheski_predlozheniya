@@ -252,3 +252,130 @@ async def test_drafting_prompt_and_saved_generation_include_requirement_coverage
         "drafting_blueprint"
     ]["groups"][0]["requirements"][0]["response_plan"]["expected_response"]
     assert result["generation_ids"]["variant_1"] == saved_generation.id
+
+
+@pytest.mark.asyncio
+async def test_drafting_repairs_short_or_missing_requirement_coverage_before_saving(
+    mock_db,
+):
+    project_id = str(uuid.uuid4())
+    section_uid = str(uuid.uuid4())
+    requirement_items = [
+        {
+            "id": "req-communication-workflow",
+            "text": (
+                "Describe communication channel, meeting cadence, reporting record, "
+                "approval interface, escalation path, and responsible role."
+            ),
+            "importance": "mandatory",
+            "category": "communication",
+            "category_label": "Communication and coordination",
+            "coverage_question": "Is the full communication workflow covered?",
+        }
+    ]
+    repaired_sentence = (
+        "The communication workflow defines the communication channel, meeting "
+        "cadence, reporting record, approval interface, escalation path, and "
+        "responsible role, with a control record, monitoring signal, acceptance "
+        "evidence, and corrective action for every coordination point. "
+    )
+
+    with patch(
+        "app.agents.drafting.llm_gateway.call",
+        new=AsyncMock(
+            side_effect=[
+                {
+                    "variant_1": {
+                        "text": "The proposal mentions communication.",
+                        "evidence_map": {},
+                    },
+                    "flags": [],
+                },
+                {
+                    "variant_1": {
+                        "text": repaired_sentence * 16,
+                        "evidence_map": {},
+                    },
+                    "flags": [],
+                },
+            ]
+        ),
+    ) as llm_call:
+        await run_drafting(
+            project_id=project_id,
+            section_uid=section_uid,
+            section_title="Communication workflow",
+            section_requirements=[],
+            evidence_snippets=[],
+            schedule_summary=None,
+            lex_citations=[],
+            db=mock_db,
+            trace_id=str(uuid.uuid4()),
+            section_requirement_items=requirement_items,
+        )
+
+    saved_generation = mock_db.add.call_args.args[0]
+
+    assert llm_call.await_count == 2
+    assert "QUALITY REPAIR REQUIRED" in llm_call.await_args_list[1].kwargs[
+        "user_message"
+    ]
+    assert saved_generation.text == repaired_sentence * 16
+    assert saved_generation.flags_json["quality_repair_attempted"] is True
+    assert saved_generation.flags_json["requirement_coverage"]["missing_ids"] == []
+    assert saved_generation.flags_json["generation_depth"]["status"] == "ok"
+
+
+@pytest.mark.asyncio
+async def test_drafting_saves_initial_generation_when_quality_repair_fails(mock_db):
+    project_id = str(uuid.uuid4())
+    section_uid = str(uuid.uuid4())
+    initial_text = "The proposal mentions communication."
+    requirement_items = [
+        {
+            "id": "req-communication-workflow",
+            "text": (
+                "Describe communication channel, meeting cadence, reporting record, "
+                "approval interface, escalation path, and responsible role."
+            ),
+            "importance": "mandatory",
+            "category": "communication",
+            "category_label": "Communication and coordination",
+        }
+    ]
+
+    with patch(
+        "app.agents.drafting.llm_gateway.call",
+        new=AsyncMock(
+            side_effect=[
+                {
+                    "variant_1": {
+                        "text": initial_text,
+                        "evidence_map": {},
+                    },
+                    "flags": [],
+                },
+                RuntimeError("temporary LLM failure"),
+            ]
+        ),
+    ) as llm_call:
+        await run_drafting(
+            project_id=project_id,
+            section_uid=section_uid,
+            section_title="Communication workflow",
+            section_requirements=[],
+            evidence_snippets=[],
+            schedule_summary=None,
+            lex_citations=[],
+            db=mock_db,
+            trace_id=str(uuid.uuid4()),
+            section_requirement_items=requirement_items,
+        )
+
+    saved_generation = mock_db.add.call_args.args[0]
+
+    assert llm_call.await_count == 2
+    assert saved_generation.text == initial_text
+    assert saved_generation.flags_json["quality_repair_attempted"] is True
+    assert saved_generation.flags_json["quality_repair_error"] == "temporary LLM failure"
+    assert saved_generation.flags_json["generation_depth"]["status"] == "needs_review"
