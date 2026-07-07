@@ -177,6 +177,69 @@ def test_extract_requirement_checklist_ignores_generic_offer_ranking_noise():
     assert extract_requirement_checklist(chunks) == []
 
 
+def test_extract_requirement_checklist_ignores_broad_catch_all_clauses():
+    chunks = [
+        make_chunk(
+            "c-broad-all",
+            (
+                "Техническото предложение следва да съдържа декларация, че "
+                "участникът приема и ще спазва всички изисквания и условия, "
+                "посочени в документацията за обществената поръчка."
+            ),
+            page=23,
+        ),
+        make_chunk(
+            "c-broad-docs",
+            (
+                "Участникът следва да спазва всички приложими нормативни актове "
+                "и всички указания на Възложителя при изпълнение на договора."
+            ),
+            page=24,
+        ),
+        make_chunk(
+            "c-concrete-compliance",
+            (
+                "Техническото предложение следва да опише конкретни мерки за "
+                "спазване на нормативните изисквания за безопасност, контрол "
+                "на качеството и опазване на околната среда при изпълнение на СМР."
+            ),
+            page=25,
+        ),
+    ]
+
+    items = extract_requirement_checklist(chunks)
+
+    assert len(items) == 1
+    assert items[0].category == "quality"
+    assert "конкретни мерки" in items[0].text
+
+
+def test_extract_requirement_checklist_splits_pdf_table_rows_without_header_noise():
+    chunks = [
+        make_chunk(
+            "c-table-rows",
+            (
+                "Минималното съдържание на техническото предложение включва:\n"
+                "№ Показател Максимален брой точки\n"
+                "1 Организация на изпълнение 20\n"
+                "2 Линеен график 10\n"
+                "3 Мерки за качество 15\n"
+                "Общо 45 точки"
+            ),
+            page=26,
+        )
+    ]
+
+    items = extract_requirement_checklist(chunks)
+
+    assert len(items) == 3
+    assert all("Показател" not in item.text for item in items)
+    assert all("Общо" not in item.text for item in items)
+    assert any("Организация на изпълнение" in item.text for item in items)
+    assert any("Линеен график" in item.text for item in items)
+    assert any("Мерки за качество" in item.text for item in items)
+
+
 def test_extract_requirement_checklist_keeps_unmapped_specific_requirements():
     chunks = [
         make_chunk(

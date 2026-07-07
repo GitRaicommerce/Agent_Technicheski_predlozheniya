@@ -210,14 +210,24 @@ def _normalize_for_match(value: Any) -> str:
 def _strip_marker(line: str) -> str:
     line = line.strip()
     line = re.sub(r"^[\-•*]\s+", "", line)
-    line = re.sub(r"^\(?\d+(?:\.\d+)*[\.\)]\s*", "", line)
+    line = re.sub(r"^\(?\d{1,3}(?:\.\d{1,3})*(?:[\.\)]|\s+)\s*", "", line)
     line = re.sub(r"^[а-я]\)\s*", "", line, flags=re.IGNORECASE)
     return line.strip(" :-")
 
 
 def _looks_like_list_item(line: str) -> bool:
     stripped = line.strip()
-    return bool(re.match(r"^([\-•*]|\(?\d+(?:\.\d+)*[\.\)]|[а-я]\))\s+", stripped, re.IGNORECASE))
+    marker_pattern = (
+        r"^(?:[\-•*]\s+|"
+        r"\(?\d{1,3}(?:\.\d{1,3})*(?:[\.\)]|\s+)|"
+        r"[\u0430-\u044f]\)\s+)"
+    )
+    return bool(re.match(marker_pattern, stripped, re.IGNORECASE))
+
+
+def _looks_like_table_total_line(line: str) -> bool:
+    normalized = _normalize_for_match(line)
+    return normalized.startswith(("общо", "total")) and "точк" in normalized
 
 
 def _find_cues(text: str) -> list[str]:
@@ -268,9 +278,87 @@ def _is_procurement_only_noise(text: str) -> bool:
     return any(noise in normalized for noise in PROCUREMENT_ONLY_NOISE)
 
 
+def _has_concrete_execution_detail(text: str) -> bool:
+    normalized = _normalize_for_match(text)
+    concrete_cues = (
+        "конкрет",
+        "мярк",
+        "мерк",
+        "контрол",
+        "график",
+        "срок",
+        "последователност",
+        "организация",
+        "ресурс",
+        "екип",
+        "отговорност",
+        "риск",
+        "качество",
+        "безопасност",
+        "околна среда",
+        "отпад",
+        "комуникация",
+        "координация",
+        "документиране",
+        "приемане",
+        "смр",
+    )
+    return any(cue in normalized for cue in concrete_cues)
+
+
+def _is_broad_catch_all_noise(text: str) -> bool:
+    normalized = _normalize_for_match(text)
+    has_catch_all_scope = any(
+        cue in normalized
+        for cue in (
+            "всички",
+            "всяко",
+            "всяка",
+            "всякакви",
+            "изцяло",
+        )
+    )
+    if not has_catch_all_scope:
+        return False
+
+    has_broad_target = any(
+        cue in normalized
+        for cue in (
+            "изисквания",
+            "условия",
+            "указания",
+            "документацията",
+            "нормативни актове",
+            "нормативните актове",
+            "приложими актове",
+        )
+    )
+    return has_broad_target and not _has_concrete_execution_detail(normalized)
+
+
+def _is_table_scoring_noise(text: str) -> bool:
+    normalized = _normalize_for_match(text)
+    if "показател" not in normalized:
+        return False
+    if not any(
+        cue in normalized
+        for cue in ("точки", "брой точки", "максимален брой")
+    ):
+        return False
+    numbered_cells = re.findall(
+        r"(?:^|\s)\d{1,3}\s+[^\d\s]",
+        normalize_text(text),
+    )
+    return "№" in text or len(numbered_cells) >= 2
+
+
 def _is_noise(text: str) -> bool:
     normalized = _normalize_for_match(text)
     if _is_procurement_only_noise(normalized):
+        return True
+    if _is_broad_catch_all_noise(normalized) or _is_table_scoring_noise(
+        normalized
+    ):
         return True
     if _has_strong_tp_context(normalized):
         return False
@@ -282,6 +370,10 @@ def _is_relevant_to_technical_proposal(text: str, context: str) -> bool:
     text_normalized = _normalize_for_match(text)
 
     if _is_procurement_only_noise(text_normalized):
+        return False
+    if _is_broad_catch_all_noise(text_normalized) or _is_table_scoring_noise(
+        text_normalized
+    ):
         return False
     if _has_strong_tp_context(combined):
         return True
@@ -351,6 +443,8 @@ def _should_join_wrapped_line(current: str, next_line: str) -> bool:
     current = normalize_text(current)
     next_line = normalize_text(next_line)
     if not current or not next_line:
+        return False
+    if _looks_like_table_total_line(next_line):
         return False
     if _looks_like_list_item(next_line):
         return False

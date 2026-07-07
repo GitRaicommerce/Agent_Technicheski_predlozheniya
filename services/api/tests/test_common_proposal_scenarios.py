@@ -253,3 +253,66 @@ def test_narrow_specific_requirement_keeps_moderate_depth_threshold():
     assert result["status"] == "ok"
     assert result["blueprint_group_count"] == 1
     assert result["min_words"] <= 300
+
+
+def test_noisy_pdf_rows_do_not_inflate_common_scenario_blueprint():
+    chunks = [
+        make_chunk(
+            "catch-all-noise",
+            (
+                "Техническото предложение следва да съдържа декларация, че "
+                "участникът приема и ще спазва всички изисквания и условия, "
+                "посочени в документацията за обществената поръчка."
+            ),
+            page=8,
+            section_path="Методика / Техническо предложение",
+        ),
+        make_chunk(
+            "pdf-table",
+            (
+                "Минималното съдържание на техническото предложение включва:\n"
+                "№ Показател Максимален брой точки\n"
+                "1 Организация на изпълнение 20\n"
+                "2 Линеен график 10\n"
+                "3 Мерки за качество 15\n"
+                "Общо 45 точки"
+            ),
+            page=9,
+            section_path="Методика / Техническо предложение",
+        ),
+    ]
+
+    requirements = extract_requirement_checklist(chunks)
+    requirement_items = [item.as_dict() for item in requirements]
+    blueprint = build_drafting_blueprint(
+        section_title="Работна програма за изпълнение",
+        requirement_items=requirement_items,
+    )
+
+    assert len(requirements) == 3
+    assert all("всички изисквания" not in item.text for item in requirements)
+    assert all("Показател" not in item.text for item in requirements)
+    assert all("Общо" not in item.text for item in requirements)
+    assert {item.category for item in requirements} == {
+        "organization",
+        "schedule",
+        "quality",
+    }
+    assert {group["category"] for group in blueprint["groups"]} == {
+        "organization",
+        "schedule",
+        "quality",
+    }
+
+    result = assess_generation_depth(
+        (
+            "Generic work programme with basic organization, schedule and "
+            "quality controls. "
+        )
+        * 30,
+        _coverage_for(requirement_items),
+        drafting_blueprint=blueprint,
+    )
+
+    assert result["blueprint_group_count"] == 3
+    assert result["status"] == "needs_review"
