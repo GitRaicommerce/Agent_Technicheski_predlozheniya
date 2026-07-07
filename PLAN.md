@@ -79,6 +79,7 @@
 - Fed the same requirement/blueprint depth thresholds used by DOCX export back into the drafting prompt as a section depth target, so generation is guided toward export-ready narrative depth before the final readiness gate.
 - Tightened deterministic generated-text requirement coverage so superficial keyword mentions no longer count as coverage for operational requirements, while storing matched ratios for diagnostics and adding common-scenario regression coverage.
 - Expanded the local proposal gap analysis script with universal topic coverage diagnostics for organization, schedule, quality, risk, environment, communication, safety, and documentation, with a runnable script-level regression test for calibration reports.
+- Added actionable calibration recommendations to the proposal gap analysis report so missing or partial topic coverage points back to outline extraction, drafting blueprint grouping, grounding chunks, prompt specificity, and rerunning readiness plus gap analysis after regeneration.
 
 ## Active Goals
 

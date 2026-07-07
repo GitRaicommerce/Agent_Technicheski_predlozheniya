@@ -413,6 +413,68 @@ def render_topic_coverage_lines(
     return lines
 
 
+def render_calibration_recommendation_lines(
+    reference_sections: list[Section],
+    generated_sections: list[Section],
+) -> list[str]:
+    rows = analyze_topic_coverage(
+        "\n\n".join(section.text for section in reference_sections),
+        "\n\n".join(section.text for section in generated_sections),
+    )
+    risky_rows = [
+        row for row in rows if row.get("status") in {"missing", "partial"}
+    ]
+    lines = ["", "## Calibration Recommendations", ""]
+
+    if not risky_rows:
+        lines.append(
+            "1. Universal topic coverage looks aligned. Focus calibration on "
+            "section-level depth, source grounding, and final DOCX readiness."
+        )
+        return lines
+
+    missing = [row for row in risky_rows if row.get("status") == "missing"]
+    partial = [row for row in risky_rows if row.get("status") == "partial"]
+    if missing:
+        labels = ", ".join(str(row["label"]) for row in missing)
+        signals = sorted(
+            {
+                str(signal)
+                for row in missing
+                for signal in row.get("missing_hits", [])
+            }
+        )
+        lines.append(
+            "1. Revisit outline extraction and drafting blueprint grouping for "
+            f"missing topics: {labels}."
+        )
+        if signals:
+            lines.append(
+                "2. Confirm the tender checklist and grounding chunks include "
+                "these missing signals: "
+                + ", ".join(signals[:16])
+                + "."
+            )
+        next_index = 3 if signals else 2
+    else:
+        next_index = 1
+
+    if partial:
+        labels = ", ".join(str(row["label"]) for row in partial)
+        lines.append(
+            f"{next_index}. Increase drafting depth and prompt specificity for "
+            f"partially covered topics: {labels}."
+        )
+        next_index += 1
+
+    lines.append(
+        f"{next_index}. After regenerating the proposal, rerun DOCX readiness "
+        "and this gap analysis to verify topic coverage, section depth, and "
+        "requirement coverage together."
+    )
+    return lines
+
+
 def coverage_label(coverage: float, length_ratio: float) -> str:
     if coverage >= 0.72 and length_ratio >= 0.65:
         return "добро"
@@ -467,7 +529,12 @@ def render_report(
         if line.startswith("## ") and "Покритие" in line
     )
     lines[section_coverage_start:section_coverage_start] = (
-        render_topic_coverage_lines(reference_sections, generated_sections) + [""]
+        render_topic_coverage_lines(reference_sections, generated_sections)
+        + render_calibration_recommendation_lines(
+            reference_sections,
+            generated_sections,
+        )
+        + [""]
     )
 
     detail_blocks: list[str] = []

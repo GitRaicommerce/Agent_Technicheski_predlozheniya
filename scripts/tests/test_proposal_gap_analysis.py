@@ -15,6 +15,9 @@ SPEC.loader.exec_module(proposal_gap_analysis)
 Section = proposal_gap_analysis.Section
 analyze_topic_coverage = proposal_gap_analysis.analyze_topic_coverage
 render_report = proposal_gap_analysis.render_report
+render_calibration_recommendation_lines = (
+    proposal_gap_analysis.render_calibration_recommendation_lines
+)
 
 
 class ProposalGapAnalysisTests(unittest.TestCase):
@@ -60,6 +63,33 @@ class ProposalGapAnalysisTests(unittest.TestCase):
         self.assertIn("Environmental protection", report)
         self.assertIn("dust, waste, soil", report)
         self.assertTrue("missing" in report or "partial" in report)
+        self.assertIn("## Calibration Recommendations", report)
+        self.assertIn("Revisit outline extraction", report)
+
+    def test_calibration_recommendations_explain_missing_and_partial_topics(self):
+        lines = render_calibration_recommendation_lines(
+            [
+                Section(
+                    "Reference",
+                    (
+                        "Risk mitigation and escalation are described. "
+                        "Environmental protection includes dust, waste and "
+                        "soil controls."
+                    ),
+                )
+            ],
+            [
+                Section(
+                    "Generated",
+                    "The generated text mentions risk only.",
+                )
+            ],
+        )
+        text = "\n".join(lines)
+
+        self.assertIn("Environmental protection", text)
+        self.assertIn("partially covered topics", text)
+        self.assertIn("rerun DOCX readiness", text)
 
 
 if __name__ == "__main__":
