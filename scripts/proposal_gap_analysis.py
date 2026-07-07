@@ -57,6 +57,125 @@ class Section:
         return tokenize(self.text)
 
 
+TOPIC_RULES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
+    (
+        "organization",
+        "Organization, roles and resources",
+        (
+            "organization",
+            "team",
+            "resource",
+            "responsib",
+            "\u043e\u0440\u0433\u0430\u043d\u0438\u0437\u0430\u0446",
+            "\u0435\u043a\u0438\u043f",
+            "\u0440\u0435\u0441\u0443\u0440\u0441",
+            "\u043e\u0442\u0433\u043e\u0432\u043e\u0440\u043d",
+        ),
+    ),
+    (
+        "schedule",
+        "Schedule, sequence and milestones",
+        (
+            "schedule",
+            "sequence",
+            "milestone",
+            "deadline",
+            "\u0433\u0440\u0430\u0444\u0438\u043a",
+            "\u0435\u0442\u0430\u043f",
+            "\u0441\u0440\u043e\u043a",
+            "\u043f\u043e\u0441\u043b\u0435\u0434\u043e\u0432\u0430\u0442\u0435\u043b\u043d",
+        ),
+    ),
+    (
+        "quality",
+        "Quality control and acceptance",
+        (
+            "quality",
+            "control",
+            "inspection",
+            "acceptance",
+            "protocol",
+            "\u043a\u0430\u0447\u0435\u0441\u0442\u0432",
+            "\u043a\u043e\u043d\u0442\u0440\u043e\u043b",
+            "\u043f\u0440\u0438\u0435\u043c\u0430\u043d",
+            "\u043f\u0440\u043e\u0442\u043e\u043a\u043e\u043b",
+        ),
+    ),
+    (
+        "risk",
+        "Risk and unforeseen circumstances",
+        (
+            "risk",
+            "unforeseen",
+            "mitigation",
+            "escalation",
+            "\u0440\u0438\u0441\u043a",
+            "\u043d\u0435\u043f\u0440\u0435\u0434\u0432\u0438\u0434",
+            "\u0435\u0441\u043a\u0430\u043b\u0430\u0446",
+        ),
+    ),
+    (
+        "environment",
+        "Environmental protection",
+        (
+            "environment",
+            "dust",
+            "waste",
+            "soil",
+            "pollution",
+            "\u043e\u043a\u043e\u043b\u043d\u0430 \u0441\u0440\u0435\u0434\u0430",
+            "\u043f\u0440\u0430\u0445",
+            "\u043e\u0442\u043f\u0430\u0434",
+            "\u043f\u043e\u0447\u0432",
+            "\u0437\u0430\u043c\u044a\u0440\u0441",
+        ),
+    ),
+    (
+        "communication",
+        "Communication and coordination",
+        (
+            "communication",
+            "coordination",
+            "meeting",
+            "reporting",
+            "authority",
+            "\u043a\u043e\u043c\u0443\u043d\u0438\u043a\u0430\u0446",
+            "\u043a\u043e\u043e\u0440\u0434\u0438\u043d\u0430\u0446",
+            "\u0432\u044a\u0437\u043b\u043e\u0436\u0438\u0442\u0435\u043b",
+            "\u043d\u0430\u0434\u0437\u043e\u0440",
+        ),
+    ),
+    (
+        "safety",
+        "Health, safety and fire safety",
+        (
+            "safety",
+            "health",
+            "fire",
+            "incident",
+            "\u0431\u0435\u0437\u043e\u043f\u0430\u0441",
+            "\u0437\u0434\u0440\u0430\u0432",
+            "\u043f\u043e\u0436\u0430\u0440",
+            "\u0438\u043d\u0446\u0438\u0434\u0435\u043d\u0442",
+        ),
+    ),
+    (
+        "documentation",
+        "Documentation, records and reporting",
+        (
+            "document",
+            "record",
+            "report",
+            "protocol",
+            "\u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442",
+            "\u043e\u0442\u0447\u0435\u0442",
+            "\u043f\u0440\u043e\u0442\u043e\u043a\u043e\u043b",
+            "\u0435\u043a\u0437\u0435\u043a\u0443\u0442\u0438\u0432",
+        ),
+    ),
+)
+
+
 def normalize_text(value: str) -> str:
     value = html.unescape(value)
     value = value.replace("\xa0", " ")
@@ -216,6 +335,84 @@ def find_tender_snippets(tender_text: str, keywords: list[str], limit: int = 3) 
     return snippets
 
 
+def analyze_topic_coverage(
+    reference_text: str,
+    generated_text: str,
+) -> list[dict[str, object]]:
+    reference_normalized = normalize_text(reference_text).lower()
+    generated_normalized = normalize_text(generated_text).lower()
+    result: list[dict[str, object]] = []
+
+    for key, label, keywords in TOPIC_RULES:
+        reference_hits = [
+            keyword for keyword in keywords if keyword in reference_normalized
+        ]
+        if not reference_hits:
+            continue
+
+        generated_hits = [
+            keyword for keyword in keywords if keyword in generated_normalized
+        ]
+        if not generated_hits:
+            status = "missing"
+        elif len(generated_hits) < max(2, len(reference_hits) // 2):
+            status = "partial"
+        else:
+            status = "covered"
+
+        result.append(
+            {
+                "key": key,
+                "label": label,
+                "status": status,
+                "reference_hits": reference_hits,
+                "generated_hits": generated_hits,
+                "missing_hits": [
+                    keyword for keyword in reference_hits if keyword not in generated_hits
+                ],
+            }
+        )
+
+    return result
+
+
+def render_topic_coverage_lines(
+    reference_sections: list[Section],
+    generated_sections: list[Section],
+) -> list[str]:
+    rows = analyze_topic_coverage(
+        "\n\n".join(section.text for section in reference_sections),
+        "\n\n".join(section.text for section in generated_sections),
+    )
+    lines = [
+        "",
+        "## Universal Topic Coverage",
+        "",
+        "| Topic | Status | Reference signals | Generated signals | Missing signals |",
+        "| --- | --- | --- | --- | --- |",
+    ]
+
+    if not rows:
+        lines.append("| n/a | no reference topic signals | n/a | n/a | n/a |")
+        return lines
+
+    for row in rows:
+        lines.append(
+            "| "
+            + " | ".join(
+                [
+                    str(row["label"]).replace("|", "\\|"),
+                    str(row["status"]),
+                    ", ".join(row["reference_hits"]).replace("|", "\\|"),
+                    ", ".join(row["generated_hits"]).replace("|", "\\|") or "n/a",
+                    ", ".join(row["missing_hits"]).replace("|", "\\|") or "n/a",
+                ]
+            )
+            + " |"
+        )
+    return lines
+
+
 def coverage_label(coverage: float, length_ratio: float) -> str:
     if coverage >= 0.72 and length_ratio >= 0.65:
         return "добро"
@@ -262,6 +459,15 @@ def render_report(
             "| Секция в референтното ТП | Най-близка секция в генерираното ТП | Покритие | Обем | Статус | Липсващи ключови термини |",
             "| --- | --- | ---: | ---: | --- | --- |",
         ]
+    )
+
+    section_coverage_start = next(
+        index
+        for index, line in enumerate(lines)
+        if line.startswith("## ") and "Покритие" in line
+    )
+    lines[section_coverage_start:section_coverage_start] = (
+        render_topic_coverage_lines(reference_sections, generated_sections) + [""]
     )
 
     detail_blocks: list[str] = []

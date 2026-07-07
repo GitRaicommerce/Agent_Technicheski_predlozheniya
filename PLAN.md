@@ -78,6 +78,7 @@
 - Updated DOCX export readiness reports to point users to the bulk duplicate resolver and added a common mixed-blocker regression scenario covering duplicate, stale, missing-requirement, and shallow-section remediation guidance.
 - Fed the same requirement/blueprint depth thresholds used by DOCX export back into the drafting prompt as a section depth target, so generation is guided toward export-ready narrative depth before the final readiness gate.
 - Tightened deterministic generated-text requirement coverage so superficial keyword mentions no longer count as coverage for operational requirements, while storing matched ratios for diagnostics and adding common-scenario regression coverage.
+- Expanded the local proposal gap analysis script with universal topic coverage diagnostics for organization, schedule, quality, risk, environment, communication, safety, and documentation, with a runnable script-level regression test for calibration reports.
 
 ## Active Goals
 
