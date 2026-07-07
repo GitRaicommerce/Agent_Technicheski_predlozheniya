@@ -26,6 +26,18 @@ class ChatMessage(BaseModel):
     content: str
 
 
+class DuplicateSelectionResolutionItem(BaseModel):
+    section_uid: str
+    generation_id: str
+    previous_selected_count: int
+
+
+class DuplicateSelectionResolutionResponse(BaseModel):
+    status: str
+    resolved_count: int
+    sections: list[DuplicateSelectionResolutionItem]
+
+
 class OrchestratorRequest(BaseModel):
     project_id: str
     message: str
@@ -224,6 +236,70 @@ async def select_generation(
     )
     gen.selected = True
     return {"status": "selected", "generation_id": generation_id}
+
+
+@router.post(
+    "/{project_id}/generations/resolve-duplicates",
+    response_model=DuplicateSelectionResolutionResponse,
+)
+async def resolve_duplicate_selected_generations(
+    project_id: str,
+    db: AsyncSession = Depends(get_db),
+) -> DuplicateSelectionResolutionResponse:
+    from app.core.models import Generation
+    from sqlalchemy import select, update
+
+    project = await db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    result = await db.execute(
+        select(Generation)
+        .where(
+            Generation.project_id == project_id,
+            Generation.selected.is_(True),
+        )
+        .order_by(
+            Generation.section_uid.asc(),
+            Generation.created_at.desc(),
+            Generation.variant.desc(),
+            Generation.id.desc(),
+        )
+    )
+    selected_generations = list(result.scalars().all())
+    grouped: dict[str, list[Generation]] = {}
+    for generation in selected_generations:
+        if generation.section_uid:
+            grouped.setdefault(generation.section_uid, []).append(generation)
+
+    resolved: list[DuplicateSelectionResolutionItem] = []
+    for section_uid, generations in grouped.items():
+        if len(generations) <= 1:
+            continue
+
+        chosen = generations[0]
+        await db.execute(
+            update(Generation)
+            .where(
+                Generation.project_id == project_id,
+                Generation.section_uid == section_uid,
+            )
+            .values(selected=False)
+        )
+        chosen.selected = True
+        resolved.append(
+            DuplicateSelectionResolutionItem(
+                section_uid=section_uid,
+                generation_id=chosen.id,
+                previous_selected_count=len(generations),
+            )
+        )
+
+    return DuplicateSelectionResolutionResponse(
+        status="resolved",
+        resolved_count=len(resolved),
+        sections=resolved,
+    )
 
 
 class ScheduleNormalizedResponse(BaseModel):

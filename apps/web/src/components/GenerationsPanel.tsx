@@ -194,15 +194,12 @@ export default function GenerationsPanel({
   };
 
   const handleResolveDuplicateSelections = async () => {
-    const targets = duplicateSelectionResolutionTargets(sections);
-    if (targets.length === 0) return;
+    if (duplicateSelectionResolutionTargets(sections).length === 0) return;
 
     setResolvingDuplicateSelections(true);
     setError(null);
     try {
-      for (const target of targets) {
-        await api.agents.selectGeneration(projectId, target.generationId);
-      }
+      await api.agents.resolveDuplicateSelectedGenerations(projectId);
       await load();
     } catch (e: unknown) {
       setError(

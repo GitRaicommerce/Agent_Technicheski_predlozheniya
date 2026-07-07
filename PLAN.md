@@ -107,6 +107,7 @@
 - Added stable remediation `action_key` markers to calibration manifest readiness priorities so duplicate, stale, missing-requirement, and quality/depth blockers can be reviewed or automated consistently across projects.
 - Re-ran the Pernik non-mutating calibration bundle through the API container after adding remediation action keys; the real manifest now includes `resolve_duplicate_selected` and `regenerate_stale` actions, while the current project remains blocked by 14 duplicate selected sections and 14 stale selected sections, with the generated/reference volume ratio still at 0.15.
 - Added a structured `calibration_manifest.json` sidecar for non-mutating calibration bundles, exposing schema version, paths, readiness gates, gap scorecard, focus counts, readiness action keys, and gap priority rows for future UI/automation; verified it on the real Pernik bundle with `resolve_duplicate_selected` and `regenerate_stale` actions for 14 sections each.
+- Added a backend bulk duplicate-selected resolver endpoint and connected the Generations panel duplicate action to it, making `resolve_duplicate_selected` an atomic API remediation path that keeps the newest selected generation per ambiguous section.
 
 ## Active Goals
 

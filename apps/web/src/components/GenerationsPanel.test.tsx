@@ -21,6 +21,7 @@ vi.mock("@/lib/api", async () => {
         regenerateQualityGenerationJob: vi.fn(),
         regenerateMissingRequirementsGenerationJob: vi.fn(),
         regenerateSection: vi.fn(),
+        resolveDuplicateSelectedGenerations: vi.fn(),
         selectGeneration: vi.fn(),
       },
     },
@@ -40,6 +41,9 @@ const regenerateMissingRequirementsGenerationJobMock = vi.mocked(
   api.agents.regenerateMissingRequirementsGenerationJob,
 );
 const regenerateSectionMock = vi.mocked(api.agents.regenerateSection);
+const resolveDuplicateSelectedGenerationsMock = vi.mocked(
+  api.agents.resolveDuplicateSelectedGenerations,
+);
 const selectGenerationMock = vi.mocked(api.agents.selectGeneration);
 
 describe("GenerationsPanel", () => {
@@ -319,9 +323,21 @@ describe("GenerationsPanel", () => {
           ],
         },
       ]);
-    selectGenerationMock.mockResolvedValue({
-      status: "selected",
-      generation_id: "gen-a-new",
+    resolveDuplicateSelectedGenerationsMock.mockResolvedValue({
+      status: "resolved",
+      resolved_count: 2,
+      sections: [
+        {
+          section_uid: "sec-duplicate-a",
+          generation_id: "gen-a-new",
+          previous_selected_count: 2,
+        },
+        {
+          section_uid: "sec-duplicate-b",
+          generation_id: "gen-b-v3",
+          previous_selected_count: 2,
+        },
+      ],
     });
 
     render(<GenerationsPanel projectId="project-1" />);
@@ -334,17 +350,11 @@ describe("GenerationsPanel", () => {
     );
 
     await waitFor(() => {
-      expect(selectGenerationMock).toHaveBeenNthCalledWith(
-        1,
+      expect(resolveDuplicateSelectedGenerationsMock).toHaveBeenCalledWith(
         "project-1",
-        "gen-a-new",
-      );
-      expect(selectGenerationMock).toHaveBeenNthCalledWith(
-        2,
-        "project-1",
-        "gen-b-v3",
       );
     });
+    expect(selectGenerationMock).not.toHaveBeenCalled();
     await waitFor(() => {
       expect(listGenerationsMock).toHaveBeenCalledTimes(2);
     });

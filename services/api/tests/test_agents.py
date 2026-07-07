@@ -865,3 +865,67 @@ async def test_select_generation_ok(client, mock_db):
     assert data["status"] == "selected"
     assert data["generation_id"] == gid
     assert gen.selected is True
+
+
+@pytest.mark.asyncio
+async def test_resolve_duplicate_selected_generations_keeps_newest(client, mock_db):
+    from app.core.models import Generation
+    from datetime import datetime, timezone
+
+    pid = str(uuid.uuid4())
+    project = _make_project()
+    project.id = pid
+    old = Generation(
+        id="gen-old",
+        project_id=pid,
+        section_uid="sec-duplicate",
+        variant=1,
+        text="Older selected",
+        evidence_status="ok",
+        selected=True,
+        created_at=datetime(2026, 4, 20, tzinfo=timezone.utc),
+    )
+    newest = Generation(
+        id="gen-newest",
+        project_id=pid,
+        section_uid="sec-duplicate",
+        variant=2,
+        text="Newest selected",
+        evidence_status="ok",
+        selected=True,
+        created_at=datetime(2026, 4, 21, tzinfo=timezone.utc),
+    )
+    single = Generation(
+        id="gen-single",
+        project_id=pid,
+        section_uid="sec-single",
+        variant=1,
+        text="Only selected",
+        evidence_status="ok",
+        selected=True,
+        created_at=datetime(2026, 4, 19, tzinfo=timezone.utc),
+    )
+    selected_result = MagicMock()
+    selected_result.scalars = MagicMock(
+        return_value=MagicMock(all=MagicMock(return_value=[newest, old, single]))
+    )
+    mock_db.get = AsyncMock(return_value=project)
+    mock_db.execute = AsyncMock(return_value=selected_result)
+
+    resp = await client.post(
+        f"/api/v1/agents/{pid}/generations/resolve-duplicates"
+    )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "resolved"
+    assert data["resolved_count"] == 1
+    assert data["sections"] == [
+        {
+            "section_uid": "sec-duplicate",
+            "generation_id": "gen-newest",
+            "previous_selected_count": 2,
+        }
+    ]
+    assert newest.selected is True
+    assert mock_db.execute.await_count == 2

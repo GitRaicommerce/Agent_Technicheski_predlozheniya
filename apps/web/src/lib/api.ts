@@ -335,6 +335,16 @@ export interface GenerationJob {
   completed_at?: string | null;
 }
 
+export interface DuplicateSelectionResolutionResponse {
+  status: string;
+  resolved_count: number;
+  sections: Array<{
+    section_uid: string;
+    generation_id: string;
+    previous_selected_count: number;
+  }>;
+}
+
 export interface ExportReadiness {
   project_id: string;
   ready: boolean;
@@ -495,6 +505,11 @@ export const api = {
     selectGeneration: (projectId: string, generationId: string) =>
       apiFetch<{ status: string; generation_id: string }>(
         `/api/v1/agents/${projectId}/generations/${generationId}/select`,
+        { method: "POST" },
+      ),
+    resolveDuplicateSelectedGenerations: (projectId: string) =>
+      apiFetch<DuplicateSelectionResolutionResponse>(
+        `/api/v1/agents/${projectId}/generations/resolve-duplicates`,
         { method: "POST" },
       ),
     regenerateSection: (projectId: string, sectionUid: string) =>
