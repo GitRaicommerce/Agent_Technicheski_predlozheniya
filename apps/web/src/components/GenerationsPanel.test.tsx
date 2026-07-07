@@ -19,6 +19,7 @@ vi.mock("@/lib/api", async () => {
         retryGenerationJob: vi.fn(),
         regenerateStaleGenerationJob: vi.fn(),
         regenerateQualityGenerationJob: vi.fn(),
+        regenerateMissingRequirementsGenerationJob: vi.fn(),
         regenerateSection: vi.fn(),
         selectGeneration: vi.fn(),
       },
@@ -34,6 +35,9 @@ const regenerateStaleGenerationJobMock = vi.mocked(
 );
 const regenerateQualityGenerationJobMock = vi.mocked(
   api.agents.regenerateQualityGenerationJob,
+);
+const regenerateMissingRequirementsGenerationJobMock = vi.mocked(
+  api.agents.regenerateMissingRequirementsGenerationJob,
 );
 const regenerateSectionMock = vi.mocked(api.agents.regenerateSection);
 const selectGenerationMock = vi.mocked(api.agents.selectGeneration);
@@ -846,6 +850,84 @@ describe("GenerationsPanel", () => {
       expect(regenerateQualityGenerationJobMock).toHaveBeenCalledWith(
         "project-1",
       );
+    });
+    await waitFor(() => {
+      expect(listGenerationsMock).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it("starts a missing requirements generation job", async () => {
+    listGenerationsMock.mockResolvedValue([
+      {
+        section_uid: "sec-missing",
+        section_title: "Missing Requirement Section",
+        variants: [
+          {
+            id: "gen-missing",
+            section_uid: "sec-missing",
+            variant: 1,
+            text: "Text without one requirement",
+            evidence_status: "ok",
+            selected: true,
+            created_at: "2026-04-20T10:00:00.000Z",
+            flags_json: {
+              requirement_coverage: {
+                total: 2,
+                covered: 1,
+                missing: 1,
+                missing_ids: ["req-missing"],
+                items: [
+                  {
+                    id: "req-covered",
+                    text: "Covered requirement",
+                    status: "covered",
+                  },
+                  {
+                    id: "req-missing",
+                    text: "Missing requirement",
+                    status: "missing",
+                  },
+                ],
+              },
+            },
+          },
+        ],
+      },
+    ]);
+    regenerateMissingRequirementsGenerationJobMock.mockResolvedValue({
+      id: "job-missing",
+      project_id: "project-1",
+      job_type: "drafting_requirements",
+      status: "queued",
+      total_sections: 1,
+      completed_sections: 0,
+      skipped_sections: 0,
+      current_section_uid: null,
+      current_section_title: null,
+      error: null,
+      result_json: {
+        target_section_uids: ["sec-missing"],
+        target_reason: "missing_requirements",
+      },
+      trace_id: "trace-missing",
+      created_at: "2026-04-20T10:02:00.000Z",
+      updated_at: "2026-04-20T10:02:00.000Z",
+      completed_at: null,
+    });
+
+    render(<GenerationsPanel projectId="project-1" />);
+
+    expect(await screen.findByTestId("generation-missing-requirements-action"))
+      .toHaveTextContent("1 missing-requirement section");
+
+    await userEvent.click(
+      screen.getByTestId("generation-missing-requirements-regenerate-button"),
+    );
+
+    await waitFor(() => {
+      expect(
+        regenerateMissingRequirementsGenerationJobMock,
+      ).toHaveBeenCalledWith("project-1");
     });
     await waitFor(() => {
       expect(listGenerationsMock).toHaveBeenCalledTimes(2);

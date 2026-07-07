@@ -37,6 +37,8 @@ export default function GenerationsPanel({
   );
   const [retryingJob, setRetryingJob] = useState(false);
   const [regeneratingStaleJob, setRegeneratingStaleJob] = useState(false);
+  const [regeneratingRequirementsJob, setRegeneratingRequirementsJob] =
+    useState(false);
   const [regeneratingQualityJob, setRegeneratingQualityJob] = useState(false);
   const [showOnlyAttention, setShowOnlyAttention] = useState(false);
   const [resolvingDuplicateSelections, setResolvingDuplicateSelections] =
@@ -172,6 +174,25 @@ export default function GenerationsPanel({
     }
   };
 
+  const handleRegenerateMissingRequirementSections = async () => {
+    setRegeneratingRequirementsJob(true);
+    setError(null);
+    try {
+      const nextJob =
+        await api.agents.regenerateMissingRequirementsGenerationJob(projectId);
+      setGenerationJob(nextJob);
+      await load();
+    } catch (e: unknown) {
+      setError(
+        e instanceof Error
+          ? e.message
+          : "Missing requirements regeneration job failed.",
+      );
+    } finally {
+      setRegeneratingRequirementsJob(false);
+    }
+  };
+
   const handleResolveDuplicateSelections = async () => {
     const targets = duplicateSelectionResolutionTargets(sections);
     if (targets.length === 0) return;
@@ -273,6 +294,16 @@ export default function GenerationsPanel({
         regenerating={regeneratingStaleJob}
         onRegenerate={() => {
           void handleRegenerateStaleSections();
+        }}
+      />
+      <MissingRequirementsRegenerationAction
+        missingRequirementSectionCount={countMissingRequirementSelectedSections(
+          sections,
+        )}
+        generationJob={generationJob}
+        regenerating={regeneratingRequirementsJob}
+        onRegenerate={() => {
+          void handleRegenerateMissingRequirementSections();
         }}
       />
       <QualityRegenerationAction
@@ -533,6 +564,46 @@ function StaleRegenerationAction({
   );
 }
 
+function MissingRequirementsRegenerationAction({
+  missingRequirementSectionCount,
+  generationJob,
+  regenerating,
+  onRegenerate,
+}: {
+  missingRequirementSectionCount: number;
+  generationJob: GenerationJob | null;
+  regenerating: boolean;
+  onRegenerate: () => void;
+}) {
+  const isActive =
+    generationJob?.status === "queued" || generationJob?.status === "processing";
+
+  if (missingRequirementSectionCount <= 0) return null;
+
+  return (
+    <div
+      data-testid="generation-missing-requirements-action"
+      className="mb-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900"
+    >
+      <div className="flex items-center justify-between gap-2">
+        <span>
+          {missingRequirementSectionCount} missing-requirement{" "}
+          {missingRequirementSectionCount === 1 ? "section" : "sections"}
+        </span>
+        <button
+          type="button"
+          onClick={onRegenerate}
+          disabled={regenerating || isActive}
+          data-testid="generation-missing-requirements-regenerate-button"
+          className="shrink-0 rounded border border-amber-300 bg-white px-2 py-1 font-medium text-amber-800 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {regenerating ? "..." : "Regenerate coverage"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function QualityRegenerationAction({
   qualitySectionCount,
   generationJob,
@@ -718,6 +789,17 @@ function countStaleSelectedSections(sections: SectionGenerations[]): number {
   return sections.filter((section) =>
     getSectionAttention(section).hasStaleSelected,
   ).length;
+}
+
+function countMissingRequirementSelectedSections(
+  sections: SectionGenerations[],
+): number {
+  return sections.filter((section) => {
+    const selectedVariants = section.variants.filter((variant) => variant.selected);
+    const displayVariant = selectedVariants[0] ?? section.variants[0];
+    const { missing } = coverageCounts(getRequirementCoverage(displayVariant));
+    return missing > 0;
+  }).length;
 }
 
 function summarizeGenerationAttention(

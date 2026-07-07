@@ -102,6 +102,7 @@
 - Surfaced the words-per-group/topic depth diagnostic in the web DOCX export warning so users can see the expected structural depth before opening the Markdown readiness report.
 - Passed shallow-section depth details from DOCX export warnings into the Generations panel, so opening the remediation view shows each affected section's current/minimum words, developed sentence target, blueprint groups/topics, and words-per-group/topic guidance.
 - Added a universal bulk quality/depth regeneration flow: DOCX readiness shallow-section blockers can now enqueue a targeted drafting job for only the selected sections that fail blueprint-aware depth checks, with backend and frontend regression coverage.
+- Added a universal bulk missing-requirements regeneration flow: sections whose selected generation fails deterministic requirement coverage can now enqueue a targeted drafting job, so export blockers for uncovered tender requirements are actionable from the Generations panel.
 
 ## Active Goals
 
@@ -113,8 +114,8 @@
 ## Next Recommended Steps
 
 1. Use the export warning remediation button and the Generations bulk duplicate resolver to clear Pernik's legacy duplicate selected generations, then re-run the aggregated export readiness check.
-2. Use the Generations panel bulk stale-regeneration action for Pernik after duplicate selections are resolved; then use the bulk quality/depth regeneration action for any blueprint-aware shallow sections reported by export preflight.
-3. After resolving Pernik's duplicate selected variants, stale selected sections, and shallow/depth blockers, regenerate the affected sections with a target of materially improving the manifest word-volume scorecard and the section-level drafting-depth diagnostics, not only clearing export blockers.
+2. Use the Generations panel bulk stale-regeneration action for Pernik after duplicate selections are resolved; then use the bulk missing-requirements and quality/depth regeneration actions for any remaining requirement-coverage or blueprint-aware shallow sections reported by export preflight.
+3. After resolving Pernik's duplicate selected variants, stale selected sections, missing-requirement sections, and shallow/depth blockers, regenerate the affected sections with a target of materially improving the manifest word-volume scorecard and the section-level drafting-depth diagnostics, not only clearing export blockers.
 4. Expand generated documentation with more precise backend endpoint and workflow coverage.
 5. Continue broadening common tender regression coverage with more real-world noisy PDF extraction and DOCX readiness combinations.
 6. Use the readiness Markdown report during the next Pernik calibration, then compare the regenerated output against the winning proposal after duplicate selected variants and stale generations are resolved.

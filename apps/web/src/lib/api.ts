@@ -487,6 +487,11 @@ export const api = {
         `/api/v1/agents/${projectId}/generation-jobs/quality`,
         { method: "POST" },
       ),
+    regenerateMissingRequirementsGenerationJob: (projectId: string) =>
+      apiFetch<GenerationJob>(
+        `/api/v1/agents/${projectId}/generation-jobs/missing-requirements`,
+        { method: "POST" },
+      ),
     selectGeneration: (projectId: string, generationId: string) =>
       apiFetch<{ status: string; generation_id: string }>(
         `/api/v1/agents/${projectId}/generations/${generationId}/select`,

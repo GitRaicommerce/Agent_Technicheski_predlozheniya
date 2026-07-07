@@ -545,6 +545,52 @@ async def test_regenerate_quality_generation_job_ok(client, mock_db):
     create_job.assert_awaited_once_with(project=project, db=mock_db)
 
 
+@pytest.mark.asyncio
+async def test_regenerate_missing_requirements_generation_job_ok(client, mock_db):
+    pid = str(uuid.uuid4())
+    project = _make_project()
+    project.id = pid
+    job = MagicMock()
+    job.id = str(uuid.uuid4())
+    job.project_id = pid
+    job.job_type = "drafting_requirements"
+    job.status = "queued"
+    job.total_sections = 1
+    job.completed_sections = 0
+    job.skipped_sections = 0
+    job.current_section_uid = None
+    job.current_section_title = None
+    job.error = None
+    job.result_json = {
+        "target_section_uids": ["s-missing"],
+        "target_reason": "missing_requirements",
+    }
+    job.trace_id = str(uuid.uuid4())
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc)
+    job.created_at = now
+    job.updated_at = now
+    job.completed_at = None
+    mock_db.get = AsyncMock(return_value=project)
+
+    with patch(
+        "app.agents.generation_jobs.create_drafting_requirements_job",
+        new=AsyncMock(return_value=job),
+    ) as create_job:
+        resp = await client.post(
+            f"/api/v1/agents/{pid}/generation-jobs/missing-requirements"
+        )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["id"] == job.id
+    assert data["job_type"] == "drafting_requirements"
+    assert data["total_sections"] == 1
+    assert data["result_json"]["target_reason"] == "missing_requirements"
+    create_job.assert_awaited_once_with(project=project, db=mock_db)
+
+
 # ---------------------------------------------------------------------------
 # POST /api/v1/agents/{project_id}/outline/unlock
 # ---------------------------------------------------------------------------
