@@ -82,6 +82,7 @@
 - Added actionable calibration recommendations to the proposal gap analysis report so missing or partial topic coverage points back to outline extraction, drafting blueprint grouping, grounding chunks, prompt specificity, and rerunning readiness plus gap analysis after regeneration.
 - Updated generated engineering documentation to include script-level regression test inventory so calibration tooling tests are visible alongside backend coverage.
 - Added a non-mutating selected-generations Markdown snapshot script for calibration runs, including duplicate selected, missing selected, stale evidence, and outside-outline warnings so gap analysis can run even before DOCX readiness is fully clear.
+- Added a non-mutating calibration bundle script that exports the selected-generation Markdown snapshot, runs proposal gap analysis against a reference proposal, and writes a review manifest for repeatable real-project calibration.
 
 ## Active Goals
 
