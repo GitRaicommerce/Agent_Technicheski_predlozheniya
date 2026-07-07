@@ -94,6 +94,7 @@
 - Added a requirement response plan to drafting blueprints so every checklist item instructs the model to write a concrete action, responsible role, control/evidence record, and sequence or deliverable link when supported by sources.
 - Tightened deterministic requirement coverage for operational categories so keyword-complete but undeveloped text no longer counts as covered unless the coherent passage includes operational evidence such as responsible role, control, record, monitoring, acceptance, escalation, or corrective action.
 - Surfaced missing-requirement diagnostics in export readiness payloads and Markdown reports so blockers distinguish missing key terms, incoherent scattered coverage, and missing operational evidence.
+- Surfaced missing-requirement diagnostic reasons in the Generations panel so users can see when a selected section needs operational evidence, a coherent passage, or key-term coverage before export.
 
 ## Active Goals
 

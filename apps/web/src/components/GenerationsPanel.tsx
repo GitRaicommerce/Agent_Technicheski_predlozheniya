@@ -859,6 +859,45 @@ function missingCoverageItems(
   );
 }
 
+function requirementCoverageReasonLabel(item: RequirementCoverageItem): string | null {
+  const reason = String(item.reason ?? "");
+  if (reason === "needs operational evidence") {
+    return "липсват оперативни доказателства";
+  }
+  if (reason === "needs coherent passage") {
+    return "липсва свързан пасаж";
+  }
+  if (reason === "missing key terms") {
+    return "липсват ключови термини";
+  }
+  if (reason === "missing requirement coverage") {
+    return "липсва покритие";
+  }
+  if (item.requires_operational_detail) {
+    return "липсват оперативни доказателства";
+  }
+  return null;
+}
+
+function requirementCoverageDiagnostics(item: RequirementCoverageItem): string | null {
+  const diagnostics: string[] = [];
+  if (typeof item.matched_ratio === "number") {
+    diagnostics.push(`термини ${Math.round(item.matched_ratio * 100)}%`);
+  }
+  if (typeof item.coherent_matched_ratio === "number") {
+    diagnostics.push(`свързаност ${Math.round(item.coherent_matched_ratio * 100)}%`);
+  }
+  if (
+    typeof item.required_operational_signal_count === "number" &&
+    item.required_operational_signal_count > 0
+  ) {
+    diagnostics.push(
+      `оперативни сигнали ${(item.operational_signals ?? []).length}/${item.required_operational_signal_count}`,
+    );
+  }
+  return diagnostics.length ? diagnostics.join(" · ") : null;
+}
+
 function RequirementCoverageBadge({
   coverage,
 }: {
@@ -913,7 +952,17 @@ function RequirementCoverageDetails({
           {missingItems.slice(0, 5).map((item) => (
             <li key={item.id}>
               <span className="font-medium">{item.id}</span>
+              {requirementCoverageReasonLabel(item) ? (
+                <span className="ml-1 rounded bg-amber-100 px-1 py-0.5 text-[10px] font-medium text-amber-800">
+                  {requirementCoverageReasonLabel(item)}
+                </span>
+              ) : null}
               {item.text ? `: ${repairLikelyMojibake(item.text)}` : ""}
+              {requirementCoverageDiagnostics(item) ? (
+                <p className="mt-0.5 text-[11px] opacity-75">
+                  {requirementCoverageDiagnostics(item)}
+                </p>
+              ) : null}
             </li>
           ))}
         </ul>

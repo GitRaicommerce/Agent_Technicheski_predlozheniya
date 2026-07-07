@@ -106,6 +106,11 @@ describe("GenerationsPanel", () => {
                     id: "req-missing",
                     text: "Missing requirement",
                     status: "missing",
+                    reason: "needs operational evidence",
+                    matched_ratio: 0.8,
+                    coherent_matched_ratio: 0.75,
+                    operational_signals: ["record"],
+                    required_operational_signal_count: 2,
                   },
                 ],
               },
@@ -129,6 +134,13 @@ describe("GenerationsPanel", () => {
     ).toHaveTextContent("1 липсват");
     expect(screen.getByText(/req-missing/)).toBeInTheDocument();
     expect(screen.getByText(/Missing requirement/)).toBeInTheDocument();
+    expect(screen.getByText("липсват оперативни доказателства"))
+      .toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "термини 80% · свързаност 75% · оперативни сигнали 1/2",
+      ),
+    ).toBeInTheDocument();
   });
 
   it("selects one variant to resolve duplicate selected generations", async () => {
