@@ -61,6 +61,10 @@ class RunProposalCalibrationTests(unittest.TestCase):
             paths["manifest_json"],
             Path("analysis/pernik/calibration_manifest.json"),
         )
+        self.assertEqual(
+            paths["comparison"],
+            Path("analysis/pernik/calibration_manifest_comparison.md"),
+        )
 
     def test_render_manifest_lists_bundle_files_and_review_order(self):
         manifest = render_manifest(
@@ -577,6 +581,117 @@ class RunProposalCalibrationTests(unittest.TestCase):
                     manifest_json["gap_priority_rows"][1]["action_key"],
                     "regenerate_missing_requirements",
                 )
+        finally:
+            calibration.load_snapshot = original_load_snapshot
+            calibration.export_readiness_report_markdown = original_export_readiness
+            calibration.extract_text = original_extract_text
+            calibration.render_report = original_render_report
+
+    def test_run_calibration_bundle_writes_comparison_when_previous_manifest_exists(self):
+        original_load_snapshot = calibration.load_snapshot
+        original_export_readiness = calibration.export_readiness_report_markdown
+        original_extract_text = calibration.extract_text
+        original_render_report = calibration.render_report
+
+        async def fake_load_snapshot(project_id):
+            return (
+                "Calibration Project",
+                [{"uid": "sec-a", "title": "Section A"}],
+                [
+                    GenerationSnapshot(
+                        id="gen-new",
+                        section_uid="sec-a",
+                        variant="1",
+                        text="New generated section",
+                        evidence_status="ok",
+                        selected=True,
+                        created_at="2026-01-02T00:00:00",
+                    ),
+                ],
+            )
+
+        async def fake_export_readiness(project_id, out_path):
+            out_path.write_text("# DOCX export readiness report", encoding="utf-8")
+            return {"status": "ready", "blockers": []}
+
+        def fake_extract_text(path):
+            if path.name == "reference.md":
+                return "# Reference\n\nReference section"
+            return path.read_text(encoding="utf-8")
+
+        def fake_render_report(**kwargs):
+            return "\n".join(
+                [
+                    "# Gap report",
+                    "- Content sections compared in reference TP: `1`",
+                    "- Content sections compared in generated TP: `1`",
+                    "- Word-like tokens в референтното ТП: `1000`",
+                    "- Word-like tokens в генерираното ТП: `500`",
+                    "",
+                    "## Section Gap Diagnostics",
+                    "",
+                    "| Reference section | Best generated section | Coverage | Volume | Gap reasons | Calibration focus |",
+                    "| --- | --- | ---: | ---: | --- | --- |",
+                    "| A | A generated | 0.90 | 0.50 | acceptable alignment | monitor |",
+                ]
+            )
+
+        calibration.load_snapshot = fake_load_snapshot
+        calibration.export_readiness_report_markdown = fake_export_readiness
+        calibration.extract_text = fake_extract_text
+        calibration.render_report = fake_render_report
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                previous_manifest = Path(tmp) / "previous.json"
+                previous_manifest.write_text(
+                    json.dumps(
+                        {
+                            "schema_version": "calibration_manifest.v1",
+                            "project_id": "project-1",
+                            "calibration_gates": {
+                                "snapshot_warnings": 2,
+                                "docx_readiness_status": "blocked",
+                                "docx_readiness_blockers": 3,
+                            },
+                            "gap_quality_scorecard": {
+                                "generated_reference_volume_ratio": 0.20,
+                                "content_generated_sections": 1,
+                            },
+                            "gap_calibration_focus_counts": {
+                                "drafting depth": 2,
+                            },
+                            "readiness_actions": [
+                                {"action_key": "regenerate_stale"}
+                            ],
+                            "gap_priority_rows": [
+                                {"action_key": "regenerate_quality_depth"}
+                            ],
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+
+                paths = asyncio.run(
+                    run_calibration_bundle(
+                        project_id="project-1",
+                        reference=Path("reference.md"),
+                        out_dir=Path(tmp) / "bundle",
+                        tenders=[],
+                        previous_manifest=previous_manifest,
+                    )
+                )
+
+                comparison = paths["comparison"].read_text(encoding="utf-8")
+                self.assertIn("Calibration manifest comparison", comparison)
+                self.assertIn(
+                    "| readiness blockers | 3 | 0 | -3 | improved |",
+                    comparison,
+                )
+                self.assertIn(
+                    "| generated/reference volume ratio | 0.20 | 0.50 | +0.30 | improved |",
+                    comparison,
+                )
+                self.assertIn("proceed to human review/export", comparison)
         finally:
             calibration.load_snapshot = original_load_snapshot
             calibration.export_readiness_report_markdown = original_export_readiness

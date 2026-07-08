@@ -116,6 +116,7 @@
 - Enriched calibration gap priority rows with executable remediation action metadata for drafting-depth and grounding/checklist gaps, while keeping outline-mapping gaps as manual review targets until a safe structural regeneration flow exists.
 - Extended the calibration manifest action runner to include executable gap-priority actions in addition to readiness actions, deduplicating shared bulk remediation endpoints so dry-run and execute flows do not enqueue the same regeneration twice.
 - Added a calibration manifest comparison script for before/after remediation review, reporting readiness blocker deltas, snapshot warning deltas, generated/reference volume-ratio movement, gap-focus changes, executable action changes, and the next universal review step.
+- Connected before/after calibration comparison into the calibration bundle itself through an optional previous manifest input, so reruns can write a proof report alongside snapshots, readiness, gap analysis, and manifest outputs.
 
 ## Active Goals
 

@@ -8,6 +8,10 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from compare_calibration_manifests import (
+    load_manifest as load_comparison_manifest,
+    render_comparison as render_manifest_comparison,
+)
 from export_selected_proposal_markdown import (
     GenerationSnapshot,
     load_snapshot,
@@ -477,6 +481,7 @@ def calibration_output_paths(out_dir: Path) -> dict[str, Path]:
         "gap_report": out_dir / "proposal_gap_report.md",
         "manifest": out_dir / "calibration_manifest.md",
         "manifest_json": out_dir / "calibration_manifest.json",
+        "comparison": out_dir / "calibration_manifest_comparison.md",
     }
 
 
@@ -726,6 +731,7 @@ async def run_calibration_bundle(
     reference: Path,
     out_dir: Path,
     tenders: list[Path],
+    previous_manifest: Path | None = None,
 ) -> dict[str, Path]:
     paths = calibration_output_paths(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -790,23 +796,32 @@ async def run_calibration_bundle(
         ),
         encoding="utf-8",
     )
+    manifest_json_text = render_manifest_json(
+        project_id=project_id,
+        reference=reference,
+        selected_snapshot=paths["selected_snapshot"],
+        effective_snapshot=paths["effective_snapshot"],
+        readiness_report=paths["readiness_report"],
+        gap_report=paths["gap_report"],
+        tenders=tenders,
+        readiness=readiness,
+        snapshot_warnings=warning_count,
+        gap_summary=gap_summary,
+        gap_focus_counts=gap_focus_counts,
+        gap_priority_rows=gap_priority_rows,
+    )
     paths["manifest_json"].write_text(
-        render_manifest_json(
-            project_id=project_id,
-            reference=reference,
-            selected_snapshot=paths["selected_snapshot"],
-            effective_snapshot=paths["effective_snapshot"],
-            readiness_report=paths["readiness_report"],
-            gap_report=paths["gap_report"],
-            tenders=tenders,
-            readiness=readiness,
-            snapshot_warnings=warning_count,
-            gap_summary=gap_summary,
-            gap_focus_counts=gap_focus_counts,
-            gap_priority_rows=gap_priority_rows,
-        ),
+        manifest_json_text,
         encoding="utf-8",
     )
+    if previous_manifest:
+        paths["comparison"].write_text(
+            render_manifest_comparison(
+                load_comparison_manifest(previous_manifest),
+                json.loads(manifest_json_text),
+            ),
+            encoding="utf-8",
+        )
     return paths
 
 
@@ -831,7 +846,20 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         type=Path,
         help="Tender/source document. Can be passed multiple times.",
     )
-    parser.add_argument("--out-dir", required=True, type=Path, help="Bundle output directory")
+    parser.add_argument(
+        "--out-dir",
+        required=True,
+        type=Path,
+        help="Bundle output directory",
+    )
+    parser.add_argument(
+        "--previous-manifest",
+        type=Path,
+        help=(
+            "Optional previous calibration_manifest.json. When set, writes a "
+            "before/after calibration_manifest_comparison.md report."
+        ),
+    )
     return parser.parse_args(argv)
 
 
@@ -843,6 +871,7 @@ def main(argv: list[str]) -> int:
             reference=args.reference,
             out_dir=args.out_dir,
             tenders=args.tender,
+            previous_manifest=args.previous_manifest,
         )
     )
     print(f"Wrote {paths['manifest']}")
@@ -851,6 +880,8 @@ def main(argv: list[str]) -> int:
     print(f"Wrote {paths['effective_snapshot']}")
     print(f"Wrote {paths['readiness_report']}")
     print(f"Wrote {paths['gap_report']}")
+    if args.previous_manifest:
+        print(f"Wrote {paths['comparison']}")
     return 0
 
 
