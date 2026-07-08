@@ -62,7 +62,56 @@ class CalibrationManifestActionTests(unittest.TestCase):
         self.assertEqual(len(actions), 1)
         self.assertEqual(actions[0].action_key, "regenerate_stale")
         self.assertEqual(actions[0].api_method, "POST")
+        self.assertEqual(actions[0].source, "readiness_actions")
         self.assertEqual(actions[0].section_count, 2)
+
+    def test_manifest_actions_include_executable_gap_rows_without_duplicates(self):
+        manifest = {
+            "readiness_actions": [
+                {
+                    "action_key": "regenerate_quality_depth",
+                    "api_method": "POST",
+                    "api_path": "/api/v1/agents/project-1/remediation-actions/regenerate_quality_depth",
+                    "section_count": 3,
+                }
+            ],
+            "gap_priority_rows": [
+                {
+                    "focus": "drafting depth",
+                    "reference_section": "Quality",
+                    "action_key": "regenerate_quality_depth",
+                    "api_method": "POST",
+                    "api_path": "/api/v1/agents/project-1/remediation-actions/regenerate_quality_depth",
+                },
+                {
+                    "focus": "grounding and checklist coverage",
+                    "reference_section": "Environment",
+                    "action_key": "regenerate_missing_requirements",
+                    "api_method": "POST",
+                    "api_path": "/api/v1/agents/project-1/remediation-actions/regenerate_missing_requirements",
+                },
+                {
+                    "focus": "outline mapping",
+                    "reference_section": "Organization",
+                    "ui_action": "Review outline mapping",
+                },
+            ],
+        }
+
+        actions = manifest_actions(manifest)
+
+        self.assertEqual(
+            [action.action_key for action in actions],
+            ["regenerate_quality_depth", "regenerate_missing_requirements"],
+        )
+        self.assertEqual(actions[0].source, "readiness_actions")
+        self.assertEqual(actions[0].section_count, 3)
+        self.assertEqual(actions[1].source, "gap_priority_rows")
+        self.assertEqual(actions[1].section_count, 1)
+        self.assertEqual(
+            actions[1].summary,
+            "gap=grounding and checklist coverage, reference=Environment",
+        )
 
     def test_action_url_substitutes_project_id_template(self):
         url = action_url(
@@ -120,7 +169,7 @@ class CalibrationManifestActionTests(unittest.TestCase):
                 json.dumps(
                     {
                         "project_id": "project-1",
-                        "readiness_actions": [
+                        "gap_priority_rows": [
                             {
                                 "action_key": "regenerate_stale",
                                 "api_method": "POST",

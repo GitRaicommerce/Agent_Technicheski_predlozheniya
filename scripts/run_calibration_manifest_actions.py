@@ -18,6 +18,7 @@ class ManifestAction:
     action_key: str
     api_method: str
     api_path: str
+    source: str = "readiness_actions"
     blocker_code: str = ""
     section_count: int = 0
     summary: str = ""
@@ -31,29 +32,67 @@ def load_manifest(path: Path) -> dict[str, Any]:
 
 
 def manifest_actions(manifest: dict[str, Any]) -> list[ManifestAction]:
-    raw_actions = manifest.get("readiness_actions") or []
-    if not isinstance(raw_actions, list):
+    raw_readiness_actions = manifest.get("readiness_actions") or []
+    if not isinstance(raw_readiness_actions, list):
         raise ValueError("Manifest readiness_actions must be a list")
+    raw_gap_rows = manifest.get("gap_priority_rows") or []
+    if not isinstance(raw_gap_rows, list):
+        raise ValueError("Manifest gap_priority_rows must be a list")
 
     actions: list[ManifestAction] = []
-    for index, item in enumerate(raw_actions, start=1):
+    seen: set[tuple[str, str]] = set()
+    for index, item in enumerate(raw_readiness_actions, start=1):
         if not isinstance(item, dict):
-            raise ValueError(f"Manifest action #{index} must be an object")
+            raise ValueError(f"Manifest readiness action #{index} must be an object")
         action_key = str(item.get("action_key") or "").strip()
         api_method = str(item.get("api_method") or "POST").strip().upper()
         api_path = str(item.get("api_path") or "").strip()
         if not action_key or not api_path:
             raise ValueError(
-                f"Manifest action #{index} must include action_key and api_path"
+                "Manifest readiness action "
+                f"#{index} must include action_key and api_path"
             )
+        seen.add((action_key, api_path))
         actions.append(
             ManifestAction(
                 action_key=action_key,
                 api_method=api_method,
                 api_path=api_path,
+                source="readiness_actions",
                 blocker_code=str(item.get("blocker_code") or ""),
                 section_count=int(item.get("section_count") or 0),
                 summary=str(item.get("summary") or ""),
+            )
+        )
+
+    for index, item in enumerate(raw_gap_rows, start=1):
+        if not isinstance(item, dict):
+            raise ValueError(f"Manifest gap priority row #{index} must be an object")
+        action_key = str(item.get("action_key") or "").strip()
+        api_path = str(item.get("api_path") or "").strip()
+        if not action_key or not api_path:
+            continue
+        dedupe_key = (action_key, api_path)
+        if dedupe_key in seen:
+            continue
+        seen.add(dedupe_key)
+        api_method = str(item.get("api_method") or "POST").strip().upper()
+        reference_section = str(item.get("reference_section") or "").strip()
+        focus = str(item.get("focus") or "").strip()
+        summary_parts = []
+        if focus:
+            summary_parts.append(f"gap={focus}")
+        if reference_section:
+            summary_parts.append(f"reference={reference_section}")
+        actions.append(
+            ManifestAction(
+                action_key=action_key,
+                api_method=api_method,
+                api_path=api_path,
+                source="gap_priority_rows",
+                blocker_code=focus,
+                section_count=1,
+                summary=", ".join(summary_parts),
             )
         )
     return actions
@@ -121,6 +160,7 @@ def render_action_line(action: ManifestAction, url: str) -> str:
         action.action_key,
         action.api_method,
         url,
+        f"source={action.source}",
         f"sections={action.section_count}",
     ]
     if action.blocker_code:
@@ -167,7 +207,7 @@ def main(argv: list[str]) -> int:
                 result = execute_action(action, url=url, timeout=args.timeout)
                 print(json.dumps(result, ensure_ascii=False, indent=2))
         if not selected:
-            print("No readiness actions in manifest")
+            print("No executable actions in manifest")
         return 0
     except (ValueError, OSError, urllib.error.URLError) as exc:
         print(f"error: {exc}", file=sys.stderr)
