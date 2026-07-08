@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from app.agents.drafting_blueprint import build_drafting_blueprint
 from app.agents.proposal_quality import assess_generation_depth
 from app.agents.requirements import (
+    RequirementItem,
     SPECIFIC_REQUIREMENTS_CATEGORY,
     SUGGESTED_SECTIONS,
     extract_requirement_checklist,
@@ -52,6 +53,33 @@ def _coverage_for(requirement_items: list[dict]) -> dict:
             for item in requirement_items
         ],
     }
+
+
+def _requirement_item(
+    requirement_id: str,
+    text: str,
+    *,
+    category: str,
+    category_label: str,
+    topic: str,
+    suggested_section: str,
+) -> RequirementItem:
+    return RequirementItem(
+        id=requirement_id,
+        text=text,
+        category=category,
+        category_label=category_label,
+        topic=topic,
+        importance="mandatory",
+        suggested_section=suggested_section,
+        coverage_question=f"Is {topic} covered?",
+        source_chunk_id=f"chunk-{requirement_id}",
+        source_page=1,
+        source_section_path="Technical proposal requirements",
+        source_file="tender.pdf",
+        source_excerpt=text,
+        evidence_cues=[],
+    )
 
 
 def test_no_outline_complex_tender_gets_checklist_outline_blueprint_and_depth_gate():
@@ -152,6 +180,114 @@ def test_no_outline_complex_tender_gets_checklist_outline_blueprint_and_depth_ga
         drafting_blueprint=blueprint,
     )
     assert developed_result["status"] == "ok"
+
+
+def test_common_structure_plan_preserves_subsections_and_checklist_topics():
+    construction_uid = "construction-organization"
+    explicit_sections = [
+        {
+            "uid": "concept",
+            "title": "Concept and approach",
+            "required": True,
+            "requirements": ["Describe the approach."],
+            "source_refs": ["chunk-concept"],
+            "subsections": [],
+        },
+        {
+            "uid": "design",
+            "title": "Design development",
+            "required": True,
+            "requirements": ["Describe design activities."],
+            "source_refs": ["chunk-design"],
+            "subsections": [],
+        },
+        {
+            "uid": construction_uid,
+            "title": "Construction organization",
+            "required": True,
+            "requirements": ["Describe construction organization."],
+            "source_refs": ["chunk-construction"],
+            "subsections": [
+                {
+                    "uid": "stakeholders",
+                    "title": "Stakeholders and participants",
+                    "required": True,
+                    "requirements": ["Identify stakeholders."],
+                    "source_refs": ["chunk-stakeholders"],
+                    "subsections": [],
+                },
+                {
+                    "uid": "internal-communication",
+                    "title": "Internal communication, coordination and control",
+                    "required": True,
+                    "requirements": ["Describe internal communication."],
+                    "source_refs": ["chunk-communication"],
+                    "subsections": [],
+                },
+            ],
+        },
+        {
+            "uid": "quality",
+            "title": "Quality control",
+            "required": True,
+            "requirements": ["Describe quality controls."],
+            "source_refs": ["chunk-quality"],
+            "subsections": [],
+        },
+        {
+            "uid": "risk",
+            "title": "Risk management",
+            "required": True,
+            "requirements": ["Describe risk management."],
+            "source_refs": ["chunk-risk"],
+            "subsections": [],
+        },
+    ]
+    requirements = [
+        _requirement_item(
+            "req-stakeholders",
+            "Describe stakeholders, responsibilities and interfaces.",
+            category="organization",
+            category_label="Construction organization",
+            topic="stakeholder responsibilities",
+            suggested_section="Construction organization",
+        ),
+        _requirement_item(
+            "req-communication",
+            "Describe communication channel, coordination control and escalation.",
+            category="communication",
+            category_label="Communication",
+            topic="communication escalation",
+            suggested_section="Construction organization",
+        ),
+    ]
+
+    outline = _build_deterministic_outline(
+        explicit_numbered_sections=explicit_sections,
+        domain_outline_sections=[],
+        mandatory_sections=[],
+        requirement_checklist=requirements,
+    )
+
+    construction = next(
+        section
+        for section in outline["sections"]
+        if section["uid"] == construction_uid
+    )
+    guidance = construction["drafting_guidance"]
+
+    assert construction["requirement_ids"] == [
+        "req-stakeholders",
+        "req-communication",
+    ]
+    assert guidance["requirement_count"] == 2
+    assert guidance["required_subtopics"][:2] == [
+        "Stakeholders and participants",
+        "Internal communication, coordination and control",
+    ]
+    assert "stakeholder responsibilities" in guidance["required_subtopics"]
+    assert "communication escalation" in guidance["required_subtopics"]
+    assert "Preserve the subsection order" in " ".join(guidance["instructions"])
 
 
 def test_explicit_outline_keeps_sections_and_attaches_matching_checklist_items():

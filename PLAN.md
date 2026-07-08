@@ -112,6 +112,7 @@
 - Added a safe calibration manifest action runner script with dry-run by default and explicit `--execute` selection, making manifest remediation paths usable in repeatable calibration workflows outside the web UI.
 - Added a universal drafting quality-repair pass before saving generations: if the first draft misses checklist coverage or fails the same depth diagnostics used by export readiness, the drafting agent asks for one targeted rewrite and stores generation-depth diagnostics with the saved variant.
 - Added a universal section structure plan to outline sections and drafting prompts, derived from checklist topics, subsections, source references, and writing instructions so generated text preserves tender-specific subtopics instead of collapsing them into generic paragraphs.
+- Added common-scenario regression coverage proving that the section structure plan preserves explicit subsections and mapped checklist topics for a complex construction-organization section.
 
 ## Active Goals
 
