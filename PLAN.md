@@ -115,6 +115,7 @@
 - Added common-scenario regression coverage proving that the section structure plan preserves explicit subsections and mapped checklist topics for a complex construction-organization section.
 - Enriched calibration gap priority rows with executable remediation action metadata for drafting-depth and grounding/checklist gaps, while keeping outline-mapping gaps as manual review targets until a safe structural regeneration flow exists.
 - Extended the calibration manifest action runner to include executable gap-priority actions in addition to readiness actions, deduplicating shared bulk remediation endpoints so dry-run and execute flows do not enqueue the same regeneration twice.
+- Added a calibration manifest comparison script for before/after remediation review, reporting readiness blocker deltas, snapshot warning deltas, generated/reference volume-ratio movement, gap-focus changes, executable action changes, and the next universal review step.
 
 ## Active Goals
 
@@ -128,7 +129,7 @@
 1. Use `scripts/run_calibration_manifest_actions.py` or the Generations bulk duplicate resolver to clear Pernik's legacy duplicate selected generations, then re-run the aggregated export readiness check.
 2. Use the calibration manifest action runner or Generations panel bulk stale-regeneration action for Pernik after duplicate selections are resolved; then use the bulk missing-requirements and quality/depth regeneration actions for any remaining requirement-coverage or blueprint-aware shallow sections reported by export preflight or gap-priority diagnostics.
 3. After resolving Pernik's duplicate selected variants and stale selected sections, regenerate affected sections so the section structure plan and drafting quality-repair pass can improve subtopic coverage, checklist coverage, and depth before export readiness is checked again.
-4. Re-run the Pernik calibration bundle after remediation and compare the regenerated output against the winning proposal, focusing on the manifest word-volume scorecard, section-level drafting-depth diagnostics, and structured gap remediation actions.
+4. Re-run the Pernik calibration bundle after remediation and compare the regenerated output against the winning proposal, focusing on the manifest word-volume scorecard, section-level drafting-depth diagnostics, structured gap remediation actions, and the before/after calibration manifest comparison report.
 5. Expand generated documentation with more precise backend endpoint and workflow coverage.
 6. Continue broadening common tender regression coverage with more real-world noisy PDF extraction and DOCX readiness combinations.
 
