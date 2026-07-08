@@ -35,6 +35,22 @@ READINESS_ACTION_KEYS = {
     "missing_requirements": "regenerate_missing_requirements",
     "shallow_sections": "regenerate_quality_depth",
 }
+GAP_FOCUS_ACTION_KEYS = {
+    "drafting depth": READINESS_ACTION_KEYS["shallow_sections"],
+    "grounding and checklist coverage": READINESS_ACTION_KEYS[
+        "missing_requirements"
+    ],
+}
+GAP_FOCUS_UI_ACTIONS = {
+    "drafting depth": "Regenerate detailed",
+    "grounding and checklist coverage": "Regenerate coverage",
+    "outline mapping": "Review outline mapping",
+}
+
+
+def _remediation_api_path(project_id: str | None, action_key: str) -> str:
+    project_part = project_id or "{project_id}"
+    return f"/api/v1/agents/{project_part}/remediation-actions/{action_key}"
 
 
 def _display_path(path: Path) -> str:
@@ -175,6 +191,27 @@ def gap_regeneration_priority_rows(
     return rows[:limit]
 
 
+def enrich_gap_priority_rows(
+    rows: list[dict[str, Any]],
+    *,
+    project_id: str | None = None,
+) -> list[dict[str, Any]]:
+    enriched: list[dict[str, Any]] = []
+    for row in rows:
+        focus = str(row.get("focus") or "")
+        action_key = GAP_FOCUS_ACTION_KEYS.get(focus)
+        item = dict(row)
+        ui_action = GAP_FOCUS_UI_ACTIONS.get(focus)
+        if ui_action:
+            item["ui_action"] = ui_action
+        if action_key:
+            item["action_key"] = action_key
+            item["api_method"] = "POST"
+            item["api_path"] = _remediation_api_path(project_id, action_key)
+        enriched.append(item)
+    return enriched
+
+
 def _section_label(section: dict[str, Any]) -> str:
     for key in ("section_title", "title", "section_uid"):
         value = section.get(key)
@@ -293,10 +330,6 @@ def structured_readiness_priority_actions(
     readiness = readiness or {}
     actions: list[dict[str, Any]] = []
 
-    def api_path(action_key: str) -> str:
-        project_part = project_id or "{project_id}"
-        return f"/api/v1/agents/{project_part}/remediation-actions/{action_key}"
-
     duplicate_sections = [
         item
         for item in readiness.get("duplicate_selected_sections") or []
@@ -315,7 +348,10 @@ def structured_readiness_priority_actions(
                 "blocker_code": "duplicate_selected",
                 "action_key": READINESS_ACTION_KEYS["duplicate_selected"],
                 "api_method": "POST",
-                "api_path": api_path(READINESS_ACTION_KEYS["duplicate_selected"]),
+                "api_path": _remediation_api_path(
+                    project_id,
+                    READINESS_ACTION_KEYS["duplicate_selected"],
+                ),
                 "ui_action": "Остави най-новите",
                 "section_count": duplicate_count,
                 "section_labels": labels,
@@ -344,7 +380,10 @@ def structured_readiness_priority_actions(
                 "blocker_code": "stale_evidence",
                 "action_key": READINESS_ACTION_KEYS["stale_evidence"],
                 "api_method": "POST",
-                "api_path": api_path(READINESS_ACTION_KEYS["stale_evidence"]),
+                "api_path": _remediation_api_path(
+                    project_id,
+                    READINESS_ACTION_KEYS["stale_evidence"],
+                ),
                 "ui_action": "Regenerate",
                 "section_count": stale_count,
                 "section_labels": labels,
@@ -375,7 +414,10 @@ def structured_readiness_priority_actions(
                 "blocker_code": "missing_requirements",
                 "action_key": READINESS_ACTION_KEYS["missing_requirements"],
                 "api_method": "POST",
-                "api_path": api_path(READINESS_ACTION_KEYS["missing_requirements"]),
+                "api_path": _remediation_api_path(
+                    project_id,
+                    READINESS_ACTION_KEYS["missing_requirements"],
+                ),
                 "ui_action": "Regenerate coverage",
                 "section_count": missing_count,
                 "section_labels": labels,
@@ -413,7 +455,10 @@ def structured_readiness_priority_actions(
                 "blocker_code": "shallow_sections",
                 "action_key": READINESS_ACTION_KEYS["shallow_sections"],
                 "api_method": "POST",
-                "api_path": api_path(READINESS_ACTION_KEYS["shallow_sections"]),
+                "api_path": _remediation_api_path(
+                    project_id,
+                    READINESS_ACTION_KEYS["shallow_sections"],
+                ),
                 "ui_action": "Regenerate detailed",
                 "section_count": quality_count,
                 "section_labels": labels,
@@ -458,7 +503,10 @@ def render_manifest(
     ]
     gap_focus_counts = gap_focus_counts or {}
     gap_summary = gap_summary or {}
-    gap_priority_rows = gap_priority_rows or []
+    gap_priority_rows = enrich_gap_priority_rows(
+        gap_priority_rows or [],
+        project_id=project_id,
+    )
     readiness_actions = readiness_priority_actions(readiness)
     lines = [
         "# Proposal calibration bundle",
@@ -542,8 +590,16 @@ def render_manifest(
         next_index = 1
     if gap_priority_rows:
         for row in gap_priority_rows:
+            action_suffix = (
+                f" action_key=`{row['action_key']}`"
+                if row.get("action_key")
+                else f" ui_action=`{row.get('ui_action')}`"
+                if row.get("ui_action")
+                else ""
+            )
             lines.append(
-                f"{next_index}. Gap `{row['focus']}`: regenerate/reference-align "
+                f"{next_index}. Gap `{row['focus']}`{action_suffix}: "
+                "regenerate/reference-align "
                 f"`{row['reference_section']}` using generated section "
                 f"`{row['generated_section']}` as the nearest current base "
                 f"(coverage `{row['coverage']:.2f}`, volume `{row['volume']:.2f}`, "
@@ -628,7 +684,10 @@ def render_manifest_json(
             readiness,
             project_id=project_id,
         ),
-        "gap_priority_rows": gap_priority_rows or [],
+        "gap_priority_rows": enrich_gap_priority_rows(
+            gap_priority_rows or [],
+            project_id=project_id,
+        ),
     }
     return json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
 

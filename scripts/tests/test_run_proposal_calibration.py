@@ -23,6 +23,7 @@ calibration_output_paths = calibration.calibration_output_paths
 gap_calibration_focus_counts = calibration.gap_calibration_focus_counts
 gap_regeneration_priority_rows = calibration.gap_regeneration_priority_rows
 gap_summary_metrics = calibration.gap_summary_metrics
+enrich_gap_priority_rows = calibration.enrich_gap_priority_rows
 readiness_priority_actions = calibration.readiness_priority_actions
 render_manifest = calibration.render_manifest
 render_manifest_json = calibration.render_manifest_json
@@ -134,7 +135,11 @@ class RunProposalCalibrationTests(unittest.TestCase):
             manifest,
         )
         self.assertIn("`Остави най-новите`", manifest)
-        self.assertIn("Gap `outline mapping`: regenerate/reference-align", manifest)
+        self.assertIn(
+            "Gap `outline mapping` ui_action=`Review outline mapping`: "
+            "regenerate/reference-align",
+            manifest,
+        )
         self.assertIn("Organization", manifest)
 
     def test_gap_summary_metrics_reads_report_summary(self):
@@ -227,6 +232,38 @@ class RunProposalCalibrationTests(unittest.TestCase):
         self.assertEqual(rows[0]["focus"], "outline mapping")
         self.assertEqual(rows[1]["focus"], "drafting depth")
         self.assertEqual(rows[2]["focus"], "grounding and checklist coverage")
+
+    def test_enrich_gap_priority_rows_maps_focus_to_real_remediation_actions(self):
+        rows = enrich_gap_priority_rows(
+            [
+                {"focus": "drafting depth", "reference_section": "Quality"},
+                {
+                    "focus": "grounding and checklist coverage",
+                    "reference_section": "Environment",
+                },
+                {"focus": "outline mapping", "reference_section": "Organization"},
+            ],
+            project_id="project-1",
+        )
+
+        self.assertEqual(rows[0]["action_key"], "regenerate_quality_depth")
+        self.assertEqual(rows[0]["ui_action"], "Regenerate detailed")
+        self.assertEqual(
+            rows[0]["api_path"],
+            "/api/v1/agents/project-1/remediation-actions/regenerate_quality_depth",
+        )
+        self.assertEqual(
+            rows[1]["action_key"],
+            "regenerate_missing_requirements",
+        )
+        self.assertEqual(rows[1]["ui_action"], "Regenerate coverage")
+        self.assertEqual(
+            rows[1]["api_path"],
+            "/api/v1/agents/project-1/remediation-actions/regenerate_missing_requirements",
+        )
+        self.assertNotIn("action_key", rows[2])
+        self.assertNotIn("api_path", rows[2])
+        self.assertEqual(rows[2]["ui_action"], "Review outline mapping")
 
     def test_readiness_priority_actions_summarize_specific_sections(self):
         actions = readiness_priority_actions(
@@ -355,6 +392,15 @@ class RunProposalCalibrationTests(unittest.TestCase):
             "/api/v1/agents/project-1/remediation-actions/regenerate_missing_requirements",
         )
         self.assertEqual(manifest["gap_priority_rows"][0]["focus"], "drafting depth")
+        self.assertEqual(
+            manifest["gap_priority_rows"][0]["action_key"],
+            "regenerate_quality_depth",
+        )
+        self.assertEqual(manifest["gap_priority_rows"][0]["api_method"], "POST")
+        self.assertEqual(
+            manifest["gap_priority_rows"][0]["api_path"],
+            "/api/v1/agents/project-1/remediation-actions/regenerate_quality_depth",
+        )
 
     def test_snapshot_warning_count_reads_warning_section_only(self):
         count = snapshot_warning_count(
@@ -519,8 +565,17 @@ class RunProposalCalibrationTests(unittest.TestCase):
                     paths["manifest"].read_text(encoding="utf-8"),
                 )
                 self.assertIn(
-                    "Gap `drafting depth`: regenerate/reference-align `A`",
+                    "Gap `drafting depth` action_key=`regenerate_quality_depth`: "
+                    "regenerate/reference-align `A`",
                     paths["manifest"].read_text(encoding="utf-8"),
+                )
+                self.assertEqual(
+                    manifest_json["gap_priority_rows"][0]["action_key"],
+                    "regenerate_quality_depth",
+                )
+                self.assertEqual(
+                    manifest_json["gap_priority_rows"][1]["action_key"],
+                    "regenerate_missing_requirements",
                 )
         finally:
             calibration.load_snapshot = original_load_snapshot
