@@ -41,6 +41,27 @@ def _topic_rich_blueprint(topic_count: int) -> dict:
     }
 
 
+def _environment_topic_blueprint() -> dict:
+    topics = ["dust", "waste", "soil", "water"]
+    return {
+        "groups": [
+            {
+                "category": "environment",
+                "label": "Environmental protection",
+                "requirements": [
+                    {"id": f"req-{topic}"}
+                    for topic in topics
+                ],
+                "topics": topics,
+                "topic_details": [
+                    {"topic": topic, "requirement_ids": [f"req-{topic}"]}
+                    for topic in topics
+                ],
+            }
+        ]
+    }
+
+
 def test_generation_depth_flags_short_text_with_multiple_requirements():
     coverage = {
         "total": 3,
@@ -163,6 +184,46 @@ def test_generation_depth_accepts_developed_blueprint_structured_text():
     assert result["blueprint_group_count"] == 6
     assert result["word_count"] >= result["min_words"]
     assert result["sentence_count"] >= result["min_sentences"]
+
+
+def test_generation_depth_rejects_long_text_with_uneven_blueprint_distribution():
+    coverage = {
+        "total": 4,
+        "covered": 4,
+        "missing": 0,
+        "missing_ids": [],
+    }
+    dust_only_sentence = (
+        "The environmental section develops dust suppression with responsible "
+        "roles, monitoring records, corrective actions, control points, "
+        "acceptance evidence, reporting sequence, and site coordination. "
+    )
+    balanced_sentence = (
+        "The environmental section covers dust suppression, waste segregation, "
+        "soil protection, and water pollution prevention with responsible "
+        "roles, monitoring records, corrective actions, control points, "
+        "acceptance evidence, reporting sequence, and site coordination. "
+    )
+
+    dust_only = assess_generation_depth(
+        dust_only_sentence * 90,
+        coverage,
+        drafting_blueprint=_environment_topic_blueprint(),
+    )
+    balanced = assess_generation_depth(
+        balanced_sentence * 90,
+        coverage,
+        drafting_blueprint=_environment_topic_blueprint(),
+    )
+
+    assert dust_only["word_count"] >= dust_only["min_words"]
+    assert "uneven_blueprint_distribution" in {
+        issue["code"] for issue in dust_only["issues"]
+    }
+    assert dust_only["structure_coverage"]["covered_count"] == 1
+    assert dust_only["structure_coverage"]["required_count"] == 3
+    assert balanced["status"] == "ok"
+    assert balanced["structure_coverage"]["covered_count"] == 4
 
 
 def test_generation_depth_target_prompt_matches_export_gate_thresholds():

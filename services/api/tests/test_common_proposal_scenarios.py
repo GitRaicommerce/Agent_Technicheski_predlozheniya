@@ -169,17 +169,20 @@ def test_no_outline_complex_tender_gets_checklist_outline_blueprint_and_depth_ga
     assert shallow_result["suggested_words_per_structure"] >= 250
 
     developed_sentence = (
-        "The proposal identifies the concrete action, responsible role, "
-        "coordination point, control record, timing, acceptance evidence, "
-        "monitoring signal, escalation path, corrective action, and document "
-        "flow for each mapped tender requirement. "
+        "Предложението описва управление на риска с конкретни действия, "
+        "мерки за околна среда с ограничаване на праха и отпад, "
+        "контрол на качество с протоколи за приемане, комуникация с "
+        "възложителя, строителния надзор и компетентните институции, "
+        "както и специален ред за достъп до помещенията и предаване на ключове. "
+        "За всяка тема са посочени отговорни роли, срок, доказателства, "
+        "мониторинг, ескалация, коригиращи действия и документиране. "
     )
     developed_result = assess_generation_depth(
         developed_sentence * 90,
         _coverage_for(requirement_items),
         drafting_blueprint=blueprint,
     )
-    assert developed_result["status"] == "ok"
+    assert developed_result["status"] == "ok", developed_result["structure_coverage"]
 
 
 def test_common_structure_plan_preserves_subsections_and_checklist_topics():
@@ -513,6 +516,65 @@ def test_common_single_category_with_many_topics_still_requires_developed_depth(
     assert shallow_result["blueprint_topic_count"] == 4
     assert shallow_result["status"] == "needs_review"
     assert shallow_result["min_words"] >= 800
+
+
+def test_common_topic_rich_section_must_distribute_depth_across_topics():
+    requirement_items = [
+        {
+            "id": "req-dust",
+            "text": "Describe dust suppression measures during execution.",
+            "importance": "mandatory",
+            "category": "environment",
+            "category_label": "Environmental protection",
+            "topic": "dust",
+        },
+        {
+            "id": "req-waste",
+            "text": "Describe waste segregation, storage, transport, and handover.",
+            "importance": "mandatory",
+            "category": "environment",
+            "category_label": "Environmental protection",
+            "topic": "waste",
+        },
+        {
+            "id": "req-soil",
+            "text": "Describe soil protection and clean-up controls.",
+            "importance": "mandatory",
+            "category": "environment",
+            "category_label": "Environmental protection",
+            "topic": "soil",
+        },
+        {
+            "id": "req-water",
+            "text": "Describe water and pollution prevention controls.",
+            "importance": "mandatory",
+            "category": "environment",
+            "category_label": "Environmental protection",
+            "topic": "water",
+        },
+    ]
+    blueprint = build_drafting_blueprint(
+        section_title="Environmental protection",
+        requirement_items=requirement_items,
+    )
+    dust_only_sentence = (
+        "The environmental section develops dust suppression with responsible "
+        "roles, monitoring records, corrective actions, control points, "
+        "acceptance evidence, reporting sequence, and site coordination. "
+    )
+
+    result = assess_generation_depth(
+        dust_only_sentence * 90,
+        _coverage_for(requirement_items),
+        drafting_blueprint=blueprint,
+    )
+
+    assert result["word_count"] >= result["min_words"]
+    assert result["structure_coverage"]["anchor_count"] == 4
+    assert result["structure_coverage"]["covered_count"] == 1
+    assert "uneven_blueprint_distribution" in {
+        issue["code"] for issue in result["issues"]
+    }
 
 
 def test_common_blueprint_creates_response_plan_for_each_requirement():

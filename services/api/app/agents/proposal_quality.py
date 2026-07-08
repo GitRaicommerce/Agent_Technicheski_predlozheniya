@@ -12,10 +12,27 @@ MAX_MIN_WORDS = 1400
 BLUEPRINT_BASE_MIN_WORDS = 260
 MIN_WORDS_PER_BLUEPRINT_GROUP = 220
 MAX_BLUEPRINT_MIN_WORDS = 2400
+STRUCTURE_ANCHOR_STOP_WORDS = {
+    "category",
+    "group",
+    "requirement",
+    "requirements",
+    "specific",
+    "tender",
+    "topic",
+}
 
 
 def _word_count(text: str) -> int:
     return len(re.findall(r"[0-9A-Za-zА-Яа-я]+", text or ""))
+
+
+def _tokens(text: str) -> list[str]:
+    return [
+        token
+        for token in re.findall(r"[0-9A-Za-z\u0400-\u04FF]+", str(text or "").lower())
+        if len(token) >= 4 and token not in STRUCTURE_ANCHOR_STOP_WORDS
+    ]
 
 
 def _sentence_count(text: str) -> int:
@@ -89,6 +106,85 @@ def _blueprint_topic_count(drafting_blueprint: dict[str, Any] | None) -> int:
     return count
 
 
+def _blueprint_structure_anchors(
+    drafting_blueprint: dict[str, Any] | None,
+) -> list[dict[str, Any]]:
+    if not isinstance(drafting_blueprint, dict):
+        return []
+
+    groups = drafting_blueprint.get("groups")
+    if not isinstance(groups, list):
+        return []
+
+    anchors: list[dict[str, Any]] = []
+    for group in groups:
+        if not isinstance(group, dict):
+            continue
+        for topic in group.get("topic_details") or []:
+            if not isinstance(topic, dict) or not topic.get("topic"):
+                continue
+            terms = _tokens(str(topic.get("topic") or ""))
+            if terms:
+                anchors.append(
+                    {
+                        "label": str(topic.get("topic") or ""),
+                        "terms": terms,
+                        "kind": "topic",
+                    }
+                )
+
+    if len(anchors) > 1:
+        return anchors
+
+    anchors = []
+    for group in groups:
+        if not isinstance(group, dict):
+            continue
+        label = str(group.get("label") or group.get("category") or "")
+        topics = " ".join(str(topic) for topic in group.get("topics") or [] if topic)
+        terms = list(dict.fromkeys(_tokens(f"{label} {topics}")))
+        if terms:
+            anchors.append(
+                {
+                    "label": label or str(group.get("category") or "group"),
+                    "terms": terms,
+                    "kind": "group",
+                }
+            )
+    return anchors
+
+
+def _blueprint_structure_coverage(
+    text: str,
+    drafting_blueprint: dict[str, Any] | None,
+) -> dict[str, Any]:
+    anchors = _blueprint_structure_anchors(drafting_blueprint)
+    generated_tokens = set(_tokens(text))
+    covered: list[dict[str, Any]] = []
+    missing: list[dict[str, Any]] = []
+    for anchor in anchors:
+        matched_terms = sorted(set(anchor["terms"]) & generated_tokens)
+        target = {
+            "label": anchor["label"],
+            "kind": anchor["kind"],
+            "matched_terms": matched_terms,
+            "terms": anchor["terms"],
+        }
+        if matched_terms:
+            covered.append(target)
+        else:
+            missing.append(target)
+
+    required = ceil(len(anchors) * 0.7) if len(anchors) > 1 else 0
+    return {
+        "anchor_count": len(anchors),
+        "covered_count": len(covered),
+        "required_count": required,
+        "covered": covered,
+        "missing": missing,
+    }
+
+
 def _min_words_for_requirements(requirement_count: int) -> int:
     if requirement_count <= 0:
         return 0
@@ -143,6 +239,7 @@ def assess_generation_depth(
     sentence_count = _sentence_count(text)
     min_words = target["min_words"]
     min_sentences = target["min_sentences"]
+    structure_coverage = _blueprint_structure_coverage(text, drafting_blueprint)
     issues: list[dict[str, Any]] = []
 
     if (requirement_count > 0 or blueprint_structure_count > 1) and word_count < min_words:
@@ -178,6 +275,26 @@ def assess_generation_depth(
             }
         )
 
+    if (
+        structure_coverage["anchor_count"] > 1
+        and structure_coverage["covered_count"] < structure_coverage["required_count"]
+    ):
+        issues.append(
+            {
+                "code": "uneven_blueprint_distribution",
+                "message": (
+                    "Generated text does not visibly distribute developed "
+                    "coverage across the drafting blueprint groups/topics."
+                ),
+                "covered_structure_count": structure_coverage["covered_count"],
+                "required_structure_count": structure_coverage["required_count"],
+                "blueprint_anchor_count": structure_coverage["anchor_count"],
+                "missing_structure_labels": [
+                    item["label"] for item in structure_coverage["missing"]
+                ],
+            }
+        )
+
     return {
         "status": "needs_review" if issues else "ok",
         "word_count": word_count,
@@ -189,6 +306,7 @@ def assess_generation_depth(
         "min_words": min_words,
         "min_sentences": min_sentences,
         "suggested_words_per_structure": target["suggested_words_per_structure"],
+        "structure_coverage": structure_coverage,
         "issues": issues,
     }
 
