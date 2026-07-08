@@ -222,6 +222,27 @@ def render_export_readiness_report(readiness: dict[str, Any]) -> str:
                 )
                 + " |"
             )
+            structure_coverage = section.get("structure_coverage")
+            if isinstance(structure_coverage, dict):
+                anchor_count = _as_int(structure_coverage.get("anchor_count"))
+                required_count = _as_int(structure_coverage.get("required_count"))
+                covered_count = _as_int(structure_coverage.get("covered_count"))
+                if anchor_count:
+                    lines.append(
+                        "  - structure coverage: "
+                        f"{covered_count}/{required_count} required "
+                        f"({anchor_count} detected groups/topics)"
+                    )
+                missing_labels = [
+                    _truncate(item.get("label"), limit=80)
+                    for item in structure_coverage.get("missing") or []
+                    if isinstance(item, dict) and item.get("label")
+                ]
+                if missing_labels:
+                    lines.append(
+                        "  - missing groups/topics: "
+                        + _list(missing_labels[:8])
+                    )
 
     actions = _blocker_actions(readiness)
     lines.extend(["", "## Recommended Next Actions", ""])

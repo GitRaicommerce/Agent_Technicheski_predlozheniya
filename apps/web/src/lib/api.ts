@@ -376,6 +376,12 @@ export interface ExportQualitySection {
   min_words?: number;
   min_sentences?: number;
   suggested_words_per_structure?: number;
+  structure_coverage?: {
+    anchor_count?: number;
+    covered_count?: number;
+    required_count?: number;
+    missing?: Array<{ label?: string }>;
+  };
   issues?: Array<Record<string, unknown>>;
 }
 

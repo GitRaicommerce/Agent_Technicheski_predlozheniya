@@ -118,6 +118,7 @@
 - Added a calibration manifest comparison script for before/after remediation review, reporting readiness blocker deltas, snapshot warning deltas, generated/reference volume-ratio movement, gap-focus changes, executable action changes, and the next universal review step.
 - Connected before/after calibration comparison into the calibration bundle itself through an optional previous manifest input, so reruns can write a proof report alongside snapshots, readiness, gap analysis, and manifest outputs.
 - Tightened blueprint-aware generation depth checks so long sections must visibly distribute coverage across real drafting blueprint groups/topics, preventing a lengthy but one-topic narrative from passing quality gates for multi-topic tender sections.
+- Surfaced uneven blueprint distribution diagnostics through export readiness payloads, Markdown readiness reports, and the Generations remediation panel so users can see which groups/topics are missing before rerunning detailed regeneration.
 
 ## Active Goals
 

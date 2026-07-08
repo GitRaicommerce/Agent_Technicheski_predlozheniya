@@ -236,6 +236,10 @@ def _quality_review_issue(
         "blueprint_topic_count": assessment["blueprint_topic_count"],
         "min_words": assessment["min_words"],
         "min_sentences": assessment["min_sentences"],
+        "suggested_words_per_structure": assessment[
+            "suggested_words_per_structure"
+        ],
+        "structure_coverage": assessment.get("structure_coverage"),
         "issues": assessment["issues"],
     }
 

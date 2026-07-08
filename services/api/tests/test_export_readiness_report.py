@@ -60,7 +60,20 @@ def test_render_export_readiness_report_includes_blockers_and_actions():
                     "blueprint_group_count": 6,
                     "blueprint_topic_count": 8,
                     "suggested_words_per_structure": 270,
-                    "issues": [{"code": "too_short_for_requirements"}],
+                    "structure_coverage": {
+                        "anchor_count": 4,
+                        "covered_count": 1,
+                        "required_count": 3,
+                        "missing": [
+                            {"label": "waste"},
+                            {"label": "soil"},
+                            {"label": "water"},
+                        ],
+                    },
+                    "issues": [
+                        {"code": "too_short_for_requirements"},
+                        {"code": "uneven_blueprint_distribution"},
+                    ],
                 }
             ],
         }
@@ -74,7 +87,9 @@ def test_render_export_readiness_report_includes_blockers_and_actions():
     assert "`req-1` [needs operational evidence]: Describe the detailed schedule." in report
     assert "diagnostics: matched_ratio=0.8, coherent_ratio=0.75, operational_signals=1/2" in report
     assert "| Section | Words | Min words | Words per group/topic | Sentences | Min sentences | Requirements | Blueprint groups | Topics | Issues |" in report
-    assert "| Shallow section title (`sec-shallow`) | 180 | 1200 | 270 | 3 | 10 | 2 | 6 | 8 | too_short_for_requirements |" in report
+    assert "| Shallow section title (`sec-shallow`) | 180 | 1200 | 270 | 3 | 10 | 2 | 6 | 8 | too_short_for_requirements, uneven_blueprint_distribution |" in report
+    assert "structure coverage: 1/3 required (4 detected groups/topics)" in report
+    assert "missing groups/topics: waste, soil, water" in report
     assert "Остави най-новите" in report
     assert "Регенерирайте избраните stale секции" in report
 

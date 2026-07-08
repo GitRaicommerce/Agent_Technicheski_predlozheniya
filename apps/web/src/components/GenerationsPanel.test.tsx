@@ -649,6 +649,12 @@ describe("GenerationsPanel", () => {
             blueprint_group_count: 5,
             blueprint_topic_count: 6,
             suggested_words_per_structure: 280,
+            structure_coverage: {
+              anchor_count: 4,
+              covered_count: 1,
+              required_count: 3,
+              missing: [{ label: "waste" }, { label: "soil" }],
+            },
           },
         ]}
       />,
@@ -690,6 +696,10 @@ describe("GenerationsPanel", () => {
       .toHaveTextContent("180/1400 думи");
     expect(screen.getByTestId("generation-quality-depth-sec-quality"))
       .toHaveTextContent("280 думи на група/тема");
+    expect(screen.getByTestId("generation-quality-depth-sec-quality"))
+      .toHaveTextContent("1/3 покрити групи/теми");
+    expect(screen.getByTestId("generation-quality-depth-sec-quality"))
+      .toHaveTextContent("waste, soil");
   });
 
   it("focuses the attention filter when requested by export remediation", async () => {

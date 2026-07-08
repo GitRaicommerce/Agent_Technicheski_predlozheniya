@@ -1034,6 +1034,29 @@ function qualityDepthDiagnostics(detail: ExportQualitySection): string[] {
   if (typeof detail.suggested_words_per_structure === "number") {
     diagnostics.push(`${detail.suggested_words_per_structure} думи на група/тема`);
   }
+  const structureCoverage = detail.structure_coverage;
+  if (
+    structureCoverage &&
+    typeof structureCoverage.covered_count === "number" &&
+    typeof structureCoverage.required_count === "number" &&
+    structureCoverage.required_count > 0
+  ) {
+    diagnostics.push(
+      `${structureCoverage.covered_count}/${structureCoverage.required_count} покрити групи/теми`,
+    );
+    const missingLabels = Array.isArray(structureCoverage.missing)
+      ? structureCoverage.missing
+          .map((item) => item?.label)
+          .filter(
+            (label): label is string =>
+              typeof label === "string" && label.length > 0,
+          )
+          .slice(0, 4)
+      : [];
+    if (missingLabels.length > 0) {
+      diagnostics.push(`липсват: ${missingLabels.join(", ")}`);
+    }
+  }
   return diagnostics;
 }
 
