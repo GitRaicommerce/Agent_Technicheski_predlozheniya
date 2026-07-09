@@ -240,10 +240,15 @@ class RunProposalCalibrationTests(unittest.TestCase):
     def test_enrich_gap_priority_rows_maps_focus_to_real_remediation_actions(self):
         rows = enrich_gap_priority_rows(
             [
-                {"focus": "drafting depth", "reference_section": "Quality"},
+                {
+                    "focus": "drafting depth",
+                    "reference_section": "Quality",
+                    "generated_section": "Quality generated",
+                },
                 {
                     "focus": "grounding and checklist coverage",
                     "reference_section": "Environment",
+                    "generated_section": "Environmental measures",
                 },
                 {"focus": "outline mapping", "reference_section": "Organization"},
             ],
@@ -257,6 +262,10 @@ class RunProposalCalibrationTests(unittest.TestCase):
             "/api/v1/agents/project-1/remediation-actions/regenerate_quality_depth",
         )
         self.assertEqual(
+            rows[0]["request_json"],
+            {"section_title_hints": ["Quality generated"]},
+        )
+        self.assertEqual(
             rows[1]["action_key"],
             "regenerate_missing_requirements",
         )
@@ -264,6 +273,10 @@ class RunProposalCalibrationTests(unittest.TestCase):
         self.assertEqual(
             rows[1]["api_path"],
             "/api/v1/agents/project-1/remediation-actions/regenerate_missing_requirements",
+        )
+        self.assertEqual(
+            rows[1]["request_json"],
+            {"section_title_hints": ["Environmental measures"]},
         )
         self.assertNotIn("action_key", rows[2])
         self.assertNotIn("api_path", rows[2])
@@ -404,6 +417,10 @@ class RunProposalCalibrationTests(unittest.TestCase):
         self.assertEqual(
             manifest["gap_priority_rows"][0]["api_path"],
             "/api/v1/agents/project-1/remediation-actions/regenerate_quality_depth",
+        )
+        self.assertEqual(
+            manifest["gap_priority_rows"][0]["request_json"],
+            {"section_title_hints": ["A generated"]},
         )
 
     def test_snapshot_warning_count_reads_warning_section_only(self):
@@ -580,6 +597,10 @@ class RunProposalCalibrationTests(unittest.TestCase):
                 self.assertEqual(
                     manifest_json["gap_priority_rows"][1]["action_key"],
                     "regenerate_missing_requirements",
+                )
+                self.assertEqual(
+                    manifest_json["gap_priority_rows"][0]["request_json"],
+                    {"section_title_hints": ["A generated"]},
                 )
         finally:
             calibration.load_snapshot = original_load_snapshot

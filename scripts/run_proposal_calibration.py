@@ -212,6 +212,11 @@ def enrich_gap_priority_rows(
             item["action_key"] = action_key
             item["api_method"] = "POST"
             item["api_path"] = _remediation_api_path(project_id, action_key)
+            generated_section = str(item.get("generated_section") or "").strip()
+            if generated_section:
+                item["request_json"] = {
+                    "section_title_hints": [generated_section],
+                }
         enriched.append(item)
     return enriched
 

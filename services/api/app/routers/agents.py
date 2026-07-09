@@ -4,11 +4,12 @@ Agents router — оркестратор endpoint.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Any
 from types import SimpleNamespace
 import uuid
+import re
 import structlog
 from slowapi import Limiter
 from slowapi.util import get_remote_address
@@ -42,6 +43,11 @@ class OrchestratorRequest(BaseModel):
     project_id: str
     message: str
     history: list[ChatMessage] = []
+
+
+class RemediationActionRequest(BaseModel):
+    section_uids: list[str] = Field(default_factory=list)
+    section_title_hints: list[str] = Field(default_factory=list)
 
 
 @router.post("/chat")
@@ -635,6 +641,7 @@ async def regenerate_missing_requirements_generation_job(
 async def run_generation_remediation_action(
     project_id: str,
     action_key: str,
+    req: RemediationActionRequest | None = None,
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     project = await db.get(Project, project_id)
@@ -650,20 +657,48 @@ async def run_generation_remediation_action(
         }
 
     from app.agents.generation_jobs import (
+        create_drafting_job,
         create_drafting_quality_job,
         create_drafting_requirements_job,
         create_drafting_stale_job,
     )
 
+    generation_action_keys = {
+        "regenerate_stale",
+        "regenerate_missing_requirements",
+        "regenerate_quality_depth",
+    }
+    if action_key not in generation_action_keys:
+        raise HTTPException(status_code=404, detail="Unknown remediation action")
+
     try:
-        if action_key == "regenerate_stale":
+        requested_section_uids = await _remediation_target_section_uids(
+            project_id,
+            db,
+            req,
+        )
+        if requested_section_uids and action_key in {
+            "regenerate_missing_requirements",
+            "regenerate_quality_depth",
+        }:
+            job_type = (
+                "drafting_requirements"
+                if action_key == "regenerate_missing_requirements"
+                else "drafting_quality"
+            )
+            job = await create_drafting_job(
+                project=project,
+                db=db,
+                target_section_uids=requested_section_uids,
+                target_reason=f"calibration_gap:{action_key}",
+                job_type=job_type,
+            )
+        elif action_key == "regenerate_stale":
             job = await create_drafting_stale_job(project=project, db=db)
         elif action_key == "regenerate_missing_requirements":
             job = await create_drafting_requirements_job(project=project, db=db)
         elif action_key == "regenerate_quality_depth":
             job = await create_drafting_quality_job(project=project, db=db)
-        else:
-            raise HTTPException(status_code=404, detail="Unknown remediation action")
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
@@ -672,6 +707,73 @@ async def run_generation_remediation_action(
         "status": "queued",
         "result": _generation_job_response(job).model_dump(),
     }
+
+
+def _normalize_remediation_title(value: str) -> str:
+    return re.sub(r"\s+", " ", value).strip().casefold()
+
+
+async def _remediation_target_section_uids(
+    project_id: str,
+    db: AsyncSession,
+    req: RemediationActionRequest | None,
+) -> list[str]:
+    if not req:
+        return []
+
+    explicit_uids = [str(uid).strip() for uid in req.section_uids if str(uid).strip()]
+    title_hints = [
+        _normalize_remediation_title(str(title))
+        for title in req.section_title_hints
+        if str(title).strip()
+    ]
+    if not title_hints:
+        return list(dict.fromkeys(explicit_uids))
+
+    from app.core.models import TpOutline
+    from sqlalchemy import select
+
+    outline_res = await db.execute(
+        select(TpOutline)
+        .where(TpOutline.project_id == project_id)
+        .order_by(TpOutline.version.desc())
+        .limit(1)
+    )
+    outline = outline_res.scalar_one_or_none()
+    if not outline:
+        raise ValueError("No outline available to resolve remediation section hints.")
+
+    sections: list[dict[str, Any]] = []
+    _collect_outline_sections(
+        outline.outline_json.get("sections", outline.outline_json.get("outline", [])),
+        sections,
+    )
+    matched_uids = list(explicit_uids)
+    for section in sections:
+        uid = str(section.get("uid") or section.get("section_uid") or "").strip()
+        title = _normalize_remediation_title(str(section.get("title") or ""))
+        if not uid or not title:
+            continue
+        if any(hint == title or hint in title or title in hint for hint in title_hints):
+            matched_uids.append(uid)
+
+    resolved = list(dict.fromkeys(uid for uid in matched_uids if uid))
+    if title_hints and not resolved:
+        raise ValueError("No outline sections matched remediation section hints.")
+    return resolved
+
+
+def _collect_outline_sections(
+    sections: list[dict[str, Any]],
+    result: list[dict[str, Any]],
+) -> None:
+    for section in sections:
+        if not isinstance(section, dict):
+            continue
+        result.append(section)
+        children = section.get("subsections") or section.get("children") or []
+        if isinstance(children, list):
+            _collect_outline_sections(children, result)
 
 
 @router.get(

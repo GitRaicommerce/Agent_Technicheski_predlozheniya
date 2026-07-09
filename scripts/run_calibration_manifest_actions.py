@@ -18,6 +18,7 @@ class ManifestAction:
     action_key: str
     api_method: str
     api_path: str
+    request_json: dict[str, Any] | None = None
     source: str = "readiness_actions"
     blocker_code: str = ""
     section_count: int = 0
@@ -52,12 +53,19 @@ def manifest_actions(manifest: dict[str, Any]) -> list[ManifestAction]:
                 "Manifest readiness action "
                 f"#{index} must include action_key and api_path"
             )
+        request_json = item.get("request_json")
+        if request_json is not None and not isinstance(request_json, dict):
+            raise ValueError(
+                "Manifest readiness action "
+                f"#{index} request_json must be an object"
+            )
         seen.add((action_key, api_path))
         actions.append(
             ManifestAction(
                 action_key=action_key,
                 api_method=api_method,
                 api_path=api_path,
+                request_json=request_json,
                 source="readiness_actions",
                 blocker_code=str(item.get("blocker_code") or ""),
                 section_count=int(item.get("section_count") or 0),
@@ -77,6 +85,11 @@ def manifest_actions(manifest: dict[str, Any]) -> list[ManifestAction]:
             continue
         seen.add(dedupe_key)
         api_method = str(item.get("api_method") or "POST").strip().upper()
+        request_json = item.get("request_json")
+        if request_json is not None and not isinstance(request_json, dict):
+            raise ValueError(
+                f"Manifest gap priority row #{index} request_json must be an object"
+            )
         reference_section = str(item.get("reference_section") or "").strip()
         focus = str(item.get("focus") or "").strip()
         summary_parts = []
@@ -89,6 +102,7 @@ def manifest_actions(manifest: dict[str, Any]) -> list[ManifestAction]:
                 action_key=action_key,
                 api_method=api_method,
                 api_path=api_path,
+                request_json=request_json,
                 source="gap_priority_rows",
                 blocker_code=focus,
                 section_count=1,
@@ -139,9 +153,10 @@ def execute_action(
     timeout: float,
     opener: Callable[..., Any] = urllib.request.urlopen,
 ) -> dict[str, Any]:
+    body = json.dumps(action.request_json or {}, ensure_ascii=False).encode("utf-8")
     request = urllib.request.Request(
         url,
-        data=b"{}",
+        data=body,
         method=action.api_method,
         headers={"Content-Type": "application/json"},
     )

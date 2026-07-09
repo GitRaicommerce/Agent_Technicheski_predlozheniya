@@ -86,6 +86,9 @@ class CalibrationManifestActionTests(unittest.TestCase):
                 {
                     "focus": "grounding and checklist coverage",
                     "reference_section": "Environment",
+                    "request_json": {
+                        "section_title_hints": ["Environmental protection"]
+                    },
                     "action_key": "regenerate_missing_requirements",
                     "api_method": "POST",
                     "api_path": "/api/v1/agents/project-1/remediation-actions/regenerate_missing_requirements",
@@ -108,6 +111,10 @@ class CalibrationManifestActionTests(unittest.TestCase):
         self.assertEqual(actions[0].section_count, 3)
         self.assertEqual(actions[1].source, "gap_priority_rows")
         self.assertEqual(actions[1].section_count, 1)
+        self.assertEqual(
+            actions[1].request_json,
+            {"section_title_hints": ["Environmental protection"]},
+        )
         self.assertEqual(
             actions[1].summary,
             "gap=grounding and checklist coverage, reference=Environment",
@@ -147,6 +154,7 @@ class CalibrationManifestActionTests(unittest.TestCase):
             action_key="regenerate_stale",
             api_method="POST",
             api_path="/api/v1/example",
+            request_json={"section_title_hints": ["Quality"]},
         )
 
         result = execute_action(
@@ -160,7 +168,10 @@ class CalibrationManifestActionTests(unittest.TestCase):
         self.assertEqual(result["body"]["status"], "queued")
         request = opener.call_args.args[0]
         self.assertEqual(request.get_method(), "POST")
-        self.assertEqual(request.data, b"{}")
+        self.assertEqual(
+            json.loads(request.data.decode("utf-8")),
+            {"section_title_hints": ["Quality"]},
+        )
 
     def test_main_refuses_execute_without_explicit_selection(self):
         with tempfile.TemporaryDirectory() as tmp:
