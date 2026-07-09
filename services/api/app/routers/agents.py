@@ -727,8 +727,8 @@ async def _remediation_target_section_uids(
         for title in req.section_title_hints
         if str(title).strip()
     ]
-    if not title_hints:
-        return list(dict.fromkeys(explicit_uids))
+    if not explicit_uids and not title_hints:
+        return []
 
     from app.core.models import TpOutline
     from sqlalchemy import select
@@ -741,14 +741,19 @@ async def _remediation_target_section_uids(
     )
     outline = outline_res.scalar_one_or_none()
     if not outline:
-        raise ValueError("No outline available to resolve remediation section hints.")
+        raise ValueError("No outline available to resolve remediation section targets.")
 
     sections: list[dict[str, Any]] = []
     _collect_outline_sections(
         outline.outline_json.get("sections", outline.outline_json.get("outline", [])),
         sections,
     )
-    matched_uids = list(explicit_uids)
+    outline_uids = {
+        str(section.get("uid") or section.get("section_uid") or "").strip()
+        for section in sections
+        if str(section.get("uid") or section.get("section_uid") or "").strip()
+    }
+    matched_uids = [uid for uid in explicit_uids if uid in outline_uids]
     for section in sections:
         uid = str(section.get("uid") or section.get("section_uid") or "").strip()
         title = _normalize_remediation_title(str(section.get("title") or ""))
@@ -758,8 +763,8 @@ async def _remediation_target_section_uids(
             matched_uids.append(uid)
 
     resolved = list(dict.fromkeys(uid for uid in matched_uids if uid))
-    if title_hints and not resolved:
-        raise ValueError("No outline sections matched remediation section hints.")
+    if (explicit_uids or title_hints) and not resolved:
+        raise ValueError("No outline sections matched remediation section targets.")
     return resolved
 
 
