@@ -1034,6 +1034,7 @@ function qualityDepthDiagnostics(detail: ExportQualitySection): string[] {
   if (typeof detail.suggested_words_per_structure === "number") {
     diagnostics.push(`${detail.suggested_words_per_structure} думи на група/тема`);
   }
+  diagnostics.push(...qualityIssueLabels(detail));
   const structureCoverage = detail.structure_coverage;
   if (
     structureCoverage &&
@@ -1058,6 +1059,29 @@ function qualityDepthDiagnostics(detail: ExportQualitySection): string[] {
     }
   }
   return diagnostics;
+}
+
+function qualityIssueLabels(detail: ExportQualitySection): string[] {
+  const labels: Record<string, string> = {
+    too_short_for_requirements: "С‚РІСЉСЂРґРµ РєСЂР°С‚РєРѕ Р·Р° РёР·РёСЃРєРІР°РЅРёСЏС‚Р°",
+    too_few_developed_sentences: "РјР°Р»РєРѕ СЂР°Р·РІРёС‚Рё РёР·СЂРµС‡РµРЅРёСЏ",
+    uneven_blueprint_distribution: "РЅРµСЂР°РІРЅРѕРјРµСЂРЅРѕ РїРѕРєСЂРёС‚РёРµ РЅР° С‚РµРјРёС‚Рµ",
+    repetitive_content: "РїРѕРІС‚Р°СЂСЏС‰ СЃРµ С‚РµРєСЃС‚",
+  };
+  const issues = Array.isArray(detail.issues) ? detail.issues : [];
+  return [
+    ...new Set(
+      issues
+        .map((issue) => {
+          const code =
+            issue && typeof issue === "object"
+              ? (issue as { code?: unknown }).code
+              : null;
+          return typeof code === "string" ? labels[code] || code : "";
+        })
+        .filter((label) => label.length > 0),
+    ),
+  ];
 }
 
 function getRequirementCoverage(

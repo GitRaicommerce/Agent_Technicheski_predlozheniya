@@ -73,6 +73,7 @@ def test_render_export_readiness_report_includes_blockers_and_actions():
                     "issues": [
                         {"code": "too_short_for_requirements"},
                         {"code": "uneven_blueprint_distribution"},
+                        {"code": "repetitive_content"},
                     ],
                 }
             ],
@@ -87,7 +88,9 @@ def test_render_export_readiness_report_includes_blockers_and_actions():
     assert "`req-1` [needs operational evidence]: Describe the detailed schedule." in report
     assert "diagnostics: matched_ratio=0.8, coherent_ratio=0.75, operational_signals=1/2" in report
     assert "| Section | Words | Min words | Words per group/topic | Sentences | Min sentences | Requirements | Blueprint groups | Topics | Issues |" in report
-    assert "| Shallow section title (`sec-shallow`) | 180 | 1200 | 270 | 3 | 10 | 2 | 6 | 8 | too_short_for_requirements, uneven_blueprint_distribution |" in report
+    assert "too short for mapped requirements (`too_short_for_requirements`)" in report
+    assert "missing blueprint groups/topics (`uneven_blueprint_distribution`)" in report
+    assert "repetitive padded content (`repetitive_content`)" in report
     assert "structure coverage: 1/3 required (4 detected groups/topics)" in report
     assert "missing groups/topics: waste, soil, water" in report
     assert "Остави най-новите" in report

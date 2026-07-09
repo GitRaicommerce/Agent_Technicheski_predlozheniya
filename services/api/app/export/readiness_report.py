@@ -22,6 +22,16 @@ def _table_cell(value: Any) -> str:
     return str(value or "").replace("|", "\\|")
 
 
+def _issue_label(code: str) -> str:
+    labels = {
+        "too_short_for_requirements": "too short for mapped requirements",
+        "too_few_developed_sentences": "too few developed sentences",
+        "uneven_blueprint_distribution": "missing blueprint groups/topics",
+        "repetitive_content": "repetitive padded content",
+    }
+    return labels.get(code, code)
+
+
 def _section_label(section: dict[str, Any]) -> str:
     section_uid = str(section.get("section_uid") or "n/a")
     title = _truncate(section.get("section_title"), limit=90)
@@ -204,6 +214,10 @@ def render_export_readiness_report(readiness: dict[str, Any]) -> str:
                 for issue in section.get("issues") or []
                 if isinstance(issue, dict) and issue.get("code")
             ]
+            issue_labels = [
+                f"{_issue_label(code)} (`{code}`)"
+                for code in issue_codes
+            ]
             lines.append(
                 "| "
                 + " | ".join(
@@ -217,7 +231,7 @@ def render_export_readiness_report(readiness: dict[str, Any]) -> str:
                         str(_as_int(section.get("requirement_count"))),
                         str(_as_int(section.get("blueprint_group_count"))),
                         str(_as_int(section.get("blueprint_topic_count"))),
-                        _table_cell(_list(issue_codes)),
+                        _table_cell(_list(issue_labels)),
                     ]
                 )
                 + " |"

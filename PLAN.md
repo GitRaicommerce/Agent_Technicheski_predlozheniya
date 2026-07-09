@@ -124,6 +124,7 @@
 - Tightened calibration remediation targeting by writing `section_uid` metadata into selected/effective proposal snapshots and preferring exact `section_uids` in manifest action payloads, with title hints retained as a fallback.
 - Hardened calibration remediation execution so requested `section_uids` are validated against the current outline before a targeted drafting job is queued, preventing stale manifests from creating empty no-op regeneration jobs.
 - Added a repetition-aware generation-depth gate so long sections made from repeated sentence patterns are flagged before export or calibration remediation, forcing real distinct operational detail rather than padded volume.
+- Surfaced generation-depth issue labels in DOCX readiness reports and the Generations panel so repetitive/padded text, missing blueprint topics, short sections, and weak sentence development are understandable remediation reasons.
 
 ## Active Goals
 

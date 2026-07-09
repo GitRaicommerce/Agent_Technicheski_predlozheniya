@@ -655,6 +655,7 @@ describe("GenerationsPanel", () => {
               required_count: 3,
               missing: [{ label: "waste" }, { label: "soil" }],
             },
+            issues: [{ code: "repetitive_content" }],
           },
         ]}
       />,
@@ -700,6 +701,8 @@ describe("GenerationsPanel", () => {
       .toHaveTextContent("1/3 покрити групи/теми");
     expect(screen.getByTestId("generation-quality-depth-sec-quality"))
       .toHaveTextContent("waste, soil");
+    expect(screen.getByTestId("generation-quality-depth-sec-quality"))
+      .toHaveTextContent("РїРѕРІС‚Р°СЂСЏС‰ СЃРµ С‚РµРєСЃС‚");
   });
 
   it("focuses the attention filter when requested by export remediation", async () => {
