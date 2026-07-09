@@ -265,6 +265,80 @@ def render_action_line(action: ManifestAction, url: str) -> str:
     return " | ".join(bits)
 
 
+def action_execution_record(
+    action: ManifestAction,
+    *,
+    url: str,
+    executed: bool,
+    action_result: dict[str, Any] | None = None,
+    wait_result: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    final_status = "planned"
+    if executed:
+        final_status = "executed"
+    wait_body = wait_result.get("body") if isinstance(wait_result, dict) else None
+    if isinstance(wait_body, dict) and wait_body.get("status"):
+        final_status = str(wait_body["status"])
+
+    return {
+        "action_key": action.action_key,
+        "source": action.source,
+        "api_method": action.api_method,
+        "api_path": action.api_path,
+        "url": url,
+        "blocker_code": action.blocker_code,
+        "section_count": action.section_count,
+        "summary": action.summary,
+        "request_json": action.request_json or {},
+        "executed": executed,
+        "final_status": final_status,
+        "action_result": action_result,
+        "wait_result": wait_result,
+    }
+
+
+def render_execution_report_json(records: list[dict[str, Any]]) -> str:
+    status_counts: dict[str, int] = {}
+    for record in records:
+        status = str(record.get("final_status") or "unknown")
+        status_counts[status] = status_counts.get(status, 0) + 1
+    payload = {
+        "schema_version": "calibration_action_execution.v1",
+        "total_actions": len(records),
+        "status_counts": status_counts,
+        "actions": records,
+    }
+    return json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
+
+
+def render_execution_report_markdown(records: list[dict[str, Any]]) -> str:
+    lines = [
+        "# Calibration action execution report",
+        "",
+        f"- Total actions: `{len(records)}`",
+        "",
+        "| Action key | Source | Executed | Final status | Sections | Summary |",
+        "| --- | --- | --- | --- | ---: | --- |",
+    ]
+    for record in records:
+        lines.append(
+            "| "
+            + " | ".join(
+                [
+                    str(record.get("action_key") or ""),
+                    str(record.get("source") or ""),
+                    "yes" if record.get("executed") else "no",
+                    str(record.get("final_status") or "unknown"),
+                    str(record.get("section_count") or 0),
+                    str(record.get("summary") or "").replace("|", "\\|"),
+                ]
+            )
+            + " |"
+        )
+    lines.append("")
+    return "\n".join(lines)
+
+
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
@@ -285,6 +359,16 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--poll-interval", type=float, default=2.0)
     parser.add_argument("--wait-timeout", type=float, default=1800.0)
     parser.add_argument("--timeout", type=float, default=60.0)
+    parser.add_argument(
+        "--out-json",
+        type=Path,
+        help="Write a machine-readable execution report for planned/executed actions.",
+    )
+    parser.add_argument(
+        "--out-md",
+        type=Path,
+        help="Write a Markdown execution report for planned/executed actions.",
+    )
     return parser.parse_args(argv)
 
 
@@ -303,15 +387,18 @@ def main(argv: list[str]) -> int:
 
         project_id = str(manifest.get("project_id") or "") or None
         exit_code = 0
+        execution_records: list[dict[str, Any]] = []
         for action in selected:
             url = action_url(args.api_base, action.api_path, project_id)
             print(render_action_line(action, url))
+            action_result = None
+            wait_result = None
             if args.execute:
-                result = execute_action(action, url=url, timeout=args.timeout)
-                print(json.dumps(result, ensure_ascii=False, indent=2))
+                action_result = execute_action(action, url=url, timeout=args.timeout)
+                print(json.dumps(action_result, ensure_ascii=False, indent=2))
                 if args.wait:
                     wait_result = wait_for_job_result(
-                        result,
+                        action_result,
                         api_base=args.api_base,
                         project_id=project_id,
                         timeout=args.wait_timeout,
@@ -322,8 +409,29 @@ def main(argv: list[str]) -> int:
                         body = wait_result.get("body")
                         if isinstance(body, dict) and body.get("status") == "error":
                             exit_code = 1
+            execution_records.append(
+                action_execution_record(
+                    action,
+                    url=url,
+                    executed=args.execute,
+                    action_result=action_result,
+                    wait_result=wait_result,
+                )
+            )
         if not selected:
             print("No executable actions in manifest")
+        if args.out_json:
+            args.out_json.parent.mkdir(parents=True, exist_ok=True)
+            args.out_json.write_text(
+                render_execution_report_json(execution_records),
+                encoding="utf-8",
+            )
+        if args.out_md:
+            args.out_md.parent.mkdir(parents=True, exist_ok=True)
+            args.out_md.write_text(
+                render_execution_report_markdown(execution_records),
+                encoding="utf-8",
+            )
         return exit_code
     except (ValueError, OSError, urllib.error.URLError) as exc:
         print(f"error: {exc}", file=sys.stderr)

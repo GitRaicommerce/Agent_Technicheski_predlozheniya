@@ -18,6 +18,7 @@ sys.modules[spec.name] = manifest_actions_module
 spec.loader.exec_module(manifest_actions_module)
 
 ManifestAction = manifest_actions_module.ManifestAction
+action_execution_record = manifest_actions_module.action_execution_record
 action_url = manifest_actions_module.action_url
 execute_action = manifest_actions_module.execute_action
 job_result_from_action_response = manifest_actions_module.job_result_from_action_response
@@ -25,6 +26,8 @@ job_status_url = manifest_actions_module.job_status_url
 load_manifest = manifest_actions_module.load_manifest
 main = manifest_actions_module.main
 manifest_actions = manifest_actions_module.manifest_actions
+render_execution_report_json = manifest_actions_module.render_execution_report_json
+render_execution_report_markdown = manifest_actions_module.render_execution_report_markdown
 select_actions = manifest_actions_module.select_actions
 wait_for_job_result = manifest_actions_module.wait_for_job_result
 
@@ -260,6 +263,40 @@ class CalibrationManifestActionTests(unittest.TestCase):
             )
         )
 
+    def test_action_execution_reports_planned_and_waited_statuses(self):
+        action = ManifestAction(
+            action_key="regenerate_stale",
+            api_method="POST",
+            api_path="/api/v1/example",
+            source="readiness_actions",
+            section_count=2,
+            summary="Section A | Section B",
+        )
+        planned = action_execution_record(
+            action,
+            url="http://localhost/api/v1/example",
+            executed=False,
+        )
+        waited = action_execution_record(
+            action,
+            url="http://localhost/api/v1/example",
+            executed=True,
+            action_result={"status_code": 200, "body": {"status": "queued"}},
+            wait_result={"status_code": 200, "body": {"status": "done"}},
+        )
+
+        payload = json.loads(render_execution_report_json([planned, waited]))
+        markdown = render_execution_report_markdown([planned, waited])
+
+        self.assertEqual(
+            payload["schema_version"],
+            "calibration_action_execution.v1",
+        )
+        self.assertEqual(payload["status_counts"], {"planned": 1, "done": 1})
+        self.assertEqual(payload["actions"][1]["final_status"], "done")
+        self.assertIn("| regenerate_stale | readiness_actions | no | planned | 2 |", markdown)
+        self.assertIn("Section A \\| Section B", markdown)
+
     def test_main_refuses_execute_without_explicit_selection(self):
         with tempfile.TemporaryDirectory() as tmp:
             manifest_path = Path(tmp) / "calibration_manifest.json"
@@ -302,6 +339,8 @@ class CalibrationManifestActionTests(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
+            out_json = Path(tmp) / "execution.json"
+            out_md = Path(tmp) / "execution.md"
             original_execute = manifest_actions_module.execute_action
             original_wait = manifest_actions_module.wait_for_job_result
             manifest_actions_module.execute_action = Mock(
@@ -326,9 +365,20 @@ class CalibrationManifestActionTests(unittest.TestCase):
                             "--wait",
                             "--action-key",
                             "regenerate_stale",
+                            "--out-json",
+                            str(out_json),
+                            "--out-md",
+                            str(out_md),
                         ]
                     ),
                     1,
+                )
+                report = json.loads(out_json.read_text(encoding="utf-8"))
+                self.assertEqual(report["status_counts"], {"error": 1})
+                self.assertEqual(report["actions"][0]["final_status"], "error")
+                self.assertIn(
+                    "Calibration action execution report",
+                    out_md.read_text(encoding="utf-8"),
                 )
             finally:
                 manifest_actions_module.execute_action = original_execute
