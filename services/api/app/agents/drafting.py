@@ -177,6 +177,20 @@ def _quality_repair_feedback(
                 f"{depth_assessment['suggested_words_per_structure']}+ words "
                 "per structure when the sources support it."
             )
+        structure_coverage = depth_assessment.get("structure_coverage")
+        if isinstance(structure_coverage, dict):
+            missing_labels = [
+                str(item.get("label"))
+                for item in structure_coverage.get("missing") or []
+                if isinstance(item, dict) and item.get("label")
+            ]
+            if missing_labels:
+                lines.append(
+                    "- Explicitly develop the currently missing blueprint "
+                    "groups/topics: "
+                    + ", ".join(missing_labels[:12])
+                    + "."
+                )
     lines.append(
         "Do not add unsupported facts. Expand with concrete actions, roles, "
         "controls, records, sequence, acceptance evidence, escalation and "

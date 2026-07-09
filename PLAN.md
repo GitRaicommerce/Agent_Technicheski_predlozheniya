@@ -119,6 +119,7 @@
 - Connected before/after calibration comparison into the calibration bundle itself through an optional previous manifest input, so reruns can write a proof report alongside snapshots, readiness, gap analysis, and manifest outputs.
 - Tightened blueprint-aware generation depth checks so long sections must visibly distribute coverage across real drafting blueprint groups/topics, preventing a lengthy but one-topic narrative from passing quality gates for multi-topic tender sections.
 - Surfaced uneven blueprint distribution diagnostics through export readiness payloads, Markdown readiness reports, and the Generations remediation panel so users can see which groups/topics are missing before rerunning detailed regeneration.
+- Fed missing blueprint group/topic labels into drafting quality-repair feedback so the targeted rewrite knows which tender subtopics to develop, not only that the section is underdistributed.
 
 ## Active Goals
 

@@ -343,6 +343,86 @@ async def test_drafting_repairs_short_or_missing_requirement_coverage_before_sav
 
 
 @pytest.mark.asyncio
+async def test_drafting_repair_feedback_names_missing_blueprint_topics(mock_db):
+    project_id = str(uuid.uuid4())
+    section_uid = str(uuid.uuid4())
+    requirement_items = [
+        {
+            "id": f"req-{topic}",
+            "text": text,
+            "importance": "mandatory",
+            "category": "environment",
+            "category_label": "Environmental protection",
+            "topic": topic,
+        }
+        for topic, text in [
+            ("dust", "Describe dust suppression measures during execution."),
+            ("waste", "Describe waste segregation, storage, transport, and handover."),
+            ("soil", "Describe soil protection and clean-up controls."),
+            ("water", "Describe water and pollution prevention controls."),
+        ]
+    ]
+    dust_only_sentence = (
+        "The environmental section develops dust suppression with responsible "
+        "roles, monitoring records, corrective actions, control points, "
+        "acceptance evidence, reporting sequence, and site coordination. "
+    )
+    balanced_sentence = (
+        "The environmental section covers dust suppression, waste segregation, "
+        "soil protection, and water pollution prevention with responsible "
+        "roles, monitoring records, corrective actions, control points, "
+        "acceptance evidence, reporting sequence, and site coordination. "
+    )
+
+    with patch(
+        "app.agents.drafting.llm_gateway.call",
+        new=AsyncMock(
+            side_effect=[
+                {
+                    "variant_1": {
+                        "text": dust_only_sentence * 90,
+                        "evidence_map": {},
+                    },
+                    "flags": [],
+                },
+                {
+                    "variant_1": {
+                        "text": balanced_sentence * 90,
+                        "evidence_map": {},
+                    },
+                    "flags": [],
+                },
+            ]
+        ),
+    ) as llm_call:
+        await run_drafting(
+            project_id=project_id,
+            section_uid=section_uid,
+            section_title="Environmental protection",
+            section_requirements=[],
+            evidence_snippets=[],
+            schedule_summary=None,
+            lex_citations=[],
+            db=mock_db,
+            trace_id=str(uuid.uuid4()),
+            section_requirement_items=requirement_items,
+        )
+
+    repair_prompt = llm_call.await_args_list[1].kwargs["user_message"]
+    saved_generation = mock_db.add.call_args.args[0]
+
+    assert llm_call.await_count == 2
+    assert "QUALITY REPAIR REQUIRED" in repair_prompt
+    assert "missing blueprint groups/topics" in repair_prompt
+    assert "waste" in repair_prompt
+    assert "soil" in repair_prompt
+    assert "water" in repair_prompt
+    assert saved_generation.text == balanced_sentence * 90
+    assert saved_generation.flags_json["quality_repair_attempted"] is True
+    assert saved_generation.flags_json["generation_depth"]["status"] == "ok"
+
+
+@pytest.mark.asyncio
 async def test_drafting_saves_initial_generation_when_quality_repair_fails(mock_db):
     project_id = str(uuid.uuid4())
     section_uid = str(uuid.uuid4())
