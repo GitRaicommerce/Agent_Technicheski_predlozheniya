@@ -59,7 +59,8 @@ def _heading(level: int, section: dict[str, Any]) -> str:
 
 def _generation_meta_line(generation: GenerationSnapshot) -> str:
     return (
-        f"<!-- generation_id={generation.id}; variant={generation.variant}; "
+        f"<!-- generation_id={generation.id}; section_uid={generation.section_uid}; "
+        f"variant={generation.variant}; "
         f"evidence_status={generation.evidence_status}; created_at={generation.created_at} -->"
     )
 

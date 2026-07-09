@@ -121,6 +121,7 @@
 - Surfaced uneven blueprint distribution diagnostics through export readiness payloads, Markdown readiness reports, and the Generations remediation panel so users can see which groups/topics are missing before rerunning detailed regeneration.
 - Fed missing blueprint group/topic labels into drafting quality-repair feedback so the targeted rewrite knows which tender subtopics to develop, not only that the section is underdistributed.
 - Made calibration gap-priority actions executable for concrete sections: manifest rows now carry section-title hints, the action runner posts them as JSON, and the backend remediation dispatcher can queue targeted drafting jobs from those hints.
+- Tightened calibration remediation targeting by writing `section_uid` metadata into selected/effective proposal snapshots and preferring exact `section_uids` in manifest action payloads, with title hints retained as a fallback.
 
 ## Active Goals
 

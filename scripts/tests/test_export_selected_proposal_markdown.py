@@ -54,6 +54,7 @@ class ExportSelectedProposalMarkdownTests(unittest.TestCase):
         self.assertLess(markdown.index("## Organization"), markdown.index("## Quality"))
         self.assertIn("Organization text.", markdown)
         self.assertIn("generation_id=gen-a", markdown)
+        self.assertIn("section_uid=sec-a", markdown)
         self.assertNotIn("Snapshot Warnings", markdown)
 
     def test_render_selected_proposal_markdown_marks_duplicate_and_missing_sections(self):

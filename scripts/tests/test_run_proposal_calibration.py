@@ -23,6 +23,7 @@ calibration_output_paths = calibration.calibration_output_paths
 gap_calibration_focus_counts = calibration.gap_calibration_focus_counts
 gap_regeneration_priority_rows = calibration.gap_regeneration_priority_rows
 gap_summary_metrics = calibration.gap_summary_metrics
+generated_section_uid_map = calibration.generated_section_uid_map
 enrich_gap_priority_rows = calibration.enrich_gap_priority_rows
 readiness_priority_actions = calibration.readiness_priority_actions
 render_manifest = calibration.render_manifest
@@ -185,7 +186,7 @@ class RunProposalCalibrationTests(unittest.TestCase):
                     "",
                     "| Reference section | Best generated section | Coverage | Volume | Gap reasons | Calibration focus |",
                     "| --- | --- | ---: | ---: | --- | --- |",
-                    "| A | A generated | 0.20 | 0.10 | too short | drafting depth |",
+                    "| A | Section A | 0.20 | 0.10 | too short | drafting depth |",
                     "| B | C generated | 0.10 | 0.80 | structure mismatch | outline mapping |",
                     "| C | C generated | 0.40 | 0.90 | weak lexical coverage | grounding and checklist coverage |",
                     "| D | D generated | 0.30 | 0.20 | too short | drafting depth |",
@@ -253,6 +254,9 @@ class RunProposalCalibrationTests(unittest.TestCase):
                 {"focus": "outline mapping", "reference_section": "Organization"},
             ],
             project_id="project-1",
+            section_uid_by_generated_title={
+                "Quality generated": "sec-quality",
+            },
         )
 
         self.assertEqual(rows[0]["action_key"], "regenerate_quality_depth")
@@ -263,7 +267,10 @@ class RunProposalCalibrationTests(unittest.TestCase):
         )
         self.assertEqual(
             rows[0]["request_json"],
-            {"section_title_hints": ["Quality generated"]},
+            {
+                "section_uids": ["sec-quality"],
+                "section_title_hints": ["Quality generated"],
+            },
         )
         self.assertEqual(
             rows[1]["action_key"],
@@ -281,6 +288,21 @@ class RunProposalCalibrationTests(unittest.TestCase):
         self.assertNotIn("action_key", rows[2])
         self.assertNotIn("api_path", rows[2])
         self.assertEqual(rows[2]["ui_action"], "Review outline mapping")
+
+    def test_generated_section_uid_map_reads_snapshot_metadata(self):
+        mapping = generated_section_uid_map(
+            "\n".join(
+                [
+                    "## Quality generated",
+                    "",
+                    "<!-- generation_id=gen-1; section_uid=sec-quality; variant=1 -->",
+                    "",
+                    "Generated text.",
+                ]
+            )
+        )
+
+        self.assertEqual(mapping, {"Quality generated": "sec-quality"})
 
     def test_readiness_priority_actions_summarize_specific_sections(self):
         actions = readiness_priority_actions(
@@ -371,6 +393,7 @@ class RunProposalCalibrationTests(unittest.TestCase):
                         "focus": "drafting depth",
                     }
                 ],
+                section_uid_by_generated_title={"A generated": "sec-a"},
             )
         )
 
@@ -420,7 +443,10 @@ class RunProposalCalibrationTests(unittest.TestCase):
         )
         self.assertEqual(
             manifest["gap_priority_rows"][0]["request_json"],
-            {"section_title_hints": ["A generated"]},
+            {
+                "section_uids": ["sec-a"],
+                "section_title_hints": ["A generated"],
+            },
         )
 
     def test_snapshot_warning_count_reads_warning_section_only(self):
@@ -508,7 +534,7 @@ class RunProposalCalibrationTests(unittest.TestCase):
                     "",
                     "| Reference section | Best generated section | Coverage | Volume | Gap reasons | Calibration focus |",
                     "| --- | --- | ---: | ---: | --- | --- |",
-                    "| A | A generated | 0.20 | 0.10 | too short | drafting depth |",
+                    "| A | Section A | 0.20 | 0.10 | too short | drafting depth |",
                     "| B | B generated | 0.10 | 0.20 | missing key terms | grounding and checklist coverage |",
                 ]
             )
@@ -600,7 +626,10 @@ class RunProposalCalibrationTests(unittest.TestCase):
                 )
                 self.assertEqual(
                     manifest_json["gap_priority_rows"][0]["request_json"],
-                    {"section_title_hints": ["A generated"]},
+                    {
+                        "section_uids": ["sec-a"],
+                        "section_title_hints": ["Section A"],
+                    },
                 )
         finally:
             calibration.load_snapshot = original_load_snapshot

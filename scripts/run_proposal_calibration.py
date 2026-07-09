@@ -195,11 +195,55 @@ def gap_regeneration_priority_rows(
     return rows[:limit]
 
 
+def _normalize_section_title(value: str) -> str:
+    return re.sub(r"\s+", " ", value).strip().casefold()
+
+
+def generated_section_uid_map(markdown: str) -> dict[str, str]:
+    section_uids: dict[str, str] = {}
+    current_title = ""
+    for line in markdown.splitlines():
+        stripped = line.strip()
+        heading = re.match(r"^#{2,6}\s+(.+)$", stripped)
+        if heading:
+            current_title = heading.group(1).strip()
+            continue
+        if not current_title:
+            continue
+        meta_match = re.search(r"\bsection_uid=([^;\s]+)", stripped)
+        if meta_match:
+            section_uids[current_title] = meta_match.group(1).strip()
+    return section_uids
+
+
+def _section_uid_for_generated_title(
+    generated_title: str,
+    section_uid_by_generated_title: dict[str, str],
+) -> str:
+    normalized_generated = _normalize_section_title(generated_title)
+    if not normalized_generated:
+        return ""
+    normalized_map = {
+        _normalize_section_title(title): uid
+        for title, uid in section_uid_by_generated_title.items()
+        if title and uid
+    }
+    direct = normalized_map.get(normalized_generated)
+    if direct:
+        return direct
+    for title, uid in normalized_map.items():
+        if normalized_generated in title or title in normalized_generated:
+            return uid
+    return ""
+
+
 def enrich_gap_priority_rows(
     rows: list[dict[str, Any]],
     *,
     project_id: str | None = None,
+    section_uid_by_generated_title: dict[str, str] | None = None,
 ) -> list[dict[str, Any]]:
+    section_uid_by_generated_title = section_uid_by_generated_title or {}
     enriched: list[dict[str, Any]] = []
     for row in rows:
         focus = str(row.get("focus") or "")
@@ -213,7 +257,16 @@ def enrich_gap_priority_rows(
             item["api_method"] = "POST"
             item["api_path"] = _remediation_api_path(project_id, action_key)
             generated_section = str(item.get("generated_section") or "").strip()
-            if generated_section:
+            section_uid = _section_uid_for_generated_title(
+                generated_section,
+                section_uid_by_generated_title,
+            )
+            if section_uid:
+                item["request_json"] = {
+                    "section_uids": [section_uid],
+                    "section_title_hints": [generated_section],
+                }
+            elif generated_section:
                 item["request_json"] = {
                     "section_title_hints": [generated_section],
                 }
@@ -504,6 +557,7 @@ def render_manifest(
     gap_summary: dict[str, int | float] | None = None,
     gap_focus_counts: dict[str, int] | None = None,
     gap_priority_rows: list[dict[str, Any]] | None = None,
+    section_uid_by_generated_title: dict[str, str] | None = None,
 ) -> str:
     readiness = readiness or {}
     blockers = [
@@ -516,6 +570,7 @@ def render_manifest(
     gap_priority_rows = enrich_gap_priority_rows(
         gap_priority_rows or [],
         project_id=project_id,
+        section_uid_by_generated_title=section_uid_by_generated_title,
     )
     readiness_actions = readiness_priority_actions(readiness)
     lines = [
@@ -662,6 +717,7 @@ def render_manifest_json(
     gap_summary: dict[str, int | float] | None = None,
     gap_focus_counts: dict[str, int] | None = None,
     gap_priority_rows: list[dict[str, Any]] | None = None,
+    section_uid_by_generated_title: dict[str, str] | None = None,
 ) -> str:
     readiness = readiness or {}
     blockers = [
@@ -697,6 +753,7 @@ def render_manifest_json(
         "gap_priority_rows": enrich_gap_priority_rows(
             gap_priority_rows or [],
             project_id=project_id,
+            section_uid_by_generated_title=section_uid_by_generated_title,
         ),
     }
     return json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
@@ -784,6 +841,7 @@ async def run_calibration_bundle(
     gap_summary = gap_summary_metrics(report)
     gap_focus_counts = gap_calibration_focus_counts(report)
     gap_priority_rows = gap_regeneration_priority_rows(report)
+    section_uid_by_generated_title = generated_section_uid_map(effective_text)
     paths["manifest"].write_text(
         render_manifest(
             project_id=project_id,
@@ -798,6 +856,7 @@ async def run_calibration_bundle(
             gap_summary=gap_summary,
             gap_focus_counts=gap_focus_counts,
             gap_priority_rows=gap_priority_rows,
+            section_uid_by_generated_title=section_uid_by_generated_title,
         ),
         encoding="utf-8",
     )
@@ -814,6 +873,7 @@ async def run_calibration_bundle(
         gap_summary=gap_summary,
         gap_focus_counts=gap_focus_counts,
         gap_priority_rows=gap_priority_rows,
+        section_uid_by_generated_title=section_uid_by_generated_title,
     )
     paths["manifest_json"].write_text(
         manifest_json_text,
