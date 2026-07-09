@@ -62,6 +62,21 @@ def _environment_topic_blueprint() -> dict:
     }
 
 
+def _varied_operational_text(topics: list[str], repeats: int = 8) -> str:
+    sentences = []
+    for cycle in range(repeats):
+        for index, topic in enumerate(topics, start=1):
+            sentences.append(
+                "For "
+                f"{topic}, the proposal defines action package {cycle + 1}-{index} "
+                "with a responsible role, control record, monitoring evidence, "
+                "acceptance criterion, reporting sequence, escalation point, "
+                "corrective action, document owner, timing link, and coordination "
+                "interface. "
+            )
+    return "".join(sentences)
+
+
 def test_generation_depth_flags_short_text_with_multiple_requirements():
     coverage = {
         "total": 3,
@@ -99,11 +114,15 @@ def test_generation_depth_accepts_developed_text_with_requirements():
         "на документиране на всяко действие съгласно изискванията на възложителя. "
     )
 
-    result = assess_generation_depth(sentence * 18, coverage)
+    result = assess_generation_depth(
+        _varied_operational_text(["organization", "sequence", "control"], repeats=6),
+        coverage,
+    )
 
     assert result["status"] == "ok"
     assert result["word_count"] >= result["min_words"]
     assert result["sentence_count"] >= result["min_sentences"]
+    assert result["unique_sentence_count"] >= 3
 
 
 def test_generation_depth_uses_blueprint_groups_for_complex_sections():
@@ -175,7 +194,17 @@ def test_generation_depth_accepts_developed_blueprint_structured_text():
     )
 
     result = assess_generation_depth(
-        sentence * 90,
+        _varied_operational_text(
+            [
+                "organization",
+                "quality",
+                "risk",
+                "environment",
+                "communication",
+                "documentation",
+            ],
+            repeats=10,
+        ),
         coverage,
         drafting_blueprint=_drafting_blueprint(6),
     )
@@ -184,6 +213,31 @@ def test_generation_depth_accepts_developed_blueprint_structured_text():
     assert result["blueprint_group_count"] == 6
     assert result["word_count"] >= result["min_words"]
     assert result["sentence_count"] >= result["min_sentences"]
+
+
+def test_generation_depth_rejects_repetitive_padding():
+    coverage = {
+        "total": 2,
+        "covered": 2,
+        "missing": 0,
+        "missing_ids": [],
+    }
+    repeated_sentence = (
+        "The proposal explains a concrete action, responsible role, control "
+        "record, evidence source, timing, coordination point, escalation path, "
+        "acceptance criterion, document flow, and corrective action. "
+    )
+
+    result = assess_generation_depth(
+        repeated_sentence * 90,
+        coverage,
+        drafting_blueprint=_drafting_blueprint(6),
+    )
+
+    assert result["word_count"] >= result["min_words"]
+    assert result["sentence_count"] >= result["min_sentences"]
+    assert result["unique_sentence_count"] == 1
+    assert "repetitive_content" in {issue["code"] for issue in result["issues"]}
 
 
 def test_generation_depth_rejects_long_text_with_uneven_blueprint_distribution():
@@ -211,7 +265,7 @@ def test_generation_depth_rejects_long_text_with_uneven_blueprint_distribution()
         drafting_blueprint=_environment_topic_blueprint(),
     )
     balanced = assess_generation_depth(
-        balanced_sentence * 90,
+        _varied_operational_text(["dust", "waste", "soil", "water"], repeats=25),
         coverage,
         drafting_blueprint=_environment_topic_blueprint(),
     )

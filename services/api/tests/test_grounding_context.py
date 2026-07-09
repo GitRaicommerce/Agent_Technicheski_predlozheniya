@@ -23,6 +23,21 @@ def _one_result(item):
     return result
 
 
+def _varied_operational_text(topics: list[str], repeats: int = 8) -> str:
+    sentences = []
+    for cycle in range(repeats):
+        for index, topic in enumerate(topics, start=1):
+            sentences.append(
+                "For "
+                f"{topic}, the proposal defines action package {cycle + 1}-{index} "
+                "with a responsible role, control record, monitoring evidence, "
+                "acceptance criterion, reporting sequence, escalation point, "
+                "corrective action, document owner, timing link, and coordination "
+                "interface. "
+            )
+    return "".join(sentences)
+
+
 @pytest.mark.asyncio
 async def test_grounding_context_includes_design_parts_from_schedule_and_tender(mock_db):
     project_id = str(uuid.uuid4())
@@ -373,6 +388,10 @@ async def test_drafting_repair_feedback_names_missing_blueprint_topics(mock_db):
         "roles, monitoring records, corrective actions, control points, "
         "acceptance evidence, reporting sequence, and site coordination. "
     )
+    balanced_text = _varied_operational_text(
+        ["dust", "waste", "soil", "water"],
+        repeats=25,
+    )
 
     with patch(
         "app.agents.drafting.llm_gateway.call",
@@ -387,7 +406,7 @@ async def test_drafting_repair_feedback_names_missing_blueprint_topics(mock_db):
                 },
                 {
                     "variant_1": {
-                        "text": balanced_sentence * 90,
+                        "text": balanced_text,
                         "evidence_map": {},
                     },
                     "flags": [],
@@ -417,7 +436,7 @@ async def test_drafting_repair_feedback_names_missing_blueprint_topics(mock_db):
     assert "waste" in repair_prompt
     assert "soil" in repair_prompt
     assert "water" in repair_prompt
-    assert saved_generation.text == balanced_sentence * 90
+    assert saved_generation.text == balanced_text
     assert saved_generation.flags_json["quality_repair_attempted"] is True
     assert saved_generation.flags_json["generation_depth"]["status"] == "ok"
 

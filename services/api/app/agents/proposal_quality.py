@@ -12,6 +12,7 @@ MAX_MIN_WORDS = 1400
 BLUEPRINT_BASE_MIN_WORDS = 260
 MIN_WORDS_PER_BLUEPRINT_GROUP = 220
 MAX_BLUEPRINT_MIN_WORDS = 2400
+MIN_UNIQUE_SENTENCE_RATIO = 0.45
 STRUCTURE_ANCHOR_STOP_WORDS = {
     "category",
     "group",
@@ -38,6 +39,22 @@ def _tokens(text: str) -> list[str]:
 def _sentence_count(text: str) -> int:
     pieces = re.split(r"(?<=[.!?])\s+|\n+", text or "")
     return sum(1 for piece in pieces if _word_count(piece) >= 6)
+
+
+def _developed_sentence_fingerprints(text: str) -> list[str]:
+    pieces = re.split(r"(?<=[.!?])\s+|\n+", text or "")
+    fingerprints: list[str] = []
+    for piece in pieces:
+        if _word_count(piece) < 6:
+            continue
+        tokens = [
+            token
+            for token in _tokens(piece)
+            if not token.isdigit()
+        ]
+        if tokens:
+            fingerprints.append(" ".join(tokens))
+    return fingerprints
 
 
 def _coverage_total(requirement_coverage: dict[str, Any] | None) -> int:
@@ -237,6 +254,8 @@ def assess_generation_depth(
     blueprint_structure_count = max(blueprint_group_count, blueprint_topic_count)
     word_count = _word_count(text)
     sentence_count = _sentence_count(text)
+    sentence_fingerprints = _developed_sentence_fingerprints(text)
+    unique_sentence_count = len(set(sentence_fingerprints))
     min_words = target["min_words"]
     min_sentences = target["min_sentences"]
     structure_coverage = _blueprint_structure_coverage(text, drafting_blueprint)
@@ -276,6 +295,28 @@ def assess_generation_depth(
         )
 
     if (
+        (requirement_count > 1 or blueprint_structure_count > 1)
+        and sentence_count >= max(6, min_sentences)
+        and unique_sentence_count < max(3, ceil(min_sentences * MIN_UNIQUE_SENTENCE_RATIO))
+    ):
+        issues.append(
+            {
+                "code": "repetitive_content",
+                "message": (
+                    "Generated text appears to meet the length target by repeating "
+                    "the same developed sentence patterns instead of adding distinct "
+                    "operational detail."
+                ),
+                "sentence_count": sentence_count,
+                "unique_sentence_count": unique_sentence_count,
+                "min_unique_sentence_count": max(
+                    3,
+                    ceil(min_sentences * MIN_UNIQUE_SENTENCE_RATIO),
+                ),
+            }
+        )
+
+    if (
         structure_coverage["anchor_count"] > 1
         and structure_coverage["covered_count"] < structure_coverage["required_count"]
     ):
@@ -299,6 +340,7 @@ def assess_generation_depth(
         "status": "needs_review" if issues else "ok",
         "word_count": word_count,
         "sentence_count": sentence_count,
+        "unique_sentence_count": unique_sentence_count,
         "requirement_count": requirement_count,
         "blueprint_group_count": blueprint_group_count,
         "blueprint_topic_count": blueprint_topic_count,
