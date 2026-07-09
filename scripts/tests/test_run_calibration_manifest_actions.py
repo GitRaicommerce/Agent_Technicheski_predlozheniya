@@ -20,17 +20,19 @@ spec.loader.exec_module(manifest_actions_module)
 ManifestAction = manifest_actions_module.ManifestAction
 action_url = manifest_actions_module.action_url
 execute_action = manifest_actions_module.execute_action
+job_result_from_action_response = manifest_actions_module.job_result_from_action_response
+job_status_url = manifest_actions_module.job_status_url
 load_manifest = manifest_actions_module.load_manifest
 main = manifest_actions_module.main
 manifest_actions = manifest_actions_module.manifest_actions
 select_actions = manifest_actions_module.select_actions
+wait_for_job_result = manifest_actions_module.wait_for_job_result
 
 
 class FakeResponse:
-    status = 200
-
-    def __init__(self, payload):
+    def __init__(self, payload, status=200):
         self.payload = payload
+        self.status = status
 
     def __enter__(self):
         return self
@@ -173,6 +175,91 @@ class CalibrationManifestActionTests(unittest.TestCase):
             {"section_title_hints": ["Quality"]},
         )
 
+    def test_job_result_from_action_response_reads_generation_job(self):
+        result = {
+            "status_code": 200,
+            "body": {
+                "action_key": "regenerate_stale",
+                "status": "queued",
+                "result": {
+                    "id": "job-1",
+                    "project_id": "project-1",
+                    "status": "queued",
+                },
+            },
+        }
+
+        self.assertEqual(
+            job_result_from_action_response(result),
+            {"id": "job-1", "project_id": "project-1", "status": "queued"},
+        )
+        self.assertIsNone(job_result_from_action_response({"body": {"result": {}}}))
+
+    def test_job_status_url_quotes_project_and_job_ids(self):
+        self.assertEqual(
+            job_status_url("http://localhost:8000", "project 1", "job/1"),
+            "http://localhost:8000/api/v1/agents/project%201/generation-jobs/job%2F1",
+        )
+
+    def test_wait_for_job_result_polls_until_terminal_status(self):
+        opener = Mock(
+            side_effect=[
+                FakeResponse(
+                    {
+                        "id": "job-1",
+                        "project_id": "project-1",
+                        "status": "processing",
+                    }
+                ),
+                FakeResponse(
+                    {
+                        "id": "job-1",
+                        "project_id": "project-1",
+                        "status": "done",
+                    }
+                ),
+            ]
+        )
+        sleeper = Mock()
+        ticks = iter([0.0, 1.0])
+
+        result = wait_for_job_result(
+            {
+                "body": {
+                    "result": {
+                        "id": "job-1",
+                        "project_id": "project-1",
+                    }
+                }
+            },
+            api_base="http://localhost:8000",
+            project_id=None,
+            timeout=10,
+            poll_interval=0.5,
+            opener=opener,
+            sleeper=sleeper,
+            monotonic=lambda: next(ticks),
+        )
+
+        self.assertEqual(result["body"]["status"], "done")
+        self.assertEqual(opener.call_count, 2)
+        self.assertEqual(sleeper.call_args.args[0], 0.5)
+        request = opener.call_args_list[0].args[0]
+        self.assertEqual(request.get_method(), "GET")
+
+    def test_wait_for_job_result_returns_none_for_non_job_actions(self):
+        self.assertIsNone(
+            wait_for_job_result(
+                {"body": {"status": "resolved"}},
+                api_base="http://localhost:8000",
+                project_id="project-1",
+                timeout=10,
+                poll_interval=0,
+                opener=Mock(),
+                sleeper=Mock(),
+            )
+        )
+
     def test_main_refuses_execute_without_explicit_selection(self):
         with tempfile.TemporaryDirectory() as tmp:
             manifest_path = Path(tmp) / "calibration_manifest.json"
@@ -196,6 +283,56 @@ class CalibrationManifestActionTests(unittest.TestCase):
                 main(["--manifest", str(manifest_path), "--execute"]),
                 1,
             )
+
+    def test_main_wait_returns_error_when_generation_job_fails(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            manifest_path = Path(tmp) / "calibration_manifest.json"
+            manifest_path.write_text(
+                json.dumps(
+                    {
+                        "project_id": "project-1",
+                        "readiness_actions": [
+                            {
+                                "action_key": "regenerate_stale",
+                                "api_method": "POST",
+                                "api_path": "/api/v1/agents/project-1/remediation-actions/regenerate_stale",
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            original_execute = manifest_actions_module.execute_action
+            original_wait = manifest_actions_module.wait_for_job_result
+            manifest_actions_module.execute_action = Mock(
+                return_value={
+                    "status_code": 200,
+                    "body": {"result": {"id": "job-1", "project_id": "project-1"}},
+                }
+            )
+            manifest_actions_module.wait_for_job_result = Mock(
+                return_value={
+                    "status_code": 200,
+                    "body": {"id": "job-1", "status": "error"},
+                }
+            )
+            try:
+                self.assertEqual(
+                    main(
+                        [
+                            "--manifest",
+                            str(manifest_path),
+                            "--execute",
+                            "--wait",
+                            "--action-key",
+                            "regenerate_stale",
+                        ]
+                    ),
+                    1,
+                )
+            finally:
+                manifest_actions_module.execute_action = original_execute
+                manifest_actions_module.wait_for_job_result = original_wait
 
     def test_load_manifest_rejects_non_object_payload(self):
         with tempfile.TemporaryDirectory() as tmp:

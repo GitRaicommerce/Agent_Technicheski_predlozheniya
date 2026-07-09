@@ -5,12 +5,15 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
+
+TERMINAL_JOB_STATUSES = {"done", "error"}
 
 
 @dataclass(frozen=True)
@@ -170,6 +173,83 @@ def execute_action(
             return {"status_code": response.status, "body": body}
 
 
+def job_result_from_action_response(result: dict[str, Any]) -> dict[str, Any] | None:
+    body = result.get("body")
+    if not isinstance(body, dict):
+        return None
+    job = body.get("result")
+    if not isinstance(job, dict) or not job.get("id"):
+        return None
+    return job
+
+
+def fetch_json(
+    *,
+    url: str,
+    timeout: float,
+    opener: Callable[..., Any] = urllib.request.urlopen,
+) -> dict[str, Any]:
+    request = urllib.request.Request(
+        url,
+        method="GET",
+        headers={"Accept": "application/json"},
+    )
+    with opener(request, timeout=timeout) as response:
+        body = response.read().decode("utf-8")
+        if not body:
+            return {"status_code": response.status, "body": None}
+        try:
+            return {"status_code": response.status, "body": json.loads(body)}
+        except json.JSONDecodeError:
+            return {"status_code": response.status, "body": body}
+
+
+def job_status_url(api_base: str, project_id: str, job_id: str) -> str:
+    project_part = urllib.parse.quote(project_id, safe="")
+    job_part = urllib.parse.quote(job_id, safe="")
+    return urllib.parse.urljoin(
+        api_base.rstrip("/") + "/",
+        f"api/v1/agents/{project_part}/generation-jobs/{job_part}",
+    )
+
+
+def wait_for_job_result(
+    action_result: dict[str, Any],
+    *,
+    api_base: str,
+    project_id: str | None,
+    timeout: float,
+    poll_interval: float,
+    opener: Callable[..., Any] = urllib.request.urlopen,
+    sleeper: Callable[[float], None] = time.sleep,
+    monotonic: Callable[[], float] = time.monotonic,
+) -> dict[str, Any] | None:
+    job = job_result_from_action_response(action_result)
+    if not job:
+        return None
+
+    job_id = str(job["id"])
+    job_project_id = str(job.get("project_id") or project_id or "")
+    if not job_project_id:
+        raise ValueError("Cannot wait for generation job without project_id")
+
+    url = job_status_url(api_base, job_project_id, job_id)
+    deadline = monotonic() + timeout
+    last_result: dict[str, Any] | None = None
+    while True:
+        last_result = fetch_json(url=url, timeout=timeout, opener=opener)
+        body = last_result.get("body")
+        status = body.get("status") if isinstance(body, dict) else None
+        if status in TERMINAL_JOB_STATUSES:
+            return last_result
+        if monotonic() >= deadline:
+            raise TimeoutError(
+                f"Timed out waiting for generation job {job_id}; "
+                f"last status was {status or 'unknown'}"
+            )
+        sleeper(poll_interval)
+
+
 def render_action_line(action: ManifestAction, url: str) -> str:
     bits = [
         action.action_key,
@@ -197,6 +277,13 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--action-key", action="append", default=[])
     parser.add_argument("--all", action="store_true", help="Select all manifest actions")
     parser.add_argument("--execute", action="store_true", help="Actually call the API")
+    parser.add_argument(
+        "--wait",
+        action="store_true",
+        help="After executing generation actions, poll their background jobs to completion.",
+    )
+    parser.add_argument("--poll-interval", type=float, default=2.0)
+    parser.add_argument("--wait-timeout", type=float, default=1800.0)
     parser.add_argument("--timeout", type=float, default=60.0)
     return parser.parse_args(argv)
 
@@ -215,15 +302,29 @@ def main(argv: list[str]) -> int:
             raise ValueError("Use --all or --action-key when running with --execute")
 
         project_id = str(manifest.get("project_id") or "") or None
+        exit_code = 0
         for action in selected:
             url = action_url(args.api_base, action.api_path, project_id)
             print(render_action_line(action, url))
             if args.execute:
                 result = execute_action(action, url=url, timeout=args.timeout)
                 print(json.dumps(result, ensure_ascii=False, indent=2))
+                if args.wait:
+                    wait_result = wait_for_job_result(
+                        result,
+                        api_base=args.api_base,
+                        project_id=project_id,
+                        timeout=args.wait_timeout,
+                        poll_interval=args.poll_interval,
+                    )
+                    if wait_result is not None:
+                        print(json.dumps({"wait_result": wait_result}, ensure_ascii=False, indent=2))
+                        body = wait_result.get("body")
+                        if isinstance(body, dict) and body.get("status") == "error":
+                            exit_code = 1
         if not selected:
             print("No executable actions in manifest")
-        return 0
+        return exit_code
     except (ValueError, OSError, urllib.error.URLError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
