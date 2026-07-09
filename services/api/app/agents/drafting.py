@@ -34,6 +34,8 @@ if TYPE_CHECKING:
 
 log = structlog.get_logger()
 
+MAX_QUALITY_REPAIR_ATTEMPTS = 2
+
 SYSTEM_PROMPT = """
 You are a Bulgarian technical proposal drafting specialist for public procurement.
 
@@ -352,6 +354,7 @@ async def run_drafting(
     variant_data = llm_result.get("variant_1") or {}
     variant_text = variant_data.get("text", "")
     repair_attempted = False
+    repair_attempt_count = 0
     repair_error: str | None = None
     if variant_text:
         requirement_coverage = assess_requirement_coverage(
@@ -367,15 +370,22 @@ async def run_drafting(
             requirement_coverage=requirement_coverage,
             depth_assessment=depth_assessment,
         )
-        if repair_feedback and _needs_quality_repair(
-            requirement_coverage,
-            depth_assessment,
+        while (
+            repair_feedback
+            and _needs_quality_repair(requirement_coverage, depth_assessment)
+            and repair_attempt_count < MAX_QUALITY_REPAIR_ATTEMPTS
         ):
             repair_attempted = True
+            repair_attempt_count += 1
             try:
                 repaired_result = await llm_gateway.call(
                     system_prompt=SYSTEM_PROMPT,
-                    user_message=f"{user_message}\n\n{repair_feedback}",
+                    user_message=(
+                        f"{user_message}\n\n"
+                        f"QUALITY REPAIR ATTEMPT {repair_attempt_count}/"
+                        f"{MAX_QUALITY_REPAIR_ATTEMPTS}\n"
+                        f"{repair_feedback}"
+                    ),
                     agent="drafting",
                     trace_id=trace_id,
                 )
@@ -384,6 +394,21 @@ async def run_drafting(
                     llm_result = repaired_result
                     variant_data = repaired_variant
                     variant_text = repaired_variant.get("text", "")
+                    requirement_coverage = assess_requirement_coverage(
+                        variant_text,
+                        normalized_requirement_items,
+                    )
+                    depth_assessment = assess_generation_depth(
+                        variant_text,
+                        requirement_coverage,
+                        drafting_blueprint=drafting_blueprint,
+                    )
+                    repair_feedback = _quality_repair_feedback(
+                        requirement_coverage=requirement_coverage,
+                        depth_assessment=depth_assessment,
+                    )
+                else:
+                    break
             except Exception as exc:  # pragma: no cover - defensive fallback
                 repair_error = str(exc)
                 log.warning(
@@ -393,6 +418,7 @@ async def run_drafting(
                     trace_id=trace_id,
                     error=repair_error,
                 )
+                break
 
     saved_ids: dict[str, str] = {}
     for variant_key in ("variant_1",):
@@ -422,6 +448,8 @@ async def run_drafting(
                 "llm_requirement_coverage": variant_data.get("requirement_coverage", []),
                 "generation_depth": depth_assessment,
                 "quality_repair_attempted": repair_attempted,
+                "quality_repair_attempt_count": repair_attempt_count,
+                "quality_repair_max_attempts": MAX_QUALITY_REPAIR_ATTEMPTS,
                 "quality_repair_error": repair_error,
             }
             used_sources: dict[str, Any] = {}

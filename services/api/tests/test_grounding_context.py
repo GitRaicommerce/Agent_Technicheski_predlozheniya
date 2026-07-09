@@ -353,6 +353,7 @@ async def test_drafting_repairs_short_or_missing_requirement_coverage_before_sav
     ]
     assert saved_generation.text == repaired_sentence * 16
     assert saved_generation.flags_json["quality_repair_attempted"] is True
+    assert saved_generation.flags_json["quality_repair_attempt_count"] == 1
     assert saved_generation.flags_json["requirement_coverage"]["missing_ids"] == []
     assert saved_generation.flags_json["generation_depth"]["status"] == "ok"
 
@@ -389,7 +390,12 @@ async def test_drafting_repair_feedback_names_missing_blueprint_topics(mock_db):
         "acceptance evidence, reporting sequence, and site coordination. "
     )
     balanced_text = _varied_operational_text(
-        ["dust", "waste", "soil", "water"],
+        [
+            "dust suppression measures during execution",
+            "waste segregation storage transport handover",
+            "soil protection clean up controls",
+            "water pollution prevention controls",
+        ],
         repeats=25,
     )
 
@@ -438,6 +444,100 @@ async def test_drafting_repair_feedback_names_missing_blueprint_topics(mock_db):
     assert "water" in repair_prompt
     assert saved_generation.text == balanced_text
     assert saved_generation.flags_json["quality_repair_attempted"] is True
+    assert saved_generation.flags_json["quality_repair_attempt_count"] == 1
+    assert saved_generation.flags_json["generation_depth"]["status"] == "ok"
+
+
+@pytest.mark.asyncio
+async def test_drafting_runs_second_repair_when_first_repair_still_fails_depth(
+    mock_db,
+):
+    project_id = str(uuid.uuid4())
+    section_uid = str(uuid.uuid4())
+    requirement_items = [
+        {
+            "id": f"req-{topic}",
+            "text": text,
+            "importance": "mandatory",
+            "category": "environment",
+            "category_label": "Environmental protection",
+            "topic": topic,
+        }
+        for topic, text in [
+            ("dust", "Describe dust suppression measures during execution."),
+            ("waste", "Describe waste segregation, storage, transport, and handover."),
+            ("soil", "Describe soil protection and clean-up controls."),
+            ("water", "Describe water and pollution prevention controls."),
+        ]
+    ]
+    first_text = "The proposal mentions environmental protection."
+    repeated_repair_sentence = (
+        "The environmental section covers dust suppression, waste segregation, "
+        "soil protection, and water pollution prevention with responsible roles, "
+        "monitoring records, corrective actions, control points, acceptance "
+        "evidence, reporting sequence, and site coordination. "
+    )
+    final_text = _varied_operational_text(
+        [
+            "dust suppression measures during execution",
+            "waste segregation storage transport handover",
+            "soil protection clean up controls",
+            "water pollution prevention controls",
+        ],
+        repeats=25,
+    )
+
+    with patch(
+        "app.agents.drafting.llm_gateway.call",
+        new=AsyncMock(
+            side_effect=[
+                {
+                    "variant_1": {
+                        "text": first_text,
+                        "evidence_map": {},
+                    },
+                    "flags": [],
+                },
+                {
+                    "variant_1": {
+                        "text": repeated_repair_sentence * 90,
+                        "evidence_map": {},
+                    },
+                    "flags": [],
+                },
+                {
+                    "variant_1": {
+                        "text": final_text,
+                        "evidence_map": {},
+                    },
+                    "flags": [],
+                },
+            ]
+        ),
+    ) as llm_call:
+        await run_drafting(
+            project_id=project_id,
+            section_uid=section_uid,
+            section_title="Environmental protection",
+            section_requirements=[],
+            evidence_snippets=[],
+            schedule_summary=None,
+            lex_citations=[],
+            db=mock_db,
+            trace_id=str(uuid.uuid4()),
+            section_requirement_items=requirement_items,
+        )
+
+    second_repair_prompt = llm_call.await_args_list[2].kwargs["user_message"]
+    saved_generation = mock_db.add.call_args.args[0]
+
+    assert llm_call.await_count == 3
+    assert "QUALITY REPAIR ATTEMPT 2/2" in second_repair_prompt
+    assert "repetitive_content" in second_repair_prompt
+    assert saved_generation.text == final_text
+    assert saved_generation.flags_json["quality_repair_attempted"] is True
+    assert saved_generation.flags_json["quality_repair_attempt_count"] == 2
+    assert saved_generation.flags_json["quality_repair_max_attempts"] == 2
     assert saved_generation.flags_json["generation_depth"]["status"] == "ok"
 
 
@@ -492,5 +592,6 @@ async def test_drafting_saves_initial_generation_when_quality_repair_fails(mock_
     assert llm_call.await_count == 2
     assert saved_generation.text == initial_text
     assert saved_generation.flags_json["quality_repair_attempted"] is True
+    assert saved_generation.flags_json["quality_repair_attempt_count"] == 1
     assert saved_generation.flags_json["quality_repair_error"] == "temporary LLM failure"
     assert saved_generation.flags_json["generation_depth"]["status"] == "needs_review"

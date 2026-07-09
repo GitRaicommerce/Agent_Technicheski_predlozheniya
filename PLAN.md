@@ -125,6 +125,7 @@
 - Hardened calibration remediation execution so requested `section_uids` are validated against the current outline before a targeted drafting job is queued, preventing stale manifests from creating empty no-op regeneration jobs.
 - Added a repetition-aware generation-depth gate so long sections made from repeated sentence patterns are flagged before export or calibration remediation, forcing real distinct operational detail rather than padded volume.
 - Surfaced generation-depth issue labels in DOCX readiness reports and the Generations panel so repetitive/padded text, missing blueprint topics, short sections, and weak sentence development are understandable remediation reasons.
+- Made drafting quality repair iterative for up to two targeted passes, so a first weak rewrite that still misses checklist coverage or depth diagnostics is rechecked and repaired again before the generation is saved.
 
 ## Active Goals
 
@@ -137,7 +138,7 @@
 
 1. Use `scripts/run_calibration_manifest_actions.py` or the Generations bulk duplicate resolver to clear Pernik's legacy duplicate selected generations, then re-run the aggregated export readiness check.
 2. Use the calibration manifest action runner or Generations panel bulk stale-regeneration action for Pernik after duplicate selections are resolved; then use the bulk missing-requirements and quality/depth regeneration actions for any remaining requirement-coverage or blueprint-aware shallow sections reported by export preflight or gap-priority diagnostics.
-3. After resolving Pernik's duplicate selected variants and stale selected sections, regenerate affected sections so the section structure plan and drafting quality-repair pass can improve subtopic coverage, checklist coverage, and depth before export readiness is checked again.
+3. After resolving Pernik's duplicate selected variants and stale selected sections, regenerate affected sections so the section structure plan and iterative drafting quality-repair pass can improve subtopic coverage, checklist coverage, and depth before export readiness is checked again.
 4. Re-run the Pernik calibration bundle after remediation and compare the regenerated output against the winning proposal, focusing on the manifest word-volume scorecard, section-level drafting-depth diagnostics, structured gap remediation actions, and the before/after calibration manifest comparison report.
 5. Expand generated documentation with more precise backend endpoint and workflow coverage.
 6. Continue broadening common tender regression coverage with more real-world noisy PDF extraction and DOCX readiness combinations.
