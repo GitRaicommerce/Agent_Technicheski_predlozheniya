@@ -129,6 +129,66 @@ class CalibrationRemediationCycleTests(unittest.TestCase):
             cycle.run_manifest_actions = original_actions
             cycle.run_proposal_calibration = original_calibration
 
+    def test_main_actions_only_skips_calibration_bundle_and_reference(self):
+        original_actions = cycle.run_manifest_actions
+        original_calibration = cycle.run_proposal_calibration
+        cycle.run_manifest_actions = Mock(return_value=0)
+        cycle.run_proposal_calibration = Mock(return_value=0)
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                out_dir = Path(tmp) / "actions"
+                manifest_path = write_manifest(Path(tmp) / "before.json")
+                status = main(
+                    [
+                        "--manifest",
+                        str(manifest_path),
+                        "--project-id",
+                        "project-1",
+                        "--out-dir",
+                        str(out_dir),
+                        "--actions-only",
+                        "--all",
+                    ]
+                )
+
+                self.assertEqual(status, 0)
+                self.assertTrue(out_dir.exists())
+                cycle.run_manifest_actions.assert_called_once()
+                cycle.run_proposal_calibration.assert_not_called()
+                action_args = cycle.run_manifest_actions.call_args.args[0]
+                self.assertIn("--out-json", action_args)
+                self.assertIn("--out-md", action_args)
+        finally:
+            cycle.run_manifest_actions = original_actions
+            cycle.run_proposal_calibration = original_calibration
+
+    def test_main_requires_reference_for_full_bundle(self):
+        original_actions = cycle.run_manifest_actions
+        original_calibration = cycle.run_proposal_calibration
+        cycle.run_manifest_actions = Mock(return_value=0)
+        cycle.run_proposal_calibration = Mock(return_value=0)
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                manifest_path = write_manifest(Path(tmp) / "before.json")
+                status = main(
+                    [
+                        "--manifest",
+                        str(manifest_path),
+                        "--project-id",
+                        "project-1",
+                        "--out-dir",
+                        str(Path(tmp) / "after"),
+                        "--all",
+                    ]
+                )
+
+                self.assertEqual(status, 1)
+                cycle.run_manifest_actions.assert_not_called()
+                cycle.run_proposal_calibration.assert_not_called()
+        finally:
+            cycle.run_manifest_actions = original_actions
+            cycle.run_proposal_calibration = original_calibration
+
     def test_main_stops_when_action_phase_fails(self):
         original_actions = cycle.run_manifest_actions
         original_calibration = cycle.run_proposal_calibration

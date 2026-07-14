@@ -50,6 +50,8 @@ def build_calibration_args(
     args: argparse.Namespace,
     reports: dict[str, Path],
 ) -> list[str]:
+    if args.reference is None:
+        raise ValueError("--reference is required unless --actions-only is used")
     calibration_args = [
         "--project-id",
         args.project_id,
@@ -72,12 +74,14 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         description=(
             "Run calibration manifest actions, write execution reports, then "
             "build a new calibration bundle with the action report attached. "
-            "Dry-run action execution is the default."
+            "Dry-run action execution is the default. Use --actions-only to "
+            "validate or execute manifest actions without rebuilding the "
+            "calibration bundle."
         )
     )
     parser.add_argument("--manifest", required=True, type=Path)
     parser.add_argument("--project-id", required=True)
-    parser.add_argument("--reference", required=True, type=Path)
+    parser.add_argument("--reference", type=Path)
     parser.add_argument("--out-dir", required=True, type=Path)
     parser.add_argument("--tender", action="append", default=[], type=Path)
     parser.add_argument("--api-base", default="http://localhost:8000")
@@ -85,6 +89,15 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--all", action="store_true")
     parser.add_argument("--execute", action="store_true")
     parser.add_argument("--wait", action="store_true")
+    parser.add_argument(
+        "--actions-only",
+        action="store_true",
+        help=(
+            "Run only the manifest action phase and write action execution "
+            "reports. This avoids DB/reference proposal dependencies and does "
+            "not build a new calibration bundle."
+        ),
+    )
     parser.add_argument("--timeout", type=float, default=60.0)
     parser.add_argument("--poll-interval", type=float, default=2.0)
     parser.add_argument("--wait-timeout", type=float, default=1800.0)
@@ -97,6 +110,8 @@ def validate_args(args: argparse.Namespace) -> None:
             "Use --wait with --execute so the calibration bundle is built after "
             "generation remediation jobs finish."
         )
+    if not args.actions_only and args.reference is None:
+        raise ValueError("--reference is required unless --actions-only is used")
     manifest_project_id = calibration_manifest_project_id(args.manifest)
     if manifest_project_id and manifest_project_id != args.project_id:
         raise ValueError(
@@ -120,7 +135,7 @@ def main(argv: list[str]) -> int:
         args.out_dir.mkdir(parents=True, exist_ok=True)
 
         action_status = run_manifest_actions(build_action_args(args, reports))
-        if action_status != 0:
+        if action_status != 0 or args.actions_only:
             return action_status
 
         return run_proposal_calibration(build_calibration_args(args, reports))

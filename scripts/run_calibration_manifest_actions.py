@@ -51,11 +51,13 @@ def manifest_actions(manifest: dict[str, Any]) -> list[ManifestAction]:
         action_key = str(item.get("action_key") or "").strip()
         api_method = str(item.get("api_method") or "POST").strip().upper()
         api_path = str(item.get("api_path") or "").strip()
-        if not action_key or not api_path:
+        if not action_key:
             raise ValueError(
                 "Manifest readiness action "
-                f"#{index} must include action_key and api_path"
+                f"#{index} must include action_key"
             )
+        if not api_path:
+            api_path = f"/api/v1/agents/{{project_id}}/remediation-actions/{action_key}"
         request_json = item.get("request_json")
         if request_json is not None and not isinstance(request_json, dict):
             raise ValueError(

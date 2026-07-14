@@ -70,6 +70,26 @@ class CalibrationManifestActionTests(unittest.TestCase):
         self.assertEqual(actions[0].source, "readiness_actions")
         self.assertEqual(actions[0].section_count, 2)
 
+    def test_manifest_actions_synthesize_dispatcher_path_for_legacy_readiness_rows(self):
+        manifest = {
+            "readiness_actions": [
+                {
+                    "action_key": "resolve_duplicate_selected",
+                    "blocker_code": "duplicate_selected",
+                    "section_count": 14,
+                }
+            ]
+        }
+
+        actions = manifest_actions(manifest)
+
+        self.assertEqual(len(actions), 1)
+        self.assertEqual(
+            actions[0].api_path,
+            "/api/v1/agents/{project_id}/remediation-actions/resolve_duplicate_selected",
+        )
+        self.assertEqual(actions[0].api_method, "POST")
+
     def test_manifest_actions_include_executable_gap_rows_without_duplicates(self):
         manifest = {
             "readiness_actions": [

@@ -134,6 +134,8 @@
 - Made before/after calibration recommendations prioritize failed remediation job executions before interpreting readiness or gap-score movement, preventing misleading "improved" conclusions after partial action failure.
 - Hardened the calibration remediation cycle script so real `--execute` runs require `--wait`, preventing a rerun bundle from being built before queued generation remediation jobs finish.
 - Hardened the calibration remediation cycle script against project mix-ups by validating that the source manifest `project_id` matches the requested rerun `--project-id` before any actions or bundle generation start.
+- Added an `--actions-only` mode to the calibration remediation cycle script so manifest remediation actions can be safely dry-run or reported without rebuilding a calibration bundle, avoiding DB/reference proposal dependencies during action validation.
+- Made the calibration manifest action runner compatible with older manifests by synthesizing the standard remediation dispatcher API path from `action_key` when `api_path` is missing.
 
 ## Active Goals
 
@@ -144,7 +146,7 @@
 
 ## Next Recommended Steps
 
-1. Use `scripts/run_calibration_remediation_cycle.py --execute --wait` or the Generations bulk duplicate resolver to clear Pernik's legacy duplicate selected generations, then inspect the rerun bundle's readiness and action evidence.
+1. Use `scripts/run_calibration_remediation_cycle.py --actions-only` against the Pernik manifest to validate the planned remediation actions and reports without rebuilding the bundle; then use `--execute --wait` or the Generations bulk duplicate resolver to clear Pernik's legacy duplicate selected generations.
 2. Use the calibration remediation cycle script with `--execute --wait` or Generations panel bulk stale-regeneration action for Pernik after duplicate selections are resolved; then use the bulk missing-requirements and quality/depth regeneration actions for any remaining requirement-coverage or blueprint-aware shallow sections reported by export preflight or gap-priority diagnostics.
 3. After resolving Pernik's duplicate selected variants and stale selected sections, regenerate affected sections so the section structure plan and iterative drafting quality-repair pass can improve subtopic coverage, checklist coverage, and depth before export readiness is checked again.
 4. Re-run the Pernik calibration bundle after remediation with `--action-report` and compare the regenerated output against the winning proposal, focusing on the manifest word-volume scorecard, section-level drafting-depth diagnostics, executed remediation evidence, and the before/after calibration manifest comparison report's execution-status deltas.
