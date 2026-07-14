@@ -94,6 +94,10 @@ class RunProposalCalibrationTests(unittest.TestCase):
                         "section_uid": "sec-quality",
                         "section_title": "Quality",
                         "missing_count": 2,
+                        "missing_items": [
+                            {"reason": "missing distinctive requirement detail"},
+                            {"reason": "needs operational evidence"},
+                        ],
                     },
                     {
                         "section_uid": "sec-risk",
@@ -157,6 +161,13 @@ class RunProposalCalibrationTests(unittest.TestCase):
         self.assertIn("`Остави най-новите`", manifest)
         self.assertIn(
             "`missing_requirements` action_key=`regenerate_missing_requirements`",
+            manifest,
+        )
+        self.assertIn(
+            (
+                "Quality (2 missing; missing distinctive requirement detail, "
+                "needs operational evidence)"
+            ),
             manifest,
         )
         self.assertIn(
@@ -424,7 +435,14 @@ class RunProposalCalibrationTests(unittest.TestCase):
                 ],
                 "stale_section_details": [{"section_title": "Schedule"}],
                 "missing_requirement_sections": [
-                    {"section_title": "Quality", "missing_count": 3},
+                    {
+                        "section_title": "Quality",
+                        "missing_count": 3,
+                        "missing_items": [
+                            {"reason": "missing distinctive requirement detail"},
+                            {"reason": "needs operational evidence"},
+                        ],
+                    },
                     {"section_title": "Safety", "missing_count": 1},
                 ],
                 "quality_sections": [
@@ -448,7 +466,13 @@ class RunProposalCalibrationTests(unittest.TestCase):
         self.assertIn("Schedule", actions[1])
         self.assertIn("action_key=`regenerate_missing_requirements`", actions[2])
         self.assertIn("bulk `Regenerate coverage`", actions[2])
-        self.assertIn("Quality (3 missing)", actions[2])
+        self.assertIn(
+            (
+                "Quality (3 missing; missing distinctive requirement detail, "
+                "needs operational evidence)"
+            ),
+            actions[2],
+        )
         self.assertIn("action_key=`regenerate_quality_depth`", actions[3])
         self.assertIn("bulk `Regenerate detailed`", actions[3])
         self.assertIn("Environment (120/420 words)", actions[3])
@@ -471,6 +495,11 @@ class RunProposalCalibrationTests(unittest.TestCase):
                     "section_uid": "sec-quality",
                     "section_title": "Quality",
                     "missing_count": 3,
+                    "missing_items": [
+                        {"reason": "missing distinctive requirement detail"},
+                        {"reason": "missing distinctive requirement detail"},
+                        {"reason": "needs operational evidence"},
+                    ],
                 },
                 {
                     "section_uid": "sec-risk",
@@ -575,6 +604,17 @@ class RunProposalCalibrationTests(unittest.TestCase):
                 "section_uids": ["sec-quality", "sec-risk"],
                 "section_title_hints": ["Quality", "Risk"],
             },
+        )
+        self.assertIn(
+            (
+                "Quality (3 missing; missing distinctive requirement detail, "
+                "needs operational evidence)"
+            ),
+            manifest["readiness_actions"][2]["section_labels"],
+        )
+        self.assertIn(
+            "missing distinctive requirement detail",
+            manifest["readiness_actions"][2]["summary"],
         )
         self.assertEqual(
             manifest["readiness_actions"][3]["request_json"],

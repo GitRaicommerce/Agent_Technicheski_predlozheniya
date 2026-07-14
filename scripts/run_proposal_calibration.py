@@ -425,6 +425,24 @@ def _summarize_labels(labels: list[str], limit: int = 6) -> str:
     return "; ".join(visible) + suffix
 
 
+def _missing_requirement_label(section: dict[str, Any]) -> str:
+    missing_count = int(section.get("missing_count") or 0)
+    reasons: list[str] = []
+    for item in section.get("missing_items") or []:
+        if not isinstance(item, dict):
+            continue
+        reason = str(item.get("reason") or "").strip()
+        if reason and reason not in reasons:
+            reasons.append(reason)
+
+    reason_summary = ""
+    if reasons:
+        visible = reasons[:3]
+        suffix = f", +{len(reasons) - 3} more" if len(reasons) > 3 else ""
+        reason_summary = "; " + ", ".join(visible) + suffix
+    return f"{_section_label(section)} ({missing_count} missing{reason_summary})"
+
+
 def _blocker_count(readiness: dict[str, Any], code: str) -> int:
     for blocker in readiness.get("blockers") or []:
         if isinstance(blocker, dict) and blocker.get("code") == code:
@@ -481,10 +499,7 @@ def readiness_priority_actions(readiness: dict[str, Any] | None) -> list[str]:
             key=lambda item: int(item.get("missing_count") or 0),
             reverse=True,
         )
-        labels = [
-            f"{_section_label(item)} ({int(item.get('missing_count') or 0)} missing)"
-            for item in missing_sections
-        ]
+        labels = [_missing_requirement_label(item) for item in missing_sections]
         actions.append(
             "`missing_requirements` action_key=`regenerate_missing_requirements`: use Generations bulk `Regenerate coverage` "
             "to rewrite selected sections with explicit checklist coverage - "
@@ -604,10 +619,9 @@ def structured_readiness_priority_actions(
             key=lambda item: int(item.get("missing_count") or 0),
             reverse=True,
         )
-        labels = [
-            f"{_section_label(item)} ({int(item.get('missing_count') or 0)} missing)"
-            for item in missing_sections
-        ] or [f"{missing_count} sections with missing requirements"]
+        labels = [_missing_requirement_label(item) for item in missing_sections] or [
+            f"{missing_count} sections with missing requirements"
+        ]
         action = {
             "blocker_code": "missing_requirements",
             "action_key": READINESS_ACTION_KEYS["missing_requirements"],

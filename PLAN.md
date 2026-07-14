@@ -175,6 +175,7 @@
 - Surfaced structured missing-requirement diagnostics inside targeted drafting guidance prompts, including distinctive detail counts and distinguishing terms for similar operational requirements.
 - Surfaced distinctive missing-requirement diagnostics in the Generations panel UI and frontend API types so users can see missing distinguishing details directly before triggering coverage regeneration.
 - Added distinctive missing-requirement diagnostics to Markdown DOCX readiness reports, so calibration bundles show missing distinguishing terms and counts before regeneration.
+- Added missing-requirement reason summaries to calibration manifest readiness actions, so review bundles show whether uncovered checklist items need distinctive detail, coherent coverage, operational evidence, or other universal repair types.
 
 ## Active Goals
 
