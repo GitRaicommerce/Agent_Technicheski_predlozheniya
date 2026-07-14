@@ -677,21 +677,20 @@ async def run_generation_remediation_action(
             db,
             req,
         )
-        if requested_section_uids and action_key in {
-            "regenerate_missing_requirements",
-            "regenerate_quality_depth",
-        }:
-            job_type = (
-                "drafting_requirements"
-                if action_key == "regenerate_missing_requirements"
-                else "drafting_quality"
+        if requested_section_uids and action_key == "regenerate_missing_requirements":
+            job = await create_drafting_requirements_job(
+                project=project,
+                db=db,
+                target_section_uids=requested_section_uids,
+                target_reason=f"calibration_gap:{action_key}",
             )
+        elif requested_section_uids and action_key == "regenerate_quality_depth":
             job = await create_drafting_job(
                 project=project,
                 db=db,
                 target_section_uids=requested_section_uids,
                 target_reason=f"calibration_gap:{action_key}",
-                job_type=job_type,
+                job_type="drafting_quality",
             )
         elif action_key == "regenerate_stale":
             job = await create_drafting_stale_job(project=project, db=db)

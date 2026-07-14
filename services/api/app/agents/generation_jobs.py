@@ -222,15 +222,31 @@ async def create_drafting_quality_job(project: Project, db) -> GenerationJob:
     )
 
 
-async def create_drafting_requirements_job(project: Project, db) -> GenerationJob:
+async def create_drafting_requirements_job(
+    project: Project,
+    db,
+    *,
+    target_section_uids: list[str] | None = None,
+    target_reason: str = "missing_requirements",
+) -> GenerationJob:
     from app.routers.export import _build_export_readiness, _load_selected_generations
 
     selected_generations = await _load_selected_generations(project.id, db)
     readiness = await _build_export_readiness(project.id, selected_generations, db)
+    target_uids = {
+        str(uid)
+        for uid in target_section_uids or []
+        if str(uid).strip()
+    }
     missing_sections = [
         section
         for section in readiness.get("missing_requirement_sections") or []
-        if isinstance(section, dict) and section.get("section_uid")
+        if isinstance(section, dict)
+        and section.get("section_uid")
+        and (
+            not target_uids
+            or str(section.get("section_uid")) in target_uids
+        )
     ]
     section_uids = list(
         dict.fromkeys(str(section["section_uid"]) for section in missing_sections)
@@ -244,7 +260,7 @@ async def create_drafting_requirements_job(project: Project, db) -> GenerationJo
         project=project,
         db=db,
         target_section_uids=section_uids,
-        target_reason="missing_requirements",
+        target_reason=target_reason,
         target_guidance=target_guidance,
         job_type="drafting_requirements",
     )

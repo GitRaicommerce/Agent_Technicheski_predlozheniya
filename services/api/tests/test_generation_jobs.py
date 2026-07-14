@@ -459,6 +459,96 @@ async def test_create_drafting_quality_job_targets_quality_sections(mock_db):
 
 
 @pytest.mark.asyncio
+async def test_create_drafting_requirements_job_filters_requested_missing_sections(
+    mock_db,
+):
+    project = _make_project()
+    selected_generations = [
+        SimpleNamespace(section_uid="sec-quality"),
+        SimpleNamespace(section_uid="sec-risk"),
+    ]
+    mock_db.flush = AsyncMock()
+    mock_db.commit = AsyncMock()
+
+    with (
+        patch("app.agents.generation_jobs._enqueue_generation_job") as enqueue,
+        patch(
+            "app.routers.export._load_selected_generations",
+            new=AsyncMock(return_value=selected_generations),
+        ),
+        patch(
+            "app.routers.export._build_export_readiness",
+            new=AsyncMock(
+                return_value={
+                    "missing_requirement_sections": [
+                        {
+                            "section_uid": "sec-quality",
+                            "missing_requirement_ids": ["req-quality"],
+                            "missing_items": [
+                                {
+                                    "id": "req-quality",
+                                    "text": "Describe quality evidence.",
+                                    "reason": "needs operational evidence",
+                                    "remediation_guidance": (
+                                        "Regenerate quality with records."
+                                    ),
+                                }
+                            ],
+                        },
+                        {
+                            "section_uid": "sec-risk",
+                            "missing_requirement_ids": ["req-risk"],
+                            "missing_items": [
+                                {
+                                    "id": "req-risk",
+                                    "text": "Describe risk controls.",
+                                    "reason": "missing key terms",
+                                    "remediation_guidance": (
+                                        "Regenerate risk with controls."
+                                    ),
+                                }
+                            ],
+                        },
+                    ]
+                }
+            ),
+        ),
+    ):
+        job = await create_drafting_requirements_job(
+            project,
+            mock_db,
+            target_section_uids=["sec-quality"],
+            target_reason="calibration_gap:regenerate_missing_requirements",
+        )
+
+    assert job.job_type == "drafting_requirements"
+    assert job.result_json["target_section_uids"] == ["sec-quality"]
+    assert job.result_json["target_reason"] == (
+        "calibration_gap:regenerate_missing_requirements"
+    )
+    assert job.result_json["target_guidance"] == {
+        "sec-quality": {
+            "instructions": ["Regenerate quality with records."],
+            "missing_requirement_ids": ["req-quality"],
+            "missing_requirement_items": [
+                {
+                    "id": "req-quality",
+                    "text": "Describe quality evidence.",
+                    "reason": "needs operational evidence",
+                    "remediation_guidance": "Regenerate quality with records.",
+                    "missing_terms": [],
+                    "required_match_count": None,
+                    "required_coherent_match_count": None,
+                    "required_operational_signal_count": None,
+                }
+            ],
+        }
+    }
+    mock_db.add.assert_called_once_with(job)
+    enqueue.assert_called_once_with(job.id)
+
+
+@pytest.mark.asyncio
 async def test_create_drafting_requirements_job_targets_missing_requirement_sections(
     mock_db,
 ):

@@ -152,6 +152,7 @@
 - Added a common proposal regression scenario proving missing requirement coverage flows through export readiness, targeted regeneration guidance, drafting prompt guidance, and back into a passing deterministic coverage assessment.
 - Extended calibration action execution reports with target summaries from remediation request payloads, making dry-run and executed calibration reports show which section ids or title hints each action will affect.
 - Added section target payloads to calibration readiness remediation actions for missing-requirement and shallow-section blockers, so generated manifests can queue targeted regeneration directly from DOCX readiness evidence.
+- Preserved missing-requirement remediation guidance for targeted calibration actions by routing `regenerate_missing_requirements` section-specific requests through the readiness-aware requirements job builder.
 
 ## Active Goals
 
