@@ -12,6 +12,11 @@ router = APIRouter()
 
 
 def _missing_requirement_reason(item: dict) -> str:
+    reasons = _missing_requirement_reasons(item)
+    return reasons[0] if reasons else "missing requirement coverage"
+
+
+def _missing_requirement_reasons(item: dict) -> list[str]:
     matched_terms = item.get("matched_terms")
     coherent_terms = item.get("coherent_matched_terms")
     operational_signals = item.get("operational_signals")
@@ -30,25 +35,26 @@ def _missing_requirement_reason(item: dict) -> str:
         len(distinctive_matches) if isinstance(distinctive_matches, list) else 0
     )
 
+    reasons: list[str] = []
     if (
         item.get("requires_operational_detail")
         and isinstance(required_operational_signal_count, int)
         and operational_count < required_operational_signal_count
     ):
-        return "needs operational evidence"
+        reasons.append("needs operational evidence")
     if (
         isinstance(required_coherent_match_count, int)
         and coherent_count < required_coherent_match_count
     ):
-        return "needs coherent passage"
+        reasons.append("needs coherent passage")
     if (
         isinstance(required_distinctive_count, int)
         and distinctive_count < required_distinctive_count
     ):
-        return "missing distinctive requirement detail"
+        reasons.append("missing distinctive requirement detail")
     if isinstance(required_match_count, int) and matched_count < required_match_count:
-        return "missing key terms"
-    return "missing requirement coverage"
+        reasons.append("missing key terms")
+    return reasons or ["missing requirement coverage"]
 
 
 def _missing_requirement_remediation_guidance(item: dict) -> str:
@@ -146,6 +152,7 @@ def _missing_requirement_coverage(generation: Generation) -> dict | None:
                 "text": item.get("text"),
                 "importance": item.get("importance"),
                 "reason": _missing_requirement_reason(item),
+                "reasons": _missing_requirement_reasons(item),
                 "remediation_guidance": _missing_requirement_remediation_guidance(
                     item
                 ),

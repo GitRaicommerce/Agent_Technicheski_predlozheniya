@@ -1154,7 +1154,7 @@ function missingCoverageItems(
 }
 
 function requirementCoverageReasonLabel(item: RequirementCoverageItem): string | null {
-  const reason = String(item.reason ?? "");
+  const reason = String(item.reason ?? item.reasons?.[0] ?? "");
   if (reason === "needs operational evidence") {
     return "липсват оперативни доказателства";
   }
@@ -1174,6 +1174,18 @@ function requirementCoverageReasonLabel(item: RequirementCoverageItem): string |
     return "липсват оперативни доказателства";
   }
   return null;
+}
+
+function requirementCoverageReasonLabels(item: RequirementCoverageItem): string[] {
+  const reasons = item.reasons?.length
+    ? item.reasons
+    : item.reason
+      ? [item.reason]
+      : [];
+  const labels = reasons
+    .map((reason) => requirementCoverageReasonLabel({ ...item, reason }))
+    .filter((label): label is string => Boolean(label));
+  return Array.from(new Set(labels));
 }
 
 function requirementCoverageDiagnostics(item: RequirementCoverageItem): string | null {
@@ -1260,11 +1272,14 @@ function RequirementCoverageDetails({
           {missingItems.slice(0, 5).map((item) => (
             <li key={item.id}>
               <span className="font-medium">{item.id}</span>
-              {requirementCoverageReasonLabel(item) ? (
-                <span className="ml-1 rounded bg-amber-100 px-1 py-0.5 text-[10px] font-medium text-amber-800">
-                  {requirementCoverageReasonLabel(item)}
+              {requirementCoverageReasonLabels(item).slice(0, 3).map((label) => (
+                <span
+                  key={label}
+                  className="ml-1 rounded bg-amber-100 px-1 py-0.5 text-[10px] font-medium text-amber-800"
+                >
+                  {label}
                 </span>
-              ) : null}
+              ))}
               {item.text ? `: ${repairLikelyMojibake(item.text)}` : ""}
               {requirementCoverageDiagnostics(item) ? (
                 <p className="mt-0.5 text-[11px] opacity-75">

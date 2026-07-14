@@ -95,7 +95,12 @@ class RunProposalCalibrationTests(unittest.TestCase):
                         "section_title": "Quality",
                         "missing_count": 2,
                         "missing_items": [
-                            {"reason": "missing distinctive requirement detail"},
+                            {
+                                "reasons": [
+                                    "missing distinctive requirement detail",
+                                    "needs coherent passage",
+                                ]
+                            },
                             {"reason": "needs operational evidence"},
                         ],
                     },
@@ -166,7 +171,7 @@ class RunProposalCalibrationTests(unittest.TestCase):
         self.assertIn(
             (
                 "Quality (2 missing; missing distinctive requirement detail, "
-                "needs operational evidence)"
+                "needs coherent passage, needs operational evidence)"
             ),
             manifest,
         )

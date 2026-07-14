@@ -190,7 +190,12 @@ async def test_export_readiness_aggregates_multiple_blockers(client, mock_db):
     assert detail["missing_requirement_count"] == 3
     missing_items = detail["missing_requirement_sections"][0]["missing_items"]
     assert missing_items[0]["reason"] == "missing requirement coverage"
+    assert missing_items[0]["reasons"] == ["missing requirement coverage"]
     assert missing_items[1]["reason"] == "needs operational evidence"
+    assert missing_items[1]["reasons"] == [
+        "needs operational evidence",
+        "needs coherent passage",
+    ]
     assert missing_items[1]["missing_terms"] == ["approval", "handover"]
     assert "include the missing concepts: approval, handover" in missing_items[1][
         "remediation_guidance"
@@ -202,6 +207,9 @@ async def test_export_readiness_aggregates_multiple_blockers(client, mock_db):
     assert missing_items[1]["operational_signals"] == ["record"]
     assert missing_items[1]["required_operational_signal_count"] == 2
     assert missing_items[2]["reason"] == "missing distinctive requirement detail"
+    assert missing_items[2]["reasons"] == [
+        "missing distinctive requirement detail"
+    ]
     assert missing_items[2]["distinctive_terms"] == [
         "final",
         "acceptance",

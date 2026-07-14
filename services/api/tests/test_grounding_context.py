@@ -72,6 +72,10 @@ def test_section_drafting_guidance_names_distinctive_requirement_diagnostics():
                     "id": "req-final-acceptance",
                     "text": "Describe final acceptance and handover controls.",
                     "reason": "missing distinctive requirement detail",
+                    "reasons": [
+                        "needs coherent passage",
+                        "missing distinctive requirement detail",
+                    ],
                     "remediation_guidance": (
                         "include distinctive requirement details such as final, "
                         "acceptance, handover"
@@ -84,7 +88,10 @@ def test_section_drafting_guidance_names_distinctive_requirement_diagnostics():
         }
     )
 
-    assert "id=req-final-acceptance [missing distinctive requirement detail]" in guidance
+    assert (
+        "id=req-final-acceptance [needs coherent passage, "
+        "missing distinctive requirement detail]"
+    ) in guidance
     assert "repair: include distinctive requirement details" in guidance
     assert "diagnostics: distinctive detail 0/1" in guidance
     assert "distinctive terms: final, acceptance, handover" in guidance

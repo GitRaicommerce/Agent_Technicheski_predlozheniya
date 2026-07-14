@@ -410,7 +410,12 @@ def _format_section_drafting_guidance(guidance: dict[str, Any] | None) -> str:
     if missing_items:
         lines.append("- Missing requirements to repair:")
         for item in missing_items[:20]:
-            reason = str(item.get("reason") or "").strip()
+            reasons = [
+                str(reason).strip()
+                for reason in item.get("reasons") or []
+                if str(reason).strip()
+            ]
+            reason = ", ".join(reasons) or str(item.get("reason") or "").strip()
             suffix = f" [{reason}]" if reason else ""
             lines.append(
                 f"  - id={item.get('id')}{suffix}: {item.get('text')}"

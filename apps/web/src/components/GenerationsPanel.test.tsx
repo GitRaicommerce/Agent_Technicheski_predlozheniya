@@ -119,6 +119,10 @@ describe("GenerationsPanel", () => {
                     text: "Missing requirement",
                     status: "missing",
                     reason: "missing distinctive requirement detail",
+                    reasons: [
+                      "missing distinctive requirement detail",
+                      "needs coherent passage",
+                    ],
                     matched_ratio: 0.8,
                     coherent_matched_ratio: 0.75,
                     operational_signals: ["record"],

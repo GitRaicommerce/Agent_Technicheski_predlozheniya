@@ -307,10 +307,17 @@ def _missing_requirement_target_guidance(
                     "id": requirement_id,
                     "text": item.get("text"),
                     "reason": item.get("reason"),
+                    "reasons": item.get("reasons") or [],
                     "remediation_guidance": guidance_text or None,
                     "missing_terms": item.get("missing_terms") or [],
+                    "matched_terms": item.get("matched_terms") or [],
                     "distinctive_terms": item.get("distinctive_terms") or [],
                     "distinctive_matches": item.get("distinctive_matches") or [],
+                    "coherent_matched_terms": item.get(
+                        "coherent_matched_terms"
+                    )
+                    or [],
+                    "operational_signals": item.get("operational_signals") or [],
                     "required_match_count": item.get("required_match_count"),
                     "required_distinctive_count": item.get(
                         "required_distinctive_count"

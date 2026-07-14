@@ -866,6 +866,7 @@ def test_common_missing_requirement_remediation_flows_into_targeted_drafting_gui
     ]
     missing_item = readiness_section["missing_items"][0]
     assert missing_item["reason"] == "needs operational evidence"
+    assert "needs operational evidence" in missing_item["reasons"]
     assert "add operational evidence" in missing_item["remediation_guidance"]
 
     target_guidance = _missing_requirement_target_guidance([readiness_section])
@@ -944,6 +945,7 @@ def test_common_similar_operational_requirements_need_distinctive_remediation():
     missing_item = readiness_section["missing_items"][0]
     assert missing_item["id"] == "req-final-acceptance"
     assert missing_item["reason"] == "missing distinctive requirement detail"
+    assert "missing distinctive requirement detail" in missing_item["reasons"]
     assert "include distinctive requirement details" in missing_item[
         "remediation_guidance"
     ]
@@ -952,6 +954,7 @@ def test_common_similar_operational_requirements_need_distinctive_remediation():
     target_missing_item = target_guidance["sec-quality"][
         "missing_requirement_items"
     ][0]
+    assert "missing distinctive requirement detail" in target_missing_item["reasons"]
     assert target_missing_item["distinctive_terms"]
     assert target_missing_item["distinctive_matches"] == []
     assert target_missing_item["required_distinctive_count"] == 1

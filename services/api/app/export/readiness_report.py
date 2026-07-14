@@ -187,7 +187,14 @@ def render_export_readiness_report(readiness: dict[str, Any]) -> str:
             )
             for item in section.get("missing_items") or []:
                 if isinstance(item, dict):
-                    reason = _truncate(item.get("reason") or "")
+                    reasons = [
+                        _truncate(reason)
+                        for reason in item.get("reasons") or []
+                        if _truncate(reason)
+                    ]
+                    reason = ", ".join(reasons) or _truncate(
+                        item.get("reason") or ""
+                    )
                     suffix = f" [{reason}]" if reason else ""
                     lines.append(
                         f"  - `{item.get('id', 'n/a')}`{suffix}: "

@@ -40,6 +40,10 @@ def test_render_export_readiness_report_includes_blockers_and_actions():
                             "id": "req-1",
                             "text": "Describe the detailed schedule.",
                             "reason": "needs operational evidence",
+                            "reasons": [
+                                "needs operational evidence",
+                                "missing distinctive requirement detail",
+                            ],
                             "matched_ratio": 0.8,
                             "coherent_matched_ratio": 0.75,
                             "operational_signals": ["record"],
@@ -116,7 +120,10 @@ def test_render_export_readiness_report_includes_blockers_and_actions():
     assert "Duplicate section title (`sec-duplicate`): 2 selected variants (gen-1, gen-2)" in report
     assert "Stale section title (`sec-stale`)" in report
     assert "Missing section title (`sec-missing`): 2 missing (req-1, req-2)" in report
-    assert "`req-1` [needs operational evidence]: Describe the detailed schedule." in report
+    assert (
+        "`req-1` [needs operational evidence, missing distinctive requirement "
+        "detail]: Describe the detailed schedule."
+    ) in report
     assert (
         "diagnostics: matched_ratio=0.8, coherent_ratio=0.75, "
         "operational_signals=1/2, distinctive=0/1, "

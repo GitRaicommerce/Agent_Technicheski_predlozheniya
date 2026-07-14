@@ -431,9 +431,13 @@ def _missing_requirement_label(section: dict[str, Any]) -> str:
     for item in section.get("missing_items") or []:
         if not isinstance(item, dict):
             continue
-        reason = str(item.get("reason") or "").strip()
-        if reason and reason not in reasons:
-            reasons.append(reason)
+        item_reasons = item.get("reasons")
+        if not isinstance(item_reasons, list):
+            item_reasons = [item.get("reason")]
+        for raw_reason in item_reasons:
+            reason = str(raw_reason or "").strip()
+            if reason and reason not in reasons:
+                reasons.append(reason)
 
     reason_summary = ""
     if reasons:
