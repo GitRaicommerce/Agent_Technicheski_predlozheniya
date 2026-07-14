@@ -447,6 +447,24 @@ def _missing_requirement_label(section: dict[str, Any]) -> str:
     return f"{_section_label(section)} ({missing_count} missing{reason_summary})"
 
 
+def _missing_requirement_reason_counts(
+    sections: list[dict[str, Any]],
+) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for section in sections:
+        for item in section.get("missing_items") or []:
+            if not isinstance(item, dict):
+                continue
+            item_reasons = item.get("reasons")
+            if not isinstance(item_reasons, list):
+                item_reasons = [item.get("reason")]
+            for raw_reason in item_reasons:
+                reason = str(raw_reason or "").strip()
+                if reason:
+                    counts[reason] = counts.get(reason, 0) + 1
+    return dict(sorted(counts.items(), key=lambda item: (-item[1], item[0])))
+
+
 def _blocker_count(readiness: dict[str, Any], code: str) -> int:
     for blocker in readiness.get("blockers") or []:
         if isinstance(blocker, dict) and blocker.get("code") == code:
@@ -639,6 +657,9 @@ def structured_readiness_priority_actions(
             "section_labels": labels,
             "summary": _summarize_labels(labels),
         }
+        reason_counts = _missing_requirement_reason_counts(missing_sections)
+        if reason_counts:
+            action["missing_reason_counts"] = reason_counts
         request_json = _section_target_request(missing_sections)
         if request_json:
             action["request_json"] = request_json

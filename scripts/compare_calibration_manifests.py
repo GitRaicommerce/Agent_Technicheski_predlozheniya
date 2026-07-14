@@ -95,6 +95,23 @@ def _action_target_counts(rows: list[Any]) -> dict[tuple[str, str], int]:
     return counts
 
 
+def _missing_reason_counts(rows: list[Any]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        if row.get("action_key") != "regenerate_missing_requirements":
+            continue
+        reason_counts = row.get("missing_reason_counts") or {}
+        if not isinstance(reason_counts, dict):
+            continue
+        for reason, count in reason_counts.items():
+            reason_label = str(reason).strip()
+            if reason_label:
+                counts[reason_label] = counts.get(reason_label, 0) + _int_value(count)
+    return counts
+
+
 def _status_counts(value: Any) -> dict[str, int]:
     if not isinstance(value, dict):
         return {}
@@ -182,6 +199,9 @@ def summarize_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
         "gap_action_counts": _action_counts(gap_rows),
         "readiness_action_target_counts": _action_target_counts(readiness_actions),
         "gap_action_target_counts": _action_target_counts(gap_rows),
+        "missing_requirement_reason_counts": _missing_reason_counts(
+            readiness_actions
+        ),
         "executed_action_count": _int_value(
             _executed_action_count(action_execution_summary)
             if isinstance(action_execution_summary, dict)
@@ -436,6 +456,30 @@ def render_comparison(before_manifest: dict[str, Any], after_manifest: dict[str,
             )
     if not target_rows_added:
         lines.append("| n/a | n/a | no section-specific action targets | 0 | 0 | +0 |")
+
+    lines.extend(
+        [
+            "",
+            "## Missing requirement reason deltas",
+            "",
+            "| Reason | Before | After | Delta |",
+            "| --- | ---: | ---: | ---: |",
+        ]
+    )
+    reason_rows_added = False
+    for reason in _sorted_keys(
+        before["missing_requirement_reason_counts"],
+        after["missing_requirement_reason_counts"],
+    ):
+        before_count = before["missing_requirement_reason_counts"].get(reason, 0)
+        after_count = after["missing_requirement_reason_counts"].get(reason, 0)
+        reason_rows_added = True
+        lines.append(
+            f"| {_escape_md_cell(reason)} | {before_count} | {after_count} | "
+            f"{_format_delta(before_count, after_count)} |"
+        )
+    if not reason_rows_added:
+        lines.append("| n/a | 0 | 0 | +0 |")
 
     lines.extend(
         [

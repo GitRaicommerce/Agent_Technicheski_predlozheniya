@@ -178,6 +178,7 @@
 - Added missing-requirement reason summaries to calibration manifest readiness actions, so review bundles show whether uncovered checklist items need distinctive detail, coherent coverage, operational evidence, or other universal repair types.
 - Added multi-reason missing-requirement diagnostics across export readiness, Markdown reports, calibration manifests, targeted drafting guidance, and the Generations panel, so one uncovered checklist item can expose every repair cause instead of hiding secondary issues behind a single label.
 - Surfaced compact missing-requirement reason summaries directly in the DOCX export warning, so users can see the blocker types before opening the full readiness report or Generations panel.
+- Added structured missing-requirement reason counts to calibration manifest JSON actions and before/after comparison reports, so remediation cycles can track whether distinctive-detail, coherent-passage, operational-evidence, or key-term blockers actually decrease.
 
 ## Active Goals
 

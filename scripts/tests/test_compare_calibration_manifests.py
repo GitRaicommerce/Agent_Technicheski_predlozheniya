@@ -153,6 +153,10 @@ class CompareCalibrationManifestsTests(unittest.TestCase):
                 readiness_actions=[
                     {
                         "action_key": "regenerate_missing_requirements",
+                        "missing_reason_counts": {
+                            "missing distinctive requirement detail": 2,
+                            "needs operational evidence": 1,
+                        },
                         "request_json": {
                             "section_uids": ["sec-quality"],
                             "section_title_hints": ["Quality controls"],
@@ -180,6 +184,13 @@ class CompareCalibrationManifestsTests(unittest.TestCase):
             },
         )
         self.assertEqual(
+            summary["missing_requirement_reason_counts"],
+            {
+                "missing distinctive requirement detail": 2,
+                "needs operational evidence": 1,
+            },
+        )
+        self.assertEqual(
             summary["gap_action_target_counts"],
             {
                 (
@@ -194,6 +205,10 @@ class CompareCalibrationManifestsTests(unittest.TestCase):
             readiness_actions=[
                 {
                     "action_key": "regenerate_missing_requirements",
+                    "missing_reason_counts": {
+                        "missing distinctive requirement detail": 2,
+                        "needs operational evidence": 1,
+                    },
                     "request_json": {
                         "section_uids": ["sec-quality"],
                         "section_title_hints": ["Quality"],
@@ -211,6 +226,10 @@ class CompareCalibrationManifestsTests(unittest.TestCase):
             readiness_actions=[
                 {
                     "action_key": "regenerate_missing_requirements",
+                    "missing_reason_counts": {
+                        "missing distinctive requirement detail": 1,
+                        "needs coherent passage": 1,
+                    },
                     "request_json": {
                         "section_uids": ["sec-environment"],
                         "section_title_hints": ["Environment"],
@@ -251,6 +270,13 @@ class CompareCalibrationManifestsTests(unittest.TestCase):
             "uids=sec-a; titles=New section | 0 | 1 | +1 |",
             text,
         )
+        self.assertIn("## Missing requirement reason deltas", text)
+        self.assertIn(
+            "| missing distinctive requirement detail | 2 | 1 | -1 |",
+            text,
+        )
+        self.assertIn("| needs coherent passage | 0 | 1 | +1 |", text)
+        self.assertIn("| needs operational evidence | 1 | 0 | -1 |", text)
 
     def test_render_comparison_shows_legacy_summary_action_targets(self):
         before = manifest(
