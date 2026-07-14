@@ -146,6 +146,7 @@
 - Enriched drafting quality-repair feedback for missing checklist coverage with required/matched term counts, coherent-passage counts, and operational-evidence signal counts so rewrites know exactly why a requirement failed deterministic coverage.
 - Added a structured requirement-repair writing plan to drafting quality-repair prompts, turning checklist diagnostics into concrete universal rewrite instructions for missing concepts, coherent passages, and operational evidence.
 - Added per-requirement remediation guidance to export readiness JSON and markdown reports, so pre-export blockers now explain how to repair missing concepts, weak coherent passages, and missing operational evidence.
+- Surfaced per-requirement remediation guidance in the Generations panel, so users can see the exact repair instruction beside each missing checklist item before choosing regeneration or manual edits.
 
 ## Active Goals
 

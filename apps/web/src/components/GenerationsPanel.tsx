@@ -1254,6 +1254,11 @@ function RequirementCoverageDetails({
                   {requirementCoverageDiagnostics(item)}
                 </p>
               ) : null}
+              {item.remediation_guidance ? (
+                <p className="mt-0.5 text-[11px] font-medium text-amber-800">
+                  Repair: {repairLikelyMojibake(item.remediation_guidance)}
+                </p>
+              ) : null}
             </li>
           ))}
         </ul>

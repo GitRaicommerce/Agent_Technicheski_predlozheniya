@@ -123,6 +123,8 @@ describe("GenerationsPanel", () => {
                     coherent_matched_ratio: 0.75,
                     operational_signals: ["record"],
                     required_operational_signal_count: 2,
+                    remediation_guidance:
+                      "Regenerate or edit this section with operational evidence.",
                   },
                 ],
               },
@@ -151,6 +153,11 @@ describe("GenerationsPanel", () => {
     expect(
       screen.getByText(
         "термини 80% · свързаност 75% · оперативни сигнали 1/2",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Repair: Regenerate or edit this section with operational evidence.",
       ),
     ).toBeInTheDocument();
   });

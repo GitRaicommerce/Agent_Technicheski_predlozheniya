@@ -278,6 +278,7 @@ export interface RequirementCoverageItem {
   requires_operational_detail?: boolean;
   required_operational_signal_count?: number;
   reason?: string;
+  remediation_guidance?: string;
 }
 
 export interface RequirementCoverage {
