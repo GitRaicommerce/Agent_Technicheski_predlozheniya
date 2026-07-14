@@ -29,6 +29,7 @@ main = manifest_actions_module.main
 manifest_actions = manifest_actions_module.manifest_actions
 render_execution_report_json = manifest_actions_module.render_execution_report_json
 render_execution_report_markdown = manifest_actions_module.render_execution_report_markdown
+request_target_summary = manifest_actions_module.request_target_summary
 select_actions = manifest_actions_module.select_actions
 wait_for_job_result = manifest_actions_module.wait_for_job_result
 
@@ -225,6 +226,18 @@ class CalibrationManifestActionTests(unittest.TestCase):
             "http://localhost:8000/api/v1/agents/project%201/generation-jobs/job%2F1",
         )
 
+    def test_request_target_summary_lists_section_uids_and_title_hints(self):
+        self.assertEqual(
+            request_target_summary(
+                {
+                    "section_uids": ["sec-quality", "sec-risk"],
+                    "section_title_hints": ["Quality controls"],
+                }
+            ),
+            "uids=sec-quality, sec-risk; titles=Quality controls",
+        )
+        self.assertEqual(request_target_summary({}), "")
+
     def test_wait_for_job_result_polls_until_terminal_status(self):
         opener = Mock(
             side_effect=[
@@ -292,6 +305,10 @@ class CalibrationManifestActionTests(unittest.TestCase):
             source="readiness_actions",
             section_count=2,
             summary="Section A | Section B",
+            request_json={
+                "section_uids": ["sec-a"],
+                "section_title_hints": ["Section A"],
+            },
         )
         planned = action_execution_record(
             action,
@@ -319,9 +336,17 @@ class CalibrationManifestActionTests(unittest.TestCase):
         self.assertFalse(payload["ready_for_bundle"])
         self.assertTrue(payload["has_unexecuted_actions"])
         self.assertEqual(payload["actions"][1]["final_status"], "done")
+        self.assertEqual(
+            payload["actions"][0]["target_summary"],
+            "uids=sec-a; titles=Section A",
+        )
         self.assertIn("Ready for calibration bundle: `no`", markdown)
         self.assertIn("Has unexecuted actions: `yes`", markdown)
-        self.assertIn("| regenerate_stale | readiness_actions | no | planned | 2 |", markdown)
+        self.assertIn(
+            "| regenerate_stale | readiness_actions | no | planned | 2 | "
+            "uids=sec-a; titles=Section A |",
+            markdown,
+        )
         self.assertIn("Section A \\| Section B", markdown)
 
     def test_action_execution_summary_marks_successful_waited_actions_ready(self):

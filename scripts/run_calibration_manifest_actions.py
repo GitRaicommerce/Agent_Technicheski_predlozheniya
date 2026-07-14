@@ -268,6 +268,29 @@ def render_action_line(action: ManifestAction, url: str) -> str:
     return " | ".join(bits)
 
 
+def request_target_summary(request_json: dict[str, Any] | None) -> str:
+    if not isinstance(request_json, dict) or not request_json:
+        return ""
+
+    section_uids = [
+        str(item).strip()
+        for item in request_json.get("section_uids") or []
+        if str(item).strip()
+    ]
+    title_hints = [
+        str(item).strip()
+        for item in request_json.get("section_title_hints") or []
+        if str(item).strip()
+    ]
+
+    parts: list[str] = []
+    if section_uids:
+        parts.append("uids=" + ", ".join(section_uids[:6]))
+    if title_hints:
+        parts.append("titles=" + ", ".join(title_hints[:6]))
+    return "; ".join(parts)
+
+
 def action_execution_record(
     action: ManifestAction,
     *,
@@ -293,6 +316,7 @@ def action_execution_record(
         "section_count": action.section_count,
         "summary": action.summary,
         "request_json": action.request_json or {},
+        "target_summary": request_target_summary(action.request_json),
         "executed": executed,
         "final_status": final_status,
         "action_result": action_result,
@@ -368,8 +392,8 @@ def render_execution_report_markdown(records: list[dict[str, Any]]) -> str:
         f"- Has unexecuted actions: `{'yes' if summary['has_unexecuted_actions'] else 'no'}`",
         f"- Recommendation: {summary['recommendation']}",
         "",
-        "| Action key | Source | Executed | Final status | Sections | Summary |",
-        "| --- | --- | --- | --- | ---: | --- |",
+        "| Action key | Source | Executed | Final status | Sections | Targets | Summary |",
+        "| --- | --- | --- | --- | ---: | --- | --- |",
     ]
     for record in records:
         lines.append(
@@ -381,6 +405,7 @@ def render_execution_report_markdown(records: list[dict[str, Any]]) -> str:
                     "yes" if record.get("executed") else "no",
                     str(record.get("final_status") or "unknown"),
                     str(record.get("section_count") or 0),
+                    str(record.get("target_summary") or "").replace("|", "\\|"),
                     str(record.get("summary") or "").replace("|", "\\|"),
                 ]
             )

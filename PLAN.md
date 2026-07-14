@@ -150,6 +150,7 @@
 - Added a short remediation hint to the DOCX export warning for missing requirements, pulling the first actionable guidance items directly from the readiness payload.
 - Connected missing-requirements remediation guidance into regeneration jobs and drafting prompts, so targeted reruns carry the exact missing checklist ids, reasons, and repair instructions from export readiness.
 - Added a common proposal regression scenario proving missing requirement coverage flows through export readiness, targeted regeneration guidance, drafting prompt guidance, and back into a passing deterministic coverage assessment.
+- Extended calibration action execution reports with target summaries from remediation request payloads, making dry-run and executed calibration reports show which section ids or title hints each action will affect.
 
 ## Active Goals
 
