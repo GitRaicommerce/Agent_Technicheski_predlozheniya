@@ -653,7 +653,20 @@ describe("GenerationsPanel", () => {
               anchor_count: 4,
               covered_count: 1,
               required_count: 3,
-              missing: [{ label: "waste" }, { label: "soil" }],
+              missing: [
+                {
+                  label: "waste segregation",
+                  terms: ["waste", "segregation"],
+                  matched_terms: ["waste"],
+                  required_terms: 2,
+                },
+                {
+                  label: "soil protection",
+                  terms: ["soil", "protection"],
+                  matched_terms: ["protection"],
+                  required_terms: 2,
+                },
+              ],
             },
             issues: [{ code: "repetitive_content" }],
           },
@@ -700,7 +713,9 @@ describe("GenerationsPanel", () => {
     expect(screen.getByTestId("generation-quality-depth-sec-quality"))
       .toHaveTextContent("1/3 покрити групи/теми");
     expect(screen.getByTestId("generation-quality-depth-sec-quality"))
-      .toHaveTextContent("waste, soil");
+      .toHaveTextContent(
+        "waste segregation (1/2: waste), soil protection (1/2: protection)",
+      );
     expect(screen.getByTestId("generation-quality-depth-sec-quality"))
       .toHaveTextContent("РїРѕРІС‚Р°СЂСЏС‰ СЃРµ С‚РµРєСЃС‚");
   });

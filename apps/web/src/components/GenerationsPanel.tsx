@@ -1047,7 +1047,7 @@ function qualityDepthDiagnostics(detail: ExportQualitySection): string[] {
     );
     const missingLabels = Array.isArray(structureCoverage.missing)
       ? structureCoverage.missing
-          .map((item) => item?.label)
+          .map((item) => structureMissingLabel(item))
           .filter(
             (label): label is string =>
               typeof label === "string" && label.length > 0,
@@ -1059,6 +1059,43 @@ function qualityDepthDiagnostics(detail: ExportQualitySection): string[] {
     }
   }
   return diagnostics;
+}
+
+function structureMissingLabel(
+  item:
+    | {
+        label?: string;
+        terms?: string[];
+        matched_terms?: string[];
+        required_terms?: number;
+      }
+    | undefined,
+): string {
+  const label = item?.label;
+  if (typeof label !== "string" || label.length === 0) return "";
+
+  const matchedTerms = Array.isArray(item?.matched_terms)
+    ? item.matched_terms.filter(
+        (term): term is string => typeof term === "string" && term.length > 0,
+      )
+    : [];
+  const termCount = Array.isArray(item?.terms)
+    ? item.terms.filter((term) => typeof term === "string" && term.length > 0)
+        .length
+    : 0;
+  const requiredTerms =
+    typeof item?.required_terms === "number" && item.required_terms > 0
+      ? item.required_terms
+      : termCount;
+
+  if (requiredTerms <= 0 && matchedTerms.length === 0) return label;
+
+  const suffix = matchedTerms.length
+    ? ` (${matchedTerms.length}/${requiredTerms}: ${matchedTerms
+        .slice(0, 5)
+        .join(", ")})`
+    : ` (0/${requiredTerms})`;
+  return `${label}${suffix}`;
 }
 
 function qualityIssueLabels(detail: ExportQualitySection): string[] {

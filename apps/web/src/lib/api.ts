@@ -380,7 +380,12 @@ export interface ExportQualitySection {
     anchor_count?: number;
     covered_count?: number;
     required_count?: number;
-    missing?: Array<{ label?: string }>;
+    missing?: Array<{
+      label?: string;
+      terms?: string[];
+      matched_terms?: string[];
+      required_terms?: number;
+    }>;
   };
   issues?: Array<Record<string, unknown>>;
 }

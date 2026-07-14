@@ -141,6 +141,7 @@
 - Added a strict `--require-action-ready` gate to the calibration remediation cycle, allowing proof-oriented reruns to stop before building a new bundle when the attached action report is only a dry-run or otherwise not `ready_for_bundle`.
 - Tightened blueprint structure coverage so multi-word drafting topics/groups require enough matched anchor terms before they count as covered, preventing generic repeated wording from passing uneven-distribution quality gates.
 - Exposed blueprint anchor match diagnostics in DOCX readiness reports, showing matched/required terms for missing groups or topics so underdistributed sections are easier to repair.
+- Surfaced the same blueprint anchor match diagnostics in the Generations remediation panel so users can see partial topic matches directly before running detailed regeneration.
 
 ## Active Goals
 
