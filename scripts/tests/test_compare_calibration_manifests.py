@@ -30,6 +30,7 @@ def manifest(
     focus_counts: dict[str, int] | None = None,
     readiness_actions: list[dict] | None = None,
     gap_rows: list[dict] | None = None,
+    action_execution_summary: dict | None = None,
 ) -> dict:
     return {
         "schema_version": "calibration_manifest.v1",
@@ -45,6 +46,7 @@ def manifest(
             "content_reference_sections": 12,
         },
         "gap_calibration_focus_counts": focus_counts or {},
+        "action_execution_summary": action_execution_summary or {},
         "readiness_actions": readiness_actions or [],
         "gap_priority_rows": gap_rows or [],
     }
@@ -66,6 +68,11 @@ class CompareCalibrationManifestsTests(unittest.TestCase):
                     {"action_key": "regenerate_quality_depth"},
                     {"focus": "outline mapping"},
                 ],
+                action_execution_summary={
+                    "report_count": 1,
+                    "total_actions": 2,
+                    "status_counts": {"done": 1, "error": 1},
+                },
             )
         )
 
@@ -80,6 +87,12 @@ class CompareCalibrationManifestsTests(unittest.TestCase):
         self.assertEqual(
             summary["gap_action_counts"],
             {"regenerate_quality_depth": 1},
+        )
+        self.assertEqual(summary["execution_report_count"], 1)
+        self.assertEqual(summary["executed_action_count"], 2)
+        self.assertEqual(
+            summary["execution_status_counts"],
+            {"done": 1, "error": 1},
         )
 
     def test_render_comparison_shows_improvement_and_next_step(self):
@@ -97,6 +110,11 @@ class CompareCalibrationManifestsTests(unittest.TestCase):
             volume_ratio=0.45,
             focus_counts={"drafting depth": 1},
             gap_rows=[{"action_key": "regenerate_quality_depth"}],
+            action_execution_summary={
+                "report_count": 1,
+                "total_actions": 2,
+                "status_counts": {"done": 2},
+            },
         )
 
         text = render_comparison(before, after)
@@ -111,6 +129,9 @@ class CompareCalibrationManifestsTests(unittest.TestCase):
             "| readiness_actions | `regenerate_stale` | 1 | 0 | -1 |",
             text,
         )
+        self.assertIn("## Action execution evidence", text)
+        self.assertIn("| executed actions | 0 | 2 | +2 |", text)
+        self.assertIn("| `done` | 0 | 2 | +2 |", text)
         self.assertIn("Run detailed regeneration", text)
 
     def test_render_comparison_prioritizes_remaining_readiness_blockers(self):

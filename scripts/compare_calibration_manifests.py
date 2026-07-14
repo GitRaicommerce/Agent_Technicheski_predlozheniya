@@ -49,12 +49,26 @@ def _action_counts(rows: list[Any]) -> dict[str, int]:
     return counts
 
 
+def _status_counts(value: Any) -> dict[str, int]:
+    if not isinstance(value, dict):
+        return {}
+    raw_counts = value.get("status_counts") or {}
+    if not isinstance(raw_counts, dict):
+        return {}
+    return {
+        str(status): _int_value(count)
+        for status, count in raw_counts.items()
+        if str(status)
+    }
+
+
 def summarize_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
     gates = manifest.get("calibration_gates") or {}
     scorecard = manifest.get("gap_quality_scorecard") or {}
     focus_counts = manifest.get("gap_calibration_focus_counts") or {}
     readiness_actions = manifest.get("readiness_actions") or []
     gap_rows = manifest.get("gap_priority_rows") or []
+    action_execution_summary = manifest.get("action_execution_summary") or {}
     if not isinstance(gates, dict):
         gates = {}
     if not isinstance(scorecard, dict):
@@ -85,6 +99,17 @@ def summarize_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
         },
         "readiness_action_counts": _action_counts(readiness_actions),
         "gap_action_counts": _action_counts(gap_rows),
+        "executed_action_count": _int_value(
+            action_execution_summary.get("total_actions")
+            if isinstance(action_execution_summary, dict)
+            else 0
+        ),
+        "execution_report_count": _int_value(
+            action_execution_summary.get("report_count")
+            if isinstance(action_execution_summary, dict)
+            else 0
+        ),
+        "execution_status_counts": _status_counts(action_execution_summary),
     }
 
 
@@ -251,6 +276,41 @@ def render_comparison(before_manifest: dict[str, Any], after_manifest: dict[str,
                 f"| {source} | `{action_key}` | {before_count} | {after_count} | "
                 f"{_format_delta(before_count, after_count)} |"
             )
+
+    lines.extend(
+        [
+            "",
+            "## Action execution evidence",
+            "",
+            "| Metric | Before | After | Delta |",
+            "| --- | ---: | ---: | ---: |",
+            (
+                "| execution reports | "
+                f"{before['execution_report_count']} | "
+                f"{after['execution_report_count']} | "
+                f"{_format_delta(before['execution_report_count'], after['execution_report_count'])} |"
+            ),
+            (
+                "| executed actions | "
+                f"{before['executed_action_count']} | "
+                f"{after['executed_action_count']} | "
+                f"{_format_delta(before['executed_action_count'], after['executed_action_count'])} |"
+            ),
+            "",
+            "| Final status | Before | After | Delta |",
+            "| --- | ---: | ---: | ---: |",
+        ]
+    )
+    for status in _sorted_keys(
+        before["execution_status_counts"],
+        after["execution_status_counts"],
+    ):
+        before_count = before["execution_status_counts"].get(status, 0)
+        after_count = after["execution_status_counts"].get(status, 0)
+        lines.append(
+            f"| `{status}` | {before_count} | {after_count} | "
+            f"{_format_delta(before_count, after_count)} |"
+        )
 
     lines.extend(
         [
