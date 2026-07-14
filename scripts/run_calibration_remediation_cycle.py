@@ -90,16 +90,29 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def validate_args(args: argparse.Namespace) -> None:
+    if args.execute and not args.wait:
+        raise ValueError(
+            "Use --wait with --execute so the calibration bundle is built after "
+            "generation remediation jobs finish."
+        )
+
+
 def main(argv: list[str]) -> int:
-    args = parse_args(argv)
-    reports = action_report_paths(args.out_dir)
-    args.out_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        args = parse_args(argv)
+        validate_args(args)
+        reports = action_report_paths(args.out_dir)
+        args.out_dir.mkdir(parents=True, exist_ok=True)
 
-    action_status = run_manifest_actions(build_action_args(args, reports))
-    if action_status != 0:
-        return action_status
+        action_status = run_manifest_actions(build_action_args(args, reports))
+        if action_status != 0:
+            return action_status
 
-    return run_proposal_calibration(build_calibration_args(args, reports))
+        return run_proposal_calibration(build_calibration_args(args, reports))
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
 
 
 if __name__ == "__main__":

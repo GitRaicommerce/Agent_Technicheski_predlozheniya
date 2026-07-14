@@ -141,10 +141,42 @@ class CalibrationRemediationCycleTests(unittest.TestCase):
                         "--action-key",
                         "regenerate_stale",
                         "--execute",
+                        "--wait",
                     ]
                 )
 
                 self.assertEqual(status, 1)
+                cycle.run_manifest_actions.assert_called_once()
+                cycle.run_proposal_calibration.assert_not_called()
+        finally:
+            cycle.run_manifest_actions = original_actions
+            cycle.run_proposal_calibration = original_calibration
+
+    def test_main_rejects_execute_without_wait(self):
+        original_actions = cycle.run_manifest_actions
+        original_calibration = cycle.run_proposal_calibration
+        cycle.run_manifest_actions = Mock(return_value=0)
+        cycle.run_proposal_calibration = Mock(return_value=0)
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                status = main(
+                    [
+                        "--manifest",
+                        str(Path(tmp) / "before.json"),
+                        "--project-id",
+                        "project-1",
+                        "--reference",
+                        "reference.docx",
+                        "--out-dir",
+                        str(Path(tmp) / "after"),
+                        "--action-key",
+                        "regenerate_stale",
+                        "--execute",
+                    ]
+                )
+
+                self.assertEqual(status, 1)
+                cycle.run_manifest_actions.assert_not_called()
                 cycle.run_proposal_calibration.assert_not_called()
         finally:
             cycle.run_manifest_actions = original_actions
