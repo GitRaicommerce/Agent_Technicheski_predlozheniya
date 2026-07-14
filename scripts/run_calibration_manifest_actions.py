@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 TERMINAL_JOB_STATUSES = {"done", "error"}
+SUCCESS_ACTION_STATUSES = {"done", "executed"}
 
 
 @dataclass(frozen=True)
@@ -299,25 +300,73 @@ def action_execution_record(
     }
 
 
-def render_execution_report_json(records: list[dict[str, Any]]) -> str:
+def action_execution_summary(records: list[dict[str, Any]]) -> dict[str, Any]:
     status_counts: dict[str, int] = {}
+    executed_count = 0
     for record in records:
         status = str(record.get("final_status") or "unknown")
         status_counts[status] = status_counts.get(status, 0) + 1
+        if record.get("executed"):
+            executed_count += 1
+
+    failure_statuses = sorted(
+        status
+        for status in status_counts
+        if status not in SUCCESS_ACTION_STATUSES and status != "planned"
+    )
+    planned_count = status_counts.get("planned", 0)
+    has_failures = bool(failure_statuses)
+    has_unexecuted_actions = planned_count > 0
+    ready_for_bundle = bool(records) and not has_failures and not has_unexecuted_actions
+    if not records:
+        recommendation = "No executable remediation actions were found in the manifest."
+    elif has_failures:
+        recommendation = (
+            "Resolve failed remediation actions before building the next calibration bundle."
+        )
+    elif has_unexecuted_actions:
+        recommendation = (
+            "Run the selected remediation actions with --execute --wait before using "
+            "this report as proof for a follow-up calibration bundle."
+        )
+    else:
+        recommendation = (
+            "All selected remediation actions completed without reported failures; "
+            "build the next calibration bundle with this action report attached."
+        )
+    return {
+        "total_actions": len(records),
+        "executed_actions": executed_count,
+        "status_counts": status_counts,
+        "failure_statuses": failure_statuses,
+        "has_failures": has_failures,
+        "has_unexecuted_actions": has_unexecuted_actions,
+        "ready_for_bundle": ready_for_bundle,
+        "recommendation": recommendation,
+    }
+
+
+def render_execution_report_json(records: list[dict[str, Any]]) -> str:
+    summary = action_execution_summary(records)
     payload = {
         "schema_version": "calibration_action_execution.v1",
-        "total_actions": len(records),
-        "status_counts": status_counts,
+        **summary,
         "actions": records,
     }
     return json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
 
 
 def render_execution_report_markdown(records: list[dict[str, Any]]) -> str:
+    summary = action_execution_summary(records)
     lines = [
         "# Calibration action execution report",
         "",
-        f"- Total actions: `{len(records)}`",
+        f"- Total actions: `{summary['total_actions']}`",
+        f"- Executed actions: `{summary['executed_actions']}`",
+        f"- Ready for calibration bundle: `{'yes' if summary['ready_for_bundle'] else 'no'}`",
+        f"- Has failures: `{'yes' if summary['has_failures'] else 'no'}`",
+        f"- Has unexecuted actions: `{'yes' if summary['has_unexecuted_actions'] else 'no'}`",
+        f"- Recommendation: {summary['recommendation']}",
         "",
         "| Action key | Source | Executed | Final status | Sections | Summary |",
         "| --- | --- | --- | --- | ---: | --- |",

@@ -136,6 +136,7 @@
 - Hardened the calibration remediation cycle script against project mix-ups by validating that the source manifest `project_id` matches the requested rerun `--project-id` before any actions or bundle generation start.
 - Added an `--actions-only` mode to the calibration remediation cycle script so manifest remediation actions can be safely dry-run or reported without rebuilding a calibration bundle, avoiding DB/reference proposal dependencies during action validation.
 - Made the calibration manifest action runner compatible with older manifests by synthesizing the standard remediation dispatcher API path from `action_key` when `api_path` is missing.
+- Added explicit action-execution verdicts to calibration action reports (`ready_for_bundle`, failures, unexecuted actions, and recommendation) so a follow-up calibration bundle is only treated as evidenced after remediation actions are actually executed and completed.
 
 ## Active Goals
 

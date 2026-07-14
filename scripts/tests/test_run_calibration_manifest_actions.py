@@ -19,6 +19,7 @@ spec.loader.exec_module(manifest_actions_module)
 
 ManifestAction = manifest_actions_module.ManifestAction
 action_execution_record = manifest_actions_module.action_execution_record
+action_execution_summary = manifest_actions_module.action_execution_summary
 action_url = manifest_actions_module.action_url
 execute_action = manifest_actions_module.execute_action
 job_result_from_action_response = manifest_actions_module.job_result_from_action_response
@@ -312,10 +313,58 @@ class CalibrationManifestActionTests(unittest.TestCase):
             payload["schema_version"],
             "calibration_action_execution.v1",
         )
+        self.assertEqual(payload["total_actions"], 2)
+        self.assertEqual(payload["executed_actions"], 1)
         self.assertEqual(payload["status_counts"], {"planned": 1, "done": 1})
+        self.assertFalse(payload["ready_for_bundle"])
+        self.assertTrue(payload["has_unexecuted_actions"])
         self.assertEqual(payload["actions"][1]["final_status"], "done")
+        self.assertIn("Ready for calibration bundle: `no`", markdown)
+        self.assertIn("Has unexecuted actions: `yes`", markdown)
         self.assertIn("| regenerate_stale | readiness_actions | no | planned | 2 |", markdown)
         self.assertIn("Section A \\| Section B", markdown)
+
+    def test_action_execution_summary_marks_successful_waited_actions_ready(self):
+        action = ManifestAction(
+            action_key="regenerate_stale",
+            api_method="POST",
+            api_path="/api/v1/example",
+        )
+        record = action_execution_record(
+            action,
+            url="http://localhost/api/v1/example",
+            executed=True,
+            action_result={"status_code": 200, "body": {"status": "queued"}},
+            wait_result={"status_code": 200, "body": {"status": "done"}},
+        )
+
+        summary = action_execution_summary([record])
+
+        self.assertEqual(summary["executed_actions"], 1)
+        self.assertEqual(summary["status_counts"], {"done": 1})
+        self.assertFalse(summary["has_failures"])
+        self.assertFalse(summary["has_unexecuted_actions"])
+        self.assertTrue(summary["ready_for_bundle"])
+
+    def test_action_execution_summary_blocks_failed_actions(self):
+        action = ManifestAction(
+            action_key="regenerate_stale",
+            api_method="POST",
+            api_path="/api/v1/example",
+        )
+        record = action_execution_record(
+            action,
+            url="http://localhost/api/v1/example",
+            executed=True,
+            action_result={"status_code": 200, "body": {"status": "queued"}},
+            wait_result={"status_code": 200, "body": {"status": "error"}},
+        )
+
+        summary = action_execution_summary([record])
+
+        self.assertEqual(summary["failure_statuses"], ["error"])
+        self.assertTrue(summary["has_failures"])
+        self.assertFalse(summary["ready_for_bundle"])
 
     def test_main_refuses_execute_without_explicit_selection(self):
         with tempfile.TemporaryDirectory() as tmp:
