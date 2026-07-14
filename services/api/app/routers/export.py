@@ -31,11 +31,66 @@ def _missing_requirement_reason(item: dict) -> str:
         and operational_count < required_operational_signal_count
     ):
         return "needs operational evidence"
-    if isinstance(required_coherent_match_count, int) and coherent_count < required_coherent_match_count:
+    if (
+        isinstance(required_coherent_match_count, int)
+        and coherent_count < required_coherent_match_count
+    ):
         return "needs coherent passage"
     if isinstance(required_match_count, int) and matched_count < required_match_count:
         return "missing key terms"
     return "missing requirement coverage"
+
+
+def _missing_requirement_remediation_guidance(item: dict) -> str:
+    requirement_id = str(item.get("id") or "n/a")
+    guidance = [
+        f"Regenerate or edit the selected section so `{requirement_id}` has a "
+        "dedicated paragraph or bullet that explicitly answers the requirement"
+    ]
+
+    missing_terms = [
+        str(term)
+        for term in item.get("missing_terms") or []
+        if term
+    ]
+    if missing_terms:
+        guidance.append(
+            "include the missing concepts: " + ", ".join(missing_terms[:8])
+        )
+
+    coherent_terms = [
+        str(term)
+        for term in item.get("coherent_matched_terms") or []
+        if term
+    ]
+    required_coherent_count = item.get("required_coherent_match_count")
+    if (
+        isinstance(required_coherent_count, int)
+        and required_coherent_count > 0
+        and len(coherent_terms) < required_coherent_count
+    ):
+        guidance.append(
+            "keep the requirement concepts together in one coherent passage"
+        )
+
+    operational_signals = [
+        str(signal)
+        for signal in item.get("operational_signals") or []
+        if signal
+    ]
+    required_operational_count = item.get("required_operational_signal_count")
+    if (
+        item.get("requires_operational_detail")
+        and isinstance(required_operational_count, int)
+        and required_operational_count > 0
+        and len(operational_signals) < required_operational_count
+    ):
+        guidance.append(
+            "add operational evidence such as responsible roles, sequence, "
+            "controls, records, acceptance evidence, escalation, or corrective actions"
+        )
+
+    return "; ".join(guidance) + "."
 
 
 def _missing_requirement_coverage(generation: Generation) -> dict | None:
@@ -60,6 +115,16 @@ def _missing_requirement_coverage(generation: Generation) -> dict | None:
                 "text": item.get("text"),
                 "importance": item.get("importance"),
                 "reason": _missing_requirement_reason(item),
+                "remediation_guidance": _missing_requirement_remediation_guidance(
+                    item
+                ),
+                "missing_terms": item.get("missing_terms") or [],
+                "matched_terms": item.get("matched_terms") or [],
+                "required_match_count": item.get("required_match_count"),
+                "coherent_matched_terms": item.get("coherent_matched_terms") or [],
+                "required_coherent_match_count": item.get(
+                    "required_coherent_match_count"
+                ),
                 "matched_ratio": item.get("matched_ratio"),
                 "coherent_matched_ratio": item.get("coherent_matched_ratio"),
                 "operational_signals": item.get("operational_signals") or [],

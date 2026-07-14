@@ -44,6 +44,10 @@ def test_render_export_readiness_report_includes_blockers_and_actions():
                             "coherent_matched_ratio": 0.75,
                             "operational_signals": ["record"],
                             "required_operational_signal_count": 2,
+                            "remediation_guidance": (
+                                "Regenerate or edit the selected section so "
+                                "`req-1` has a dedicated paragraph."
+                            ),
                         }
                     ],
                 }
@@ -106,6 +110,10 @@ def test_render_export_readiness_report_includes_blockers_and_actions():
     assert "Missing section title (`sec-missing`): 2 missing (req-1, req-2)" in report
     assert "`req-1` [needs operational evidence]: Describe the detailed schedule." in report
     assert "diagnostics: matched_ratio=0.8, coherent_ratio=0.75, operational_signals=1/2" in report
+    assert (
+        "remediation: Regenerate or edit the selected section so `req-1` "
+        "has a dedicated paragraph."
+    ) in report
     assert "| Section | Words | Min words | Words per group/topic | Sentences | Min sentences | Requirements | Blueprint groups | Topics | Issues |" in report
     assert "too short for mapped requirements (`too_short_for_requirements`)" in report
     assert "missing blueprint groups/topics (`uneven_blueprint_distribution`)" in report

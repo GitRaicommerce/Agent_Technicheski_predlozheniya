@@ -119,6 +119,9 @@ async def test_export_readiness_aggregates_multiple_blockers(client, mock_db):
                     "id": "req-2",
                     "text": "Second missing",
                     "status": "missing",
+                    "missing_terms": ["approval", "handover"],
+                    "coherent_matched_terms": ["second"],
+                    "required_coherent_match_count": 2,
                     "matched_ratio": 0.8,
                     "coherent_matched_ratio": 0.8,
                     "requires_operational_detail": True,
@@ -178,6 +181,14 @@ async def test_export_readiness_aggregates_multiple_blockers(client, mock_db):
     missing_items = detail["missing_requirement_sections"][0]["missing_items"]
     assert missing_items[0]["reason"] == "missing requirement coverage"
     assert missing_items[1]["reason"] == "needs operational evidence"
+    assert missing_items[1]["missing_terms"] == ["approval", "handover"]
+    assert "include the missing concepts: approval, handover" in missing_items[1][
+        "remediation_guidance"
+    ]
+    assert "keep the requirement concepts together" in missing_items[1][
+        "remediation_guidance"
+    ]
+    assert "add operational evidence" in missing_items[1]["remediation_guidance"]
     assert missing_items[1]["operational_signals"] == ["record"]
     assert missing_items[1]["required_operational_signal_count"] == 2
     assert detail["quality_section_count"] == 1

@@ -215,6 +215,9 @@ def render_export_readiness_report(readiness: dict[str, Any]) -> str:
                         )
                     if diagnostics:
                         lines.append(f"    - diagnostics: {', '.join(diagnostics)}")
+                    guidance = _truncate(item.get("remediation_guidance") or "")
+                    if guidance:
+                        lines.append(f"    - remediation: {guidance}")
 
     quality_sections = [
         item

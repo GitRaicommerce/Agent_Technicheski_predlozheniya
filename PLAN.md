@@ -145,6 +145,7 @@
 - Fed blueprint anchor match diagnostics into drafting quality-repair prompts, so targeted rewrites know which missing groups/topics have zero or partial term coverage.
 - Enriched drafting quality-repair feedback for missing checklist coverage with required/matched term counts, coherent-passage counts, and operational-evidence signal counts so rewrites know exactly why a requirement failed deterministic coverage.
 - Added a structured requirement-repair writing plan to drafting quality-repair prompts, turning checklist diagnostics into concrete universal rewrite instructions for missing concepts, coherent passages, and operational evidence.
+- Added per-requirement remediation guidance to export readiness JSON and markdown reports, so pre-export blockers now explain how to repair missing concepts, weak coherent passages, and missing operational evidence.
 
 ## Active Goals
 
