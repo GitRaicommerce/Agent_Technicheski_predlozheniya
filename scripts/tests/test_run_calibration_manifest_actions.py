@@ -304,6 +304,39 @@ class CalibrationManifestActionTests(unittest.TestCase):
         )
         self.assertEqual(request_target_summary({}), "")
 
+    def test_request_target_summary_marks_truncated_targets(self):
+        self.assertEqual(
+            request_target_summary(
+                {
+                    "section_uids": [
+                        "sec-1",
+                        "sec-2",
+                        "sec-3",
+                        "sec-4",
+                        "sec-5",
+                        "sec-6",
+                        "sec-7",
+                    ],
+                    "section_title_hints": [
+                        "Title 1",
+                        "Title 2",
+                        "Title 3",
+                        "Title 4",
+                        "Title 5",
+                        "Title 6",
+                        "Title 7",
+                        "Title 8",
+                    ],
+                }
+            ),
+            (
+                "uids=sec-1, sec-2, sec-3, sec-4, sec-5, sec-6; "
+                "+1 more uids; "
+                "titles=Title 1, Title 2, Title 3, Title 4, Title 5, Title 6; "
+                "+2 more titles"
+            ),
+        )
+
     def test_wait_for_job_result_polls_until_terminal_status(self):
         opener = Mock(
             side_effect=[

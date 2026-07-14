@@ -159,6 +159,7 @@
 - Fixed calibration action deduplication so identical bulk remediation actions are still collapsed, but same-endpoint actions with different section target payloads are preserved and executed separately.
 - Added backend regression coverage for multi-section targeted remediation, proving API action payloads preserve unique section targets and generation jobs regenerate exactly the requested sections.
 - Added calibration manifest regression coverage for multi-section readiness targets, proving JSON action payloads and Markdown target summaries preserve all missing-requirement and quality/depth section targets.
+- Made calibration action execution target summaries explicit when long target lists are truncated, so dry-run and execute reports show that additional section ids or title hints exist.
 
 ## Active Goals
 

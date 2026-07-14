@@ -295,8 +295,12 @@ def request_target_summary(request_json: dict[str, Any] | None) -> str:
     parts: list[str] = []
     if section_uids:
         parts.append("uids=" + ", ".join(section_uids[:6]))
+        if len(section_uids) > 6:
+            parts.append(f"+{len(section_uids) - 6} more uids")
     if title_hints:
         parts.append("titles=" + ", ".join(title_hints[:6]))
+        if len(title_hints) > 6:
+            parts.append(f"+{len(title_hints) - 6} more titles")
     return "; ".join(parts)
 
 
