@@ -156,6 +156,12 @@ def _direction_for_metric(metric: str, before: Any, after: Any) -> str:
 
 
 def recommendation(before: dict[str, Any], after: dict[str, Any]) -> str:
+    failed_actions = after["execution_status_counts"].get("error", 0)
+    if failed_actions > 0:
+        return (
+            "Inspect failed remediation jobs before interpreting calibration "
+            "movement; rerun or fix the failed action execution report entries first."
+        )
     if after["readiness_blockers"] > 0:
         return (
             "Resolve remaining DOCX readiness blockers first; they can still "

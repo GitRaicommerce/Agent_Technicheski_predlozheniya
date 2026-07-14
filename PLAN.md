@@ -131,6 +131,7 @@
 - Connected calibration action execution reports back into calibration bundles and manifests, so reruns can carry the exact remediation evidence alongside readiness gates, gap scorecards, and before/after comparisons.
 - Extended before/after calibration manifest comparisons with remediation execution evidence, showing attached execution report counts, executed action counts, and final job status deltas alongside readiness and gap-score movement.
 - Added a repeatable calibration remediation cycle script that runs selected manifest actions, writes action execution reports, and immediately builds the next calibration bundle with the previous manifest and action evidence attached.
+- Made before/after calibration recommendations prioritize failed remediation job executions before interpreting readiness or gap-score movement, preventing misleading "improved" conclusions after partial action failure.
 
 ## Active Goals
 

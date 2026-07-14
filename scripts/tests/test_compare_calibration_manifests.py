@@ -147,6 +147,23 @@ class CompareCalibrationManifestsTests(unittest.TestCase):
         self.assertIn("| readiness blockers | 1 | 2 | +1 | regressed |", text)
         self.assertIn("Resolve remaining DOCX readiness blockers first", text)
 
+    def test_render_comparison_prioritizes_failed_action_execution(self):
+        text = render_comparison(
+            manifest(blockers=3, volume_ratio=0.20),
+            manifest(
+                blockers=0,
+                volume_ratio=0.50,
+                action_execution_summary={
+                    "report_count": 1,
+                    "total_actions": 2,
+                    "status_counts": {"done": 1, "error": 1},
+                },
+            ),
+        )
+
+        self.assertIn("| `error` | 0 | 1 | +1 |", text)
+        self.assertIn("Inspect failed remediation jobs", text)
+
     def test_render_comparison_prioritizes_outline_mapping_after_readiness(self):
         text = render_comparison(
             manifest(blockers=0, focus_counts={"outline mapping": 3}),
