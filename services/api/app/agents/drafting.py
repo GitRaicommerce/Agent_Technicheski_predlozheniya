@@ -418,6 +418,72 @@ def _format_section_drafting_guidance(guidance: dict[str, Any] | None) -> str:
             remediation = str(item.get("remediation_guidance") or "").strip()
             if remediation:
                 lines.append(f"    repair: {remediation}")
+            diagnostics: list[str] = []
+            required_match_count = item.get("required_match_count")
+            if isinstance(required_match_count, int) and required_match_count > 0:
+                matched_terms = [
+                    str(term)
+                    for term in item.get("matched_terms") or []
+                    if term
+                ]
+                diagnostics.append(
+                    f"matched terms {len(matched_terms)}/{required_match_count}"
+                )
+            required_distinctive_count = item.get("required_distinctive_count")
+            if (
+                isinstance(required_distinctive_count, int)
+                and required_distinctive_count > 0
+            ):
+                distinctive_matches = [
+                    str(term)
+                    for term in item.get("distinctive_matches") or []
+                    if term
+                ]
+                diagnostics.append(
+                    "distinctive detail "
+                    f"{len(distinctive_matches)}/{required_distinctive_count}"
+                )
+                distinctive_terms = [
+                    str(term)
+                    for term in item.get("distinctive_terms") or []
+                    if term
+                ]
+                if distinctive_terms:
+                    diagnostics.append(
+                        "distinctive terms: "
+                        + ", ".join(distinctive_terms[:8])
+                    )
+            required_coherent_count = item.get("required_coherent_match_count")
+            if (
+                isinstance(required_coherent_count, int)
+                and required_coherent_count > 0
+            ):
+                coherent_terms = [
+                    str(term)
+                    for term in item.get("coherent_matched_terms") or []
+                    if term
+                ]
+                diagnostics.append(
+                    f"coherent terms {len(coherent_terms)}/{required_coherent_count}"
+                )
+            required_operational_count = item.get(
+                "required_operational_signal_count"
+            )
+            if (
+                isinstance(required_operational_count, int)
+                and required_operational_count > 0
+            ):
+                operational_signals = [
+                    str(signal)
+                    for signal in item.get("operational_signals") or []
+                    if signal
+                ]
+                diagnostics.append(
+                    "operational evidence "
+                    f"{len(operational_signals)}/{required_operational_count}"
+                )
+            if diagnostics:
+                lines.append("    diagnostics: " + "; ".join(diagnostics))
 
     source_refs = [
         str(item).strip()

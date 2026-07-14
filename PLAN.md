@@ -172,6 +172,7 @@
 - Added common-scenario regression coverage for similar operational requirements, proving distinctive missing-requirement diagnostics flow from coverage assessment through export readiness and targeted drafting guidance into a repaired passing section.
 - Preserved legacy section-summary targets in before/after calibration comparisons, so older manifests without explicit `request_json` still show which remediation sections changed.
 - Preserved distinctive missing-requirement diagnostics in targeted regeneration job guidance, so reruns for similar operational requirements keep the exact distinguishing terms and required distinctive match counts.
+- Surfaced structured missing-requirement diagnostics inside targeted drafting guidance prompts, including distinctive detail counts and distinguishing terms for similar operational requirements.
 
 ## Active Goals
 

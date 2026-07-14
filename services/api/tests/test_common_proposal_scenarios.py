@@ -969,6 +969,8 @@ def test_common_similar_operational_requirements_need_distinctive_remediation():
         guidance_prompt
     )
     assert "distinctive" in guidance_prompt
+    assert "distinctive detail 0/1" in guidance_prompt
+    assert "distinctive terms:" in guidance_prompt
     assert "include distinctive requirement details" in guidance_prompt
     assert "final" in guidance_prompt
     assert "handover" in guidance_prompt

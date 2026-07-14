@@ -8,7 +8,11 @@ import pytest
 from sqlalchemy.sql.dml import Update
 
 from app.agents.context import build_project_grounding_context
-from app.agents.drafting import _quality_repair_feedback, run_drafting
+from app.agents.drafting import (
+    _format_section_drafting_guidance,
+    _quality_repair_feedback,
+    run_drafting,
+)
 
 
 def _scalar_result(items):
@@ -58,6 +62,32 @@ def test_quality_repair_feedback_names_missing_distinctive_requirement_details()
     assert "distinctive detail: 0/1 required" in feedback
     assert "distinctive terms: final, acceptance, handover" in feedback
     assert "make it distinct from similar checklist items" in feedback
+
+
+def test_section_drafting_guidance_names_distinctive_requirement_diagnostics():
+    guidance = _format_section_drafting_guidance(
+        {
+            "missing_requirement_items": [
+                {
+                    "id": "req-final-acceptance",
+                    "text": "Describe final acceptance and handover controls.",
+                    "reason": "missing distinctive requirement detail",
+                    "remediation_guidance": (
+                        "include distinctive requirement details such as final, "
+                        "acceptance, handover"
+                    ),
+                    "distinctive_terms": ["final", "acceptance", "handover"],
+                    "distinctive_matches": [],
+                    "required_distinctive_count": 1,
+                }
+            ]
+        }
+    )
+
+    assert "id=req-final-acceptance [missing distinctive requirement detail]" in guidance
+    assert "repair: include distinctive requirement details" in guidance
+    assert "diagnostics: distinctive detail 0/1" in guidance
+    assert "distinctive terms: final, acceptance, handover" in guidance
 
 
 @pytest.mark.asyncio
