@@ -94,6 +94,11 @@ class RunProposalCalibrationTests(unittest.TestCase):
                         "section_uid": "sec-quality",
                         "section_title": "Quality",
                         "missing_count": 2,
+                    },
+                    {
+                        "section_uid": "sec-risk",
+                        "section_title": "Risk",
+                        "missing_count": 1,
                     }
                 ],
             },
@@ -154,7 +159,10 @@ class RunProposalCalibrationTests(unittest.TestCase):
             "`missing_requirements` action_key=`regenerate_missing_requirements`",
             manifest,
         )
-        self.assertIn("targets: uids=sec-quality; titles=Quality", manifest)
+        self.assertIn(
+            "targets: uids=sec-quality, sec-risk; titles=Quality, Risk",
+            manifest,
+        )
         self.assertIn(
             "Gap `outline mapping` ui_action=`Review outline mapping`: "
             "regenerate/reference-align",
@@ -426,7 +434,12 @@ class RunProposalCalibrationTests(unittest.TestCase):
                     "section_uid": "sec-quality",
                     "section_title": "Quality",
                     "missing_count": 3,
-                }
+                },
+                {
+                    "section_uid": "sec-risk",
+                    "section_title": "Risk",
+                    "missing_count": 2,
+                },
             ],
             "quality_sections": [
                 {
@@ -436,6 +449,14 @@ class RunProposalCalibrationTests(unittest.TestCase):
                     "min_words": 420,
                     "requirement_count": 5,
                     "blueprint_topic_count": 7,
+                },
+                {
+                    "section_uid": "sec-safety",
+                    "section_title": "Safety",
+                    "word_count": 90,
+                    "min_words": 360,
+                    "requirement_count": 4,
+                    "blueprint_topic_count": 5,
                 }
             ],
         }
@@ -514,15 +535,15 @@ class RunProposalCalibrationTests(unittest.TestCase):
         self.assertEqual(
             manifest["readiness_actions"][2]["request_json"],
             {
-                "section_uids": ["sec-quality"],
-                "section_title_hints": ["Quality"],
+                "section_uids": ["sec-quality", "sec-risk"],
+                "section_title_hints": ["Quality", "Risk"],
             },
         )
         self.assertEqual(
             manifest["readiness_actions"][3]["request_json"],
             {
-                "section_uids": ["sec-environment"],
-                "section_title_hints": ["Environment"],
+                "section_uids": ["sec-environment", "sec-safety"],
+                "section_title_hints": ["Environment", "Safety"],
             },
         )
         self.assertEqual(manifest["gap_priority_rows"][0]["focus"], "drafting depth")
