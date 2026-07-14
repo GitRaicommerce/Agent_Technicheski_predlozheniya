@@ -170,6 +170,7 @@
 - Added explicit remediation action evidence levels (`planned`, `proof`, `failed`, etc.) to action reports, calibration manifests, and before/after comparisons so dry-run calibration evidence cannot be mistaken for completed remediation.
 - Tightened the strict calibration remediation cycle gate so `--require-action-ready` now requires proof-level action evidence when available, while remaining compatible with older ready reports that predate evidence levels.
 - Added common-scenario regression coverage for similar operational requirements, proving distinctive missing-requirement diagnostics flow from coverage assessment through export readiness and targeted drafting guidance into a repaired passing section.
+- Preserved legacy section-summary targets in before/after calibration comparisons, so older manifests without explicit `request_json` still show which remediation sections changed.
 
 ## Active Goals
 

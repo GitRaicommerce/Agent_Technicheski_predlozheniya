@@ -252,6 +252,36 @@ class CompareCalibrationManifestsTests(unittest.TestCase):
             text,
         )
 
+    def test_render_comparison_shows_legacy_summary_action_targets(self):
+        before = manifest(
+            readiness_actions=[
+                {
+                    "action_key": "regenerate_stale",
+                    "section_count": 14,
+                    "summary": "Schedule; Quality (+12 more)",
+                }
+            ]
+        )
+        after = manifest(readiness_actions=[])
+
+        summary = summarize_manifest(before)
+        text = render_comparison(before, after)
+
+        self.assertEqual(
+            summary["readiness_action_target_counts"],
+            {
+                (
+                    "regenerate_stale",
+                    "sections=Schedule; Quality (+12 more)",
+                ): 1,
+            },
+        )
+        self.assertIn(
+            "| readiness_actions | `regenerate_stale` | "
+            "sections=Schedule; Quality (+12 more) | 1 | 0 | -1 |",
+            text,
+        )
+
     def test_render_comparison_prioritizes_remaining_readiness_blockers(self):
         text = render_comparison(
             manifest(blockers=1, volume_ratio=0.20),

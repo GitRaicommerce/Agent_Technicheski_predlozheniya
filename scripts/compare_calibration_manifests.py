@@ -72,13 +72,23 @@ def _request_target_summary(request_json: Any) -> str:
     return "; ".join(parts)
 
 
+def _action_target_summary(row: dict[str, Any]) -> str:
+    target_summary = _request_target_summary(row.get("request_json"))
+    if target_summary:
+        return target_summary
+    summary = str(row.get("summary") or "").strip()
+    if summary and _int_value(row.get("section_count")):
+        return "sections=" + summary
+    return ""
+
+
 def _action_target_counts(rows: list[Any]) -> dict[tuple[str, str], int]:
     counts: dict[tuple[str, str], int] = {}
     for row in rows:
         if not isinstance(row, dict):
             continue
         action_key = str(row.get("action_key") or "").strip()
-        target_summary = _request_target_summary(row.get("request_json"))
+        target_summary = _action_target_summary(row)
         if action_key and target_summary:
             key = (action_key, target_summary)
             counts[key] = counts.get(key, 0) + 1
