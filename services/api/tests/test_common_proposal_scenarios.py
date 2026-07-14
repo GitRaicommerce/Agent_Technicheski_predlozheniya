@@ -11,7 +11,10 @@ from app.agents.generation_jobs import (
     _merge_section_drafting_guidance,
     _missing_requirement_target_guidance,
 )
-from app.agents.proposal_quality import assess_generation_depth
+from app.agents.proposal_quality import (
+    assess_generation_depth,
+    build_generation_depth_target,
+)
 from app.agents.requirements import (
     RequirementItem,
     SPECIFIC_REQUIREMENTS_CATEGORY,
@@ -686,6 +689,12 @@ def test_common_blueprint_keeps_many_specific_requirements_visible():
     assert "additional requirements to cover explicitly" in prompt
     assert "req-specific-14 [specific condition 14]" in prompt
     assert "Do not hide unusual or one-off requirements" in prompt
+    target = build_generation_depth_target(
+        requirement_coverage={"total": len(requirement_items)},
+        drafting_blueprint=blueprint,
+    )
+    assert target["blueprint_requirement_id_count"] == 14
+    assert target["min_words"] >= 1400
 
 
 def test_common_readiness_report_guides_mixed_blocker_remediation():

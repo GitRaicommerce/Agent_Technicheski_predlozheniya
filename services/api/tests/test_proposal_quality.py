@@ -403,6 +403,50 @@ def test_generation_depth_target_prompt_reports_topic_rich_blueprint():
     assert "for each major group/topic" in prompt
 
 
+def test_generation_depth_target_counts_overflow_blueprint_requirement_ids():
+    blueprint = {
+        "groups": [
+            {
+                "category": "specific",
+                "label": "Specific tender requirements",
+                "requirement_ids": [
+                    f"req-specific-{index}" for index in range(1, 14)
+                ],
+                "requirements": [
+                    {"id": f"req-specific-{index}"}
+                    for index in range(1, 11)
+                ],
+                "additional_requirements": [
+                    {"id": "req-specific-11"},
+                    {"id": "req-specific-12"},
+                    {"id": "req-specific-13"},
+                ],
+                "topics": ["specific conditions"],
+                "topic_details": [
+                    {
+                        "topic": "specific conditions",
+                        "requirement_ids": [
+                            f"req-specific-{index}" for index in range(1, 14)
+                        ],
+                    }
+                ],
+            }
+        ]
+    }
+
+    target = build_generation_depth_target(
+        requirement_coverage={"total": 13},
+        drafting_blueprint=blueprint,
+    )
+    prompt = format_generation_depth_target_for_prompt(target)
+
+    assert target["blueprint_group_count"] == 1
+    assert target["blueprint_topic_count"] == 1
+    assert target["blueprint_requirement_id_count"] == 13
+    assert target["min_words"] >= 1400
+    assert "13 blueprint requirement ids" in prompt
+
+
 def test_generation_depth_target_prompt_omits_zero_sentence_target():
     target = build_generation_depth_target(
         requirement_coverage={"total": 1, "items": [{"id": "req-1"}]},

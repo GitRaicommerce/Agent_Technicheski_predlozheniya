@@ -123,6 +123,37 @@ def _blueprint_topic_count(drafting_blueprint: dict[str, Any] | None) -> int:
     return count
 
 
+def _blueprint_requirement_id_count(
+    drafting_blueprint: dict[str, Any] | None,
+) -> int:
+    if not isinstance(drafting_blueprint, dict):
+        return 0
+
+    groups = drafting_blueprint.get("groups")
+    if not isinstance(groups, list):
+        return 0
+
+    requirement_ids: list[str] = []
+    for group in groups:
+        if not isinstance(group, dict):
+            continue
+        group_ids = group.get("requirement_ids")
+        if isinstance(group_ids, list):
+            requirement_ids.extend(
+                str(item).strip()
+                for item in group_ids
+                if str(item).strip()
+            )
+            continue
+        for item in group.get("requirements") or []:
+            if isinstance(item, dict) and item.get("id"):
+                requirement_ids.append(str(item["id"]).strip())
+        for item in group.get("additional_requirements") or []:
+            if isinstance(item, dict) and item.get("id"):
+                requirement_ids.append(str(item["id"]).strip())
+    return len(list(dict.fromkeys(requirement_ids)))
+
+
 def _blueprint_structure_anchors(
     drafting_blueprint: dict[str, Any] | None,
 ) -> list[dict[str, Any]]:
@@ -351,6 +382,7 @@ def assess_generation_depth(
         "requirement_count": requirement_count,
         "blueprint_group_count": blueprint_group_count,
         "blueprint_topic_count": blueprint_topic_count,
+        "blueprint_requirement_id_count": target["blueprint_requirement_id_count"],
         "blueprint_structure_count": target["blueprint_structure_count"],
         "min_words": min_words,
         "min_sentences": min_sentences,
@@ -368,6 +400,9 @@ def build_generation_depth_target(
     requirement_count = _coverage_total(requirement_coverage)
     blueprint_group_count = _blueprint_group_count(drafting_blueprint)
     blueprint_topic_count = _blueprint_topic_count(drafting_blueprint)
+    blueprint_requirement_id_count = _blueprint_requirement_id_count(
+        drafting_blueprint
+    )
     blueprint_structure_count = max(blueprint_group_count, blueprint_topic_count)
     min_words = max(
         _min_words_for_requirements(requirement_count),
@@ -381,6 +416,7 @@ def build_generation_depth_target(
         "requirement_count": requirement_count,
         "blueprint_group_count": blueprint_group_count,
         "blueprint_topic_count": blueprint_topic_count,
+        "blueprint_requirement_id_count": blueprint_requirement_id_count,
         "blueprint_structure_count": blueprint_structure_count,
         "min_words": min_words,
         "min_sentences": min_sentences,
@@ -400,6 +436,9 @@ def format_generation_depth_target_for_prompt(target: dict[str, Any]) -> str:
     requirement_count = int(target.get("requirement_count") or 0)
     blueprint_group_count = int(target.get("blueprint_group_count") or 0)
     blueprint_topic_count = int(target.get("blueprint_topic_count") or 0)
+    blueprint_requirement_id_count = int(
+        target.get("blueprint_requirement_id_count") or 0
+    )
     blueprint_structure_count = int(target.get("blueprint_structure_count") or 0)
     min_words = int(target.get("min_words") or 0)
     min_sentences = int(target.get("min_sentences") or 0)
@@ -436,7 +475,8 @@ def format_generation_depth_target_for_prompt(target: dict[str, Any]) -> str:
                 "- The target is derived from "
                 f"{requirement_count} mapped checklist requirements and "
                 f"{blueprint_group_count} drafting blueprint groups "
-                f"with {blueprint_topic_count} required topics."
+                f"with {blueprint_topic_count} required topics "
+                f"covering {blueprint_requirement_id_count} blueprint requirement ids."
             ),
             distribution_hint,
             (

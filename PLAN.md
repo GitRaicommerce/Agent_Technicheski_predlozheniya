@@ -163,6 +163,7 @@
 - Made Markdown calibration manifest target summaries explicit when long readiness-action target lists are truncated, matching the action execution and comparison reports.
 - Hardened calibration action selection deduplication for readiness actions too, so identical target payloads are executed once while distinct same-endpoint targets are preserved.
 - Kept overflow checklist requirements visible in drafting blueprints and prompts, so sections with many same-category requirements still expose every requirement id instead of only the first detailed response-plan items.
+- Added blueprint requirement-id counts to generation depth targets and prompts, making large same-category sections visibly demanding even when they have few groups or topics.
 
 ## Active Goals
 
