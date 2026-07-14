@@ -353,6 +353,10 @@ async def test_drafting_repairs_short_or_missing_requirement_coverage_before_sav
     assert "matched terms:" in repair_prompt
     assert "coherent terms:" in repair_prompt
     assert "operational evidence:" in repair_prompt
+    assert "Requirement repair writing plan:" in repair_prompt
+    assert "For id=req-communication-workflow" in repair_prompt
+    assert "keep those concepts together in one coherent passage" in repair_prompt
+    assert "make it operational with responsible roles" in repair_prompt
     assert saved_generation.text == repaired_sentence * 16
     assert saved_generation.flags_json["quality_repair_attempted"] is True
     assert saved_generation.flags_json["quality_repair_attempt_count"] == 1

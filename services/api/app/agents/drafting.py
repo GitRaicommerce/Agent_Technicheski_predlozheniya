@@ -194,6 +194,10 @@ def _quality_repair_feedback(
                 )
             reason = "; ".join(reason_bits) or "not covered"
             lines.append(f"- id={item.get('id')}: {item.get('text')} ({reason})")
+        repair_steps = _requirement_repair_steps(missing_items[:20])
+        if repair_steps:
+            lines.append("Requirement repair writing plan:")
+            lines.extend(repair_steps)
     if depth_issues:
         lines.append("Depth diagnostics:")
         for issue in depth_issues:
@@ -233,6 +237,58 @@ def _quality_repair_feedback(
         "corrective actions from the supplied sources."
     )
     return "\n".join(lines)
+
+
+def _requirement_repair_steps(items: list[dict[str, Any]]) -> list[str]:
+    steps: list[str] = []
+    for item in items:
+        requirement_id = item.get("id")
+        missing_terms = [
+            str(term)
+            for term in item.get("missing_terms") or []
+            if term
+        ]
+        step_bits = [
+            f"For id={requirement_id}, add a dedicated paragraph or bullet that "
+            "answers the checklist item explicitly"
+        ]
+        if missing_terms:
+            step_bits.append(
+                "bring in the missing concepts: "
+                + ", ".join(missing_terms[:8])
+            )
+        coherent_terms = [
+            str(term)
+            for term in item.get("coherent_matched_terms") or []
+            if term
+        ]
+        required_coherent_count = item.get("required_coherent_match_count")
+        if (
+            isinstance(required_coherent_count, int)
+            and required_coherent_count > 0
+            and len(coherent_terms) < required_coherent_count
+        ):
+            step_bits.append(
+                "keep those concepts together in one coherent passage instead "
+                "of scattering them across the section"
+            )
+        required_operational_count = item.get("required_operational_signal_count")
+        operational_signals = [
+            str(signal)
+            for signal in item.get("operational_signals") or []
+            if signal
+        ]
+        if (
+            isinstance(required_operational_count, int)
+            and required_operational_count > 0
+            and len(operational_signals) < required_operational_count
+        ):
+            step_bits.append(
+                "make it operational with responsible roles, sequence, controls, "
+                "records, acceptance evidence, escalation, or corrective actions"
+            )
+        steps.append("- " + "; ".join(step_bits) + ".")
+    return steps
 
 
 def _structure_missing_label(item: dict[str, Any]) -> str:
