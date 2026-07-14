@@ -37,6 +37,9 @@ export default function ExportButton({
   const [missingRequirementWarning, setMissingRequirementWarning] = useState(false);
   const [missingRequirementCount, setMissingRequirementCount] =
     useState<number | null>(null);
+  const [missingRequirementGuidance, setMissingRequirementGuidance] = useState<
+    string[]
+  >([]);
   const [qualityWarning, setQualityWarning] = useState(false);
   const [qualitySectionCount, setQualitySectionCount] = useState<number | null>(null);
   const [qualityWarningSummary, setQualityWarningSummary] =
@@ -65,6 +68,7 @@ export default function ExportButton({
     if (isRequirementCoverageExportError(source)) {
       setMissingRequirementWarning(true);
       setMissingRequirementCount(getMissingRequirementCount(source));
+      setMissingRequirementGuidance(getMissingRequirementGuidance(source));
       handled = true;
     }
     if (isQualityExportError(source)) {
@@ -90,6 +94,7 @@ export default function ExportButton({
     setStaleSectionCount(null);
     setMissingRequirementWarning(false);
     setMissingRequirementCount(null);
+    setMissingRequirementGuidance([]);
     setQualityWarning(false);
     setQualitySectionCount(null);
     setQualityWarningSummary(null);
@@ -216,6 +221,13 @@ export default function ExportButton({
             }. `}
             Прегледайте генерациите и регенерирайте засегнатите секции преди DOCX export.
           </p>
+          {missingRequirementGuidance.length > 0 && (
+            <ul className="mt-1 list-disc space-y-0.5 pl-4">
+              {missingRequirementGuidance.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+          )}
           {onOpenGenerations && (
             <button
               type="button"
@@ -370,6 +382,32 @@ function getMissingRequirementCount(err: unknown): number | null {
     return total + (typeof missingCount === "number" ? missingCount : 0);
   }, 0);
   return count > 0 ? count : sections.length;
+}
+
+function getMissingRequirementGuidance(err: unknown): string[] {
+  const payload = getReadinessPayload(err);
+  if (!payload || typeof payload !== "object") return [];
+
+  const sections = (payload as { missing_requirement_sections?: unknown })
+    .missing_requirement_sections;
+  if (!Array.isArray(sections)) return [];
+
+  const guidance: string[] = [];
+  for (const section of sections) {
+    if (!section || typeof section !== "object") continue;
+    const missingItems = (section as { missing_items?: unknown }).missing_items;
+    if (!Array.isArray(missingItems)) continue;
+    for (const item of missingItems) {
+      if (!item || typeof item !== "object") continue;
+      const value = (item as { remediation_guidance?: unknown })
+        .remediation_guidance;
+      if (typeof value === "string" && value.trim()) {
+        guidance.push(value.trim());
+      }
+      if (guidance.length >= 2) return guidance;
+    }
+  }
+  return guidance;
 }
 
 function isQualityExportError(err: unknown): boolean {

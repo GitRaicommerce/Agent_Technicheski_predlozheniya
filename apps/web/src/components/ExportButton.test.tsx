@@ -145,7 +145,19 @@ describe("ExportButton", () => {
       ready: false,
       status: "blocked",
       missing_requirement_count: 2,
-      missing_requirement_sections: [{ section_uid: "s1", missing_count: 2 }],
+      missing_requirement_sections: [
+        {
+          section_uid: "s1",
+          missing_count: 2,
+          missing_items: [
+            {
+              id: "req-1",
+              remediation_guidance:
+                "Regenerate section s1 with operational evidence.",
+            },
+          ],
+        },
+      ],
     });
 
     render(
@@ -160,6 +172,8 @@ describe("ExportButton", () => {
 
     expect(await screen.findByTestId("export-requirement-warning"))
       .toHaveTextContent("2");
+    expect(screen.getByTestId("export-requirement-warning"))
+      .toHaveTextContent("Regenerate section s1 with operational evidence.");
 
     await userEvent.click(screen.getByRole("button", { name: "Отвори Генерации" }));
 
