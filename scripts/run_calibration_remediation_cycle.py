@@ -69,6 +69,13 @@ def build_calibration_args(
     return calibration_args
 
 
+def action_report_ready(path: Path) -> bool:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError(f"{path} must contain a JSON object")
+    return bool(payload.get("ready_for_bundle"))
+
+
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
@@ -96,6 +103,15 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
             "Run only the manifest action phase and write action execution "
             "reports. This avoids DB/reference proposal dependencies and does "
             "not build a new calibration bundle."
+        ),
+    )
+    parser.add_argument(
+        "--require-action-ready",
+        action="store_true",
+        help=(
+            "Before building the calibration bundle, require the generated "
+            "action execution report to have ready_for_bundle=true. This is "
+            "useful for strict before/after proof runs."
         ),
     )
     parser.add_argument("--timeout", type=float, default=60.0)
@@ -137,6 +153,12 @@ def main(argv: list[str]) -> int:
         action_status = run_manifest_actions(build_action_args(args, reports))
         if action_status != 0 or args.actions_only:
             return action_status
+        if args.require_action_ready and not action_report_ready(reports["json"]):
+            raise ValueError(
+                "Action execution report is not ready for a follow-up calibration "
+                "bundle. Run remediation with --execute --wait, or omit "
+                "--require-action-ready for an exploratory bundle."
+            )
 
         return run_proposal_calibration(build_calibration_args(args, reports))
     except ValueError as exc:

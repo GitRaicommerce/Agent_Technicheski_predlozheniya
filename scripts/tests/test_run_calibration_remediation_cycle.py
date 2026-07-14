@@ -24,6 +24,7 @@ sys.modules[spec.name] = cycle
 spec.loader.exec_module(cycle)
 
 action_report_paths = cycle.action_report_paths
+action_report_ready = cycle.action_report_ready
 build_action_args = cycle.build_action_args
 build_calibration_args = cycle.build_calibration_args
 calibration_manifest_project_id = cycle.calibration_manifest_project_id
@@ -162,6 +163,97 @@ class CalibrationRemediationCycleTests(unittest.TestCase):
             cycle.run_manifest_actions = original_actions
             cycle.run_proposal_calibration = original_calibration
 
+    def test_main_require_action_ready_blocks_unready_action_report(self):
+        original_actions = cycle.run_manifest_actions
+        original_calibration = cycle.run_proposal_calibration
+
+        def fake_actions(argv):
+            out_json = Path(argv[argv.index("--out-json") + 1])
+            out_json.parent.mkdir(parents=True, exist_ok=True)
+            out_json.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "calibration_action_execution.v1",
+                        "ready_for_bundle": False,
+                        "has_unexecuted_actions": True,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            return 0
+
+        cycle.run_manifest_actions = fake_actions
+        cycle.run_proposal_calibration = Mock(return_value=0)
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                out_dir = Path(tmp) / "after"
+                manifest_path = write_manifest(Path(tmp) / "before.json")
+                status = main(
+                    [
+                        "--manifest",
+                        str(manifest_path),
+                        "--project-id",
+                        "project-1",
+                        "--reference",
+                        "reference.docx",
+                        "--out-dir",
+                        str(out_dir),
+                        "--all",
+                        "--require-action-ready",
+                    ]
+                )
+
+                self.assertEqual(status, 1)
+                cycle.run_proposal_calibration.assert_not_called()
+        finally:
+            cycle.run_manifest_actions = original_actions
+            cycle.run_proposal_calibration = original_calibration
+
+    def test_main_require_action_ready_allows_ready_action_report(self):
+        original_actions = cycle.run_manifest_actions
+        original_calibration = cycle.run_proposal_calibration
+
+        def fake_actions(argv):
+            out_json = Path(argv[argv.index("--out-json") + 1])
+            out_json.parent.mkdir(parents=True, exist_ok=True)
+            out_json.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "calibration_action_execution.v1",
+                        "ready_for_bundle": True,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            return 0
+
+        cycle.run_manifest_actions = fake_actions
+        cycle.run_proposal_calibration = Mock(return_value=0)
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                out_dir = Path(tmp) / "after"
+                manifest_path = write_manifest(Path(tmp) / "before.json")
+                status = main(
+                    [
+                        "--manifest",
+                        str(manifest_path),
+                        "--project-id",
+                        "project-1",
+                        "--reference",
+                        "reference.docx",
+                        "--out-dir",
+                        str(out_dir),
+                        "--all",
+                        "--require-action-ready",
+                    ]
+                )
+
+                self.assertEqual(status, 0)
+                cycle.run_proposal_calibration.assert_called_once()
+        finally:
+            cycle.run_manifest_actions = original_actions
+            cycle.run_proposal_calibration = original_calibration
+
     def test_main_requires_reference_for_full_bundle(self):
         original_actions = cycle.run_manifest_actions
         original_calibration = cycle.run_proposal_calibration
@@ -291,6 +383,14 @@ class CalibrationRemediationCycleTests(unittest.TestCase):
 
             with self.assertRaisesRegex(ValueError, "JSON object"):
                 calibration_manifest_project_id(manifest_path)
+
+    def test_action_report_ready_rejects_non_object_payload(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report_path = Path(tmp) / "execution.json"
+            report_path.write_text("[]", encoding="utf-8")
+
+            with self.assertRaisesRegex(ValueError, "JSON object"):
+                action_report_ready(report_path)
 
 
 if __name__ == "__main__":
