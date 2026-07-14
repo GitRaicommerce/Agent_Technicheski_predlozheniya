@@ -126,6 +126,13 @@ def validate_args(args: argparse.Namespace) -> None:
             "Use --wait with --execute so the calibration bundle is built after "
             "generation remediation jobs finish."
         )
+    if args.execute and not (args.all or args.action_key):
+        raise ValueError("Use --all or --action-key when running with --execute")
+    if args.require_action_ready and not args.execute:
+        raise ValueError(
+            "Use --execute --wait with --require-action-ready; dry-run action "
+            "reports are not proof for a follow-up calibration bundle."
+        )
     if not args.actions_only and args.reference is None:
         raise ValueError("--reference is required unless --actions-only is used")
     manifest_project_id = calibration_manifest_project_id(args.manifest)

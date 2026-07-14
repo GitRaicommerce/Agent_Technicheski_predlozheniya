@@ -199,6 +199,8 @@ class CalibrationRemediationCycleTests(unittest.TestCase):
                         "--out-dir",
                         str(out_dir),
                         "--all",
+                        "--execute",
+                        "--wait",
                         "--require-action-ready",
                     ]
                 )
@@ -244,6 +246,8 @@ class CalibrationRemediationCycleTests(unittest.TestCase):
                         "--out-dir",
                         str(out_dir),
                         "--all",
+                        "--execute",
+                        "--wait",
                         "--require-action-ready",
                     ]
                 )
@@ -334,6 +338,66 @@ class CalibrationRemediationCycleTests(unittest.TestCase):
                         "--action-key",
                         "regenerate_stale",
                         "--execute",
+                    ]
+                )
+
+                self.assertEqual(status, 1)
+                cycle.run_manifest_actions.assert_not_called()
+                cycle.run_proposal_calibration.assert_not_called()
+        finally:
+            cycle.run_manifest_actions = original_actions
+            cycle.run_proposal_calibration = original_calibration
+
+    def test_main_rejects_execute_without_action_selection(self):
+        original_actions = cycle.run_manifest_actions
+        original_calibration = cycle.run_proposal_calibration
+        cycle.run_manifest_actions = Mock(return_value=0)
+        cycle.run_proposal_calibration = Mock(return_value=0)
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                manifest_path = write_manifest(Path(tmp) / "before.json")
+                status = main(
+                    [
+                        "--manifest",
+                        str(manifest_path),
+                        "--project-id",
+                        "project-1",
+                        "--reference",
+                        "reference.docx",
+                        "--out-dir",
+                        str(Path(tmp) / "after"),
+                        "--execute",
+                        "--wait",
+                    ]
+                )
+
+                self.assertEqual(status, 1)
+                cycle.run_manifest_actions.assert_not_called()
+                cycle.run_proposal_calibration.assert_not_called()
+        finally:
+            cycle.run_manifest_actions = original_actions
+            cycle.run_proposal_calibration = original_calibration
+
+    def test_main_rejects_require_action_ready_without_execute(self):
+        original_actions = cycle.run_manifest_actions
+        original_calibration = cycle.run_proposal_calibration
+        cycle.run_manifest_actions = Mock(return_value=0)
+        cycle.run_proposal_calibration = Mock(return_value=0)
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                manifest_path = write_manifest(Path(tmp) / "before.json")
+                status = main(
+                    [
+                        "--manifest",
+                        str(manifest_path),
+                        "--project-id",
+                        "project-1",
+                        "--reference",
+                        "reference.docx",
+                        "--out-dir",
+                        str(Path(tmp) / "after"),
+                        "--all",
+                        "--require-action-ready",
                     ]
                 )
 
