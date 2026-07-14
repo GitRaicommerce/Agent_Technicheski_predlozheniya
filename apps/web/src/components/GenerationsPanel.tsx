@@ -1164,6 +1164,9 @@ function requirementCoverageReasonLabel(item: RequirementCoverageItem): string |
   if (reason === "missing key terms") {
     return "липсват ключови термини";
   }
+  if (reason === "missing distinctive requirement detail") {
+    return "липсва отличителен детайл";
+  }
   if (reason === "missing requirement coverage") {
     return "липсва покритие";
   }
@@ -1188,6 +1191,17 @@ function requirementCoverageDiagnostics(item: RequirementCoverageItem): string |
     diagnostics.push(
       `оперативни сигнали ${(item.operational_signals ?? []).length}/${item.required_operational_signal_count}`,
     );
+  }
+  if (
+    typeof item.required_distinctive_count === "number" &&
+    item.required_distinctive_count > 0
+  ) {
+    diagnostics.push(
+      `отличителни детайли ${(item.distinctive_matches ?? []).length}/${item.required_distinctive_count}`,
+    );
+    if (item.distinctive_terms?.length) {
+      diagnostics.push(`отличаващи: ${item.distinctive_terms.slice(0, 5).join(", ")}`);
+    }
   }
   return diagnostics.length ? diagnostics.join(" · ") : null;
 }

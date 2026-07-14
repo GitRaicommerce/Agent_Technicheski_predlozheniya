@@ -269,10 +269,13 @@ export interface RequirementCoverageItem {
   status?: "covered" | "missing" | string;
   matched_terms?: string[];
   missing_terms?: string[];
+  distinctive_terms?: string[];
+  distinctive_matches?: string[];
   matched_ratio?: number;
   coherent_matched_ratio?: number;
   coherent_matched_terms?: string[];
   required_match_count?: number;
+  required_distinctive_count?: number;
   required_coherent_match_count?: number;
   operational_signals?: string[];
   requires_operational_detail?: boolean;

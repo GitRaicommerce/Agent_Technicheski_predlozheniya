@@ -118,13 +118,16 @@ describe("GenerationsPanel", () => {
                     id: "req-missing",
                     text: "Missing requirement",
                     status: "missing",
-                    reason: "needs operational evidence",
+                    reason: "missing distinctive requirement detail",
                     matched_ratio: 0.8,
                     coherent_matched_ratio: 0.75,
                     operational_signals: ["record"],
                     required_operational_signal_count: 2,
+                    distinctive_terms: ["final", "acceptance", "handover"],
+                    distinctive_matches: [],
+                    required_distinctive_count: 1,
                     remediation_guidance:
-                      "Regenerate or edit this section with operational evidence.",
+                      "Regenerate or edit this section with final acceptance and handover details.",
                   },
                 ],
               },
@@ -148,16 +151,16 @@ describe("GenerationsPanel", () => {
     ).toHaveTextContent("1 липсват");
     expect(screen.getByText(/req-missing/)).toBeInTheDocument();
     expect(screen.getByText(/Missing requirement/)).toBeInTheDocument();
-    expect(screen.getByText("липсват оперативни доказателства"))
+    expect(screen.getByText("липсва отличителен детайл"))
       .toBeInTheDocument();
     expect(
       screen.getByText(
-        "термини 80% · свързаност 75% · оперативни сигнали 1/2",
+        "термини 80% · свързаност 75% · оперативни сигнали 1/2 · отличителни детайли 0/1 · отличаващи: final, acceptance, handover",
       ),
     ).toBeInTheDocument();
     expect(
       screen.getByText(
-        "Repair: Regenerate or edit this section with operational evidence.",
+        "Repair: Regenerate or edit this section with final acceptance and handover details.",
       ),
     ).toBeInTheDocument();
   });
