@@ -127,6 +127,38 @@ OPERATIONAL_SIGNAL_TERMS = (
     "\u043f\u043e\u0441\u043b\u0435\u0434\u043e\u0432",
 )
 
+OPERATIONAL_EXECUTION_TERMS = (
+    "applies",
+    "assigns",
+    "attaches",
+    "completes",
+    "defines",
+    "documents",
+    "executes",
+    "follows",
+    "implements",
+    "keeps",
+    "maintains",
+    "monitors",
+    "opens",
+    "performs",
+    "prepares",
+    "records",
+    "updates",
+    "\u0432\u044a\u0437\u043b\u0430\u0433",
+    "\u043e\u043f\u0440\u0435\u0434\u0435\u043b",
+    "\u0438\u0437\u043f\u044a\u043b\u043d",
+    "\u043f\u0440\u0438\u043b\u0430\u0433",
+    "\u043f\u043e\u0434\u0433\u043e\u0442\u0432",
+    "\u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442\u0438\u0440",
+    "\u0437\u0430\u043f\u0438\u0441\u0432",
+    "\u0432\u043e\u0434\u0438",
+    "\u043f\u043e\u0434\u0434\u044a\u0440\u0436",
+    "\u043c\u043e\u043d\u0438\u0442\u043e\u0440",
+    "\u043f\u0440\u043e\u0441\u043b\u0435\u0434",
+    "\u0430\u043a\u0442\u0443\u0430\u043b\u0438\u0437",
+)
+
 GENERIC_COVERAGE_TERMS = {
     "action",
     "actions",
@@ -184,6 +216,17 @@ def _operational_signal_terms(text: str) -> list[str]:
         {
             signal
             for signal in OPERATIONAL_SIGNAL_TERMS
+            if signal in normalized
+        }
+    )
+
+
+def _operational_execution_terms(text: str) -> list[str]:
+    normalized = _normalize(text)
+    return sorted(
+        {
+            signal
+            for signal in OPERATIONAL_EXECUTION_TERMS
             if signal in normalized
         }
     )
@@ -339,10 +382,14 @@ def assess_requirement_coverage(
             generated_text,
         )
         operational_signals = _operational_signal_terms(best_window)
+        operational_execution_signals = _operational_execution_terms(best_window)
         distinctive_terms = _distinctive_terms(requirement_tokens)
         distinctive_matches = sorted(set(distinctive_terms) & set(window_terms))
         requires_operational_detail = _requires_operational_detail(item)
         required_operational_signal_count = 2 if requires_operational_detail else 0
+        required_operational_execution_signal_count = (
+            1 if requires_operational_detail else 0
+        )
         required_distinctive_count = 1 if len(distinctive_terms) >= 3 else 0
 
         if not requirement_tokens:
@@ -368,6 +415,8 @@ def assess_requirement_coverage(
         locally_coherent = len(window_terms) >= required_window_matches
         operationally_developed = (
             len(operational_signals) >= required_operational_signal_count
+            and len(operational_execution_signals)
+            >= required_operational_execution_signal_count
         )
         distinctively_matched = (
             len(distinctive_matches) >= required_distinctive_count
@@ -410,8 +459,12 @@ def assess_requirement_coverage(
                 "required_match_count": required_matches,
                 "required_coherent_match_count": required_window_matches,
                 "operational_signals": operational_signals,
+                "operational_execution_signals": operational_execution_signals,
                 "requires_operational_detail": requires_operational_detail,
                 "required_operational_signal_count": required_operational_signal_count,
+                "required_operational_execution_signal_count": (
+                    required_operational_execution_signal_count
+                ),
             }
         )
 

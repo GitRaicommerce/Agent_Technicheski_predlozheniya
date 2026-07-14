@@ -126,7 +126,9 @@ async def test_export_readiness_aggregates_multiple_blockers(client, mock_db):
                     "coherent_matched_ratio": 0.8,
                     "requires_operational_detail": True,
                     "operational_signals": ["record"],
+                    "operational_execution_signals": [],
                     "required_operational_signal_count": 2,
+                    "required_operational_execution_signal_count": 1,
                 },
                 {
                     "id": "req-3",
@@ -194,6 +196,7 @@ async def test_export_readiness_aggregates_multiple_blockers(client, mock_db):
     assert missing_items[1]["reason"] == "needs operational evidence"
     assert missing_items[1]["reasons"] == [
         "needs operational evidence",
+        "needs execution action",
         "needs coherent passage",
     ]
     assert missing_items[1]["missing_terms"] == ["approval", "handover"]
@@ -204,8 +207,13 @@ async def test_export_readiness_aggregates_multiple_blockers(client, mock_db):
         "remediation_guidance"
     ]
     assert "add operational evidence" in missing_items[1]["remediation_guidance"]
+    assert "write active execution steps" in missing_items[1][
+        "remediation_guidance"
+    ]
     assert missing_items[1]["operational_signals"] == ["record"]
+    assert missing_items[1]["operational_execution_signals"] == []
     assert missing_items[1]["required_operational_signal_count"] == 2
+    assert missing_items[1]["required_operational_execution_signal_count"] == 1
     assert missing_items[2]["reason"] == "missing distinctive requirement detail"
     assert missing_items[2]["reasons"] == [
         "missing distinctive requirement detail"

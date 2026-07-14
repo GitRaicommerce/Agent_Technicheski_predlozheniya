@@ -20,9 +20,13 @@ def _missing_requirement_reasons(item: dict) -> list[str]:
     matched_terms = item.get("matched_terms")
     coherent_terms = item.get("coherent_matched_terms")
     operational_signals = item.get("operational_signals")
+    operational_execution_signals = item.get("operational_execution_signals")
     required_match_count = item.get("required_match_count")
     required_coherent_match_count = item.get("required_coherent_match_count")
     required_operational_signal_count = item.get("required_operational_signal_count")
+    required_operational_execution_signal_count = item.get(
+        "required_operational_execution_signal_count"
+    )
     distinctive_matches = item.get("distinctive_matches")
     required_distinctive_count = item.get("required_distinctive_count")
 
@@ -30,6 +34,11 @@ def _missing_requirement_reasons(item: dict) -> list[str]:
     coherent_count = len(coherent_terms) if isinstance(coherent_terms, list) else 0
     operational_count = (
         len(operational_signals) if isinstance(operational_signals, list) else 0
+    )
+    operational_execution_count = (
+        len(operational_execution_signals)
+        if isinstance(operational_execution_signals, list)
+        else 0
     )
     distinctive_count = (
         len(distinctive_matches) if isinstance(distinctive_matches, list) else 0
@@ -42,6 +51,13 @@ def _missing_requirement_reasons(item: dict) -> list[str]:
         and operational_count < required_operational_signal_count
     ):
         reasons.append("needs operational evidence")
+    if (
+        item.get("requires_operational_detail")
+        and isinstance(required_operational_execution_signal_count, int)
+        and operational_execution_count
+        < required_operational_execution_signal_count
+    ):
+        reasons.append("needs execution action")
     if (
         isinstance(required_coherent_match_count, int)
         and coherent_count < required_coherent_match_count
@@ -115,7 +131,15 @@ def _missing_requirement_remediation_guidance(item: dict) -> str:
         for signal in item.get("operational_signals") or []
         if signal
     ]
+    operational_execution_signals = [
+        str(signal)
+        for signal in item.get("operational_execution_signals") or []
+        if signal
+    ]
     required_operational_count = item.get("required_operational_signal_count")
+    required_operational_execution_count = item.get(
+        "required_operational_execution_signal_count"
+    )
     if (
         item.get("requires_operational_detail")
         and isinstance(required_operational_count, int)
@@ -125,6 +149,16 @@ def _missing_requirement_remediation_guidance(item: dict) -> str:
         guidance.append(
             "add operational evidence such as responsible roles, sequence, "
             "controls, records, acceptance evidence, escalation, or corrective actions"
+        )
+    if (
+        item.get("requires_operational_detail")
+        and isinstance(required_operational_execution_count, int)
+        and required_operational_execution_count > 0
+        and len(operational_execution_signals) < required_operational_execution_count
+    ):
+        guidance.append(
+            "write active execution steps using concrete verbs such as assigns, "
+            "performs, keeps, documents, monitors, or applies"
         )
 
     return "; ".join(guidance) + "."
@@ -171,8 +205,15 @@ def _missing_requirement_coverage(generation: Generation) -> dict | None:
                 "matched_ratio": item.get("matched_ratio"),
                 "coherent_matched_ratio": item.get("coherent_matched_ratio"),
                 "operational_signals": item.get("operational_signals") or [],
+                "operational_execution_signals": item.get(
+                    "operational_execution_signals"
+                )
+                or [],
                 "required_operational_signal_count": item.get(
                     "required_operational_signal_count"
+                ),
+                "required_operational_execution_signal_count": item.get(
+                    "required_operational_execution_signal_count"
                 ),
             }
             for item in items

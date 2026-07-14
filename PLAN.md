@@ -182,6 +182,7 @@
 - Preserved missing-requirement reason counts in calibration action execution JSON and Markdown reports, so remediation evidence records why a missing-requirements action was planned or executed.
 - Aggregated missing-requirement reason evidence from attached calibration action reports back into calibration bundle Markdown and JSON summaries, so follow-up bundles show which blocker types were actually targeted by remediation evidence.
 - Made generated-text requirement coverage infer operational-detail expectations from uncategorized requirement text and topics, so legacy or fallback checklist items about risk, quality, communication, safety, environment, or documentation cannot pass with keyword-only wording.
+- Tightened operational requirement coverage with an active execution-action check, so text that merely repeats terms such as protocol, record, evidence, or corrective action no longer passes unless it also says who performs/keeps/documents/monitors/applies the work; the diagnostic now flows through export readiness reports, targeted regeneration guidance, drafting repair prompts, and common-scenario regressions.
 
 ## Active Goals
 
@@ -197,7 +198,7 @@
 3. After resolving Pernik's duplicate selected variants and stale selected sections, regenerate affected sections so the section structure plan and iterative drafting quality-repair pass can improve subtopic coverage, checklist coverage, and depth before export readiness is checked again.
 4. Re-run the Pernik calibration bundle after remediation with `--action-report` and compare the regenerated output against the winning proposal, focusing on the manifest word-volume scorecard, section-level drafting-depth diagnostics, executed remediation evidence, execution-status deltas, and action target deltas in the before/after calibration manifest comparison report.
 5. Expand generated documentation with more precise backend endpoint and workflow coverage.
-6. Continue broadening common tender regression coverage with more real-world noisy PDF extraction and DOCX readiness combinations.
+6. Continue broadening common tender regression coverage with more real-world noisy PDF extraction, DOCX readiness combinations, and operational-action coverage cases across quality, risk, environment, safety, communication, and documentation requirements.
 
 ## Notes
 

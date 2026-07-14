@@ -307,6 +307,10 @@ async def test_drafting_prompt_and_saved_generation_include_requirement_coverage
                         "remediation_guidance": (
                             "Add roles, control records, and acceptance evidence."
                         ),
+                        "operational_signals": ["record"],
+                        "operational_execution_signals": [],
+                        "required_operational_signal_count": 2,
+                        "required_operational_execution_signal_count": 1,
                     }
                 ],
             },
@@ -320,6 +324,7 @@ async def test_drafting_prompt_and_saved_generation_include_requirement_coverage
     assert "Detailed linear schedule" in prompt
     assert "Missing requirements to repair" in prompt
     assert "id=req-schedule [needs operational evidence]" in prompt
+    assert "diagnostics: operational evidence 1/2; execution actions 0/1" in prompt
     assert "repair: Add roles, control records, and acceptance evidence." in prompt
     assert "DRAFTING BLUEPRINT" in prompt
     assert "SECTION DEPTH TARGET" in prompt
@@ -425,10 +430,12 @@ async def test_drafting_repairs_short_or_missing_requirement_coverage_before_sav
     assert "matched terms:" in repair_prompt
     assert "coherent terms:" in repair_prompt
     assert "operational evidence:" in repair_prompt
+    assert "execution actions:" in repair_prompt
     assert "Requirement repair writing plan:" in repair_prompt
     assert "For id=req-communication-workflow" in repair_prompt
     assert "keep those concepts together in one coherent passage" in repair_prompt
     assert "make it operational with responsible roles" in repair_prompt
+    assert "write active execution steps with concrete verbs" in repair_prompt
     assert saved_generation.text == repaired_sentence * 16
     assert saved_generation.flags_json["quality_repair_attempted"] is True
     assert saved_generation.flags_json["quality_repair_attempt_count"] == 1

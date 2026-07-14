@@ -219,6 +219,19 @@ def _quality_repair_feedback(
                     f"{len(operational_signals)}/"
                     f"{item.get('required_operational_signal_count')} signals"
                 )
+            if item.get("requires_operational_detail") and item.get(
+                "required_operational_execution_signal_count"
+            ):
+                execution_signals = [
+                    str(signal)
+                    for signal in item.get("operational_execution_signals") or []
+                    if signal
+                ]
+                reason_bits.append(
+                    "execution actions: "
+                    f"{len(execution_signals)}/"
+                    f"{item.get('required_operational_execution_signal_count')} signals"
+                )
             reason = "; ".join(reason_bits) or "not covered"
             lines.append(f"- id={item.get('id')}: {item.get('text')} ({reason})")
         repair_steps = _requirement_repair_steps(missing_items[:20])
@@ -335,6 +348,23 @@ def _requirement_repair_steps(items: list[dict[str, Any]]) -> list[str]:
             step_bits.append(
                 "make it operational with responsible roles, sequence, controls, "
                 "records, acceptance evidence, escalation, or corrective actions"
+            )
+        required_execution_count = item.get(
+            "required_operational_execution_signal_count"
+        )
+        execution_signals = [
+            str(signal)
+            for signal in item.get("operational_execution_signals") or []
+            if signal
+        ]
+        if (
+            isinstance(required_execution_count, int)
+            and required_execution_count > 0
+            and len(execution_signals) < required_execution_count
+        ):
+            step_bits.append(
+                "write active execution steps with concrete verbs such as assigns, "
+                "performs, keeps, documents, monitors, or applies"
             )
         steps.append("- " + "; ".join(step_bits) + ".")
     return steps
@@ -486,6 +516,22 @@ def _format_section_drafting_guidance(guidance: dict[str, Any] | None) -> str:
                 diagnostics.append(
                     "operational evidence "
                     f"{len(operational_signals)}/{required_operational_count}"
+                )
+            required_execution_count = item.get(
+                "required_operational_execution_signal_count"
+            )
+            if (
+                isinstance(required_execution_count, int)
+                and required_execution_count > 0
+            ):
+                execution_signals = [
+                    str(signal)
+                    for signal in item.get("operational_execution_signals") or []
+                    if signal
+                ]
+                diagnostics.append(
+                    "execution actions "
+                    f"{len(execution_signals)}/{required_execution_count}"
                 )
             if diagnostics:
                 lines.append("    diagnostics: " + "; ".join(diagnostics))

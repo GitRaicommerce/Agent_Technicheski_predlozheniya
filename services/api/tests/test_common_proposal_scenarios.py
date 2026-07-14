@@ -822,7 +822,8 @@ def test_common_requirement_coverage_requires_developed_operational_detail():
         (
             "The work programme describes dust control, waste segregation, "
             "soil protection, the responsible role, monitoring records, and "
-            "corrective actions during execution."
+            "corrective actions, while the contractor assigns owners, monitors "
+            "records, and documents follow-up during execution."
         ),
         requirement_items,
     )
@@ -867,7 +868,9 @@ def test_common_missing_requirement_remediation_flows_into_targeted_drafting_gui
     missing_item = readiness_section["missing_items"][0]
     assert missing_item["reason"] == "needs operational evidence"
     assert "needs operational evidence" in missing_item["reasons"]
+    assert "needs execution action" in missing_item["reasons"]
     assert "add operational evidence" in missing_item["remediation_guidance"]
+    assert "write active execution steps" in missing_item["remediation_guidance"]
 
     target_guidance = _missing_requirement_target_guidance([readiness_section])
     section_guidance = _merge_section_drafting_guidance(
@@ -884,7 +887,11 @@ def test_common_missing_requirement_remediation_flows_into_targeted_drafting_gui
     assert "Develop the quality controls as a separate point." in guidance_prompt
     assert "Regenerate or edit the selected section" in guidance_prompt
     assert "Missing requirements to repair" in guidance_prompt
-    assert "id=req-quality-acceptance [needs operational evidence]" in guidance_prompt
+    assert (
+        "id=req-quality-acceptance [needs operational evidence, needs execution action]"
+        in guidance_prompt
+    )
+    assert "execution actions 0/1" in guidance_prompt
     assert "repair:" in guidance_prompt
 
     repaired_text = (
@@ -1063,4 +1070,6 @@ def test_common_uncategorized_operational_requirement_still_needs_evidence():
     assert keyword_only["missing_ids"] == ["req-legacy-quality-record"]
     assert keyword_only["items"][0]["requires_operational_detail"] is True
     assert len(keyword_only["items"][0]["operational_signals"]) < 2
+    assert keyword_only["items"][0]["operational_execution_signals"] == []
     assert developed["covered_ids"] == ["req-legacy-quality-record"]
+    assert len(developed["items"][0]["operational_execution_signals"]) >= 1

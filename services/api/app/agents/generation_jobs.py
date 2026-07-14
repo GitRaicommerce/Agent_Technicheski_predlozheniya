@@ -318,6 +318,10 @@ def _missing_requirement_target_guidance(
                     )
                     or [],
                     "operational_signals": item.get("operational_signals") or [],
+                    "operational_execution_signals": item.get(
+                        "operational_execution_signals"
+                    )
+                    or [],
                     "required_match_count": item.get("required_match_count"),
                     "required_distinctive_count": item.get(
                         "required_distinctive_count"
@@ -327,6 +331,9 @@ def _missing_requirement_target_guidance(
                     ),
                     "required_operational_signal_count": item.get(
                         "required_operational_signal_count"
+                    ),
+                    "required_operational_execution_signal_count": item.get(
+                        "required_operational_execution_signal_count"
                     ),
                 }
             )

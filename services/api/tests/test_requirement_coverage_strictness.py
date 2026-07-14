@@ -69,7 +69,8 @@ def test_requirement_coverage_rejects_scattered_keyword_mentions():
         (
             "For each risk, the proposal identifies the trigger, prevention "
             "action, response owner, monitoring signal, escalation path, and "
-            "corrective record in one control workflow."
+            "corrective record in one control workflow, then assigns the owner, "
+            "monitors the signal, and documents corrective records."
         ),
         items,
     )
@@ -117,8 +118,14 @@ def test_requirement_coverage_requires_operational_evidence_for_operational_cate
     assert keyword_only["items"][0]["matched_ratio"] >= 0.6
     assert keyword_only["items"][0]["requires_operational_detail"] is True
     assert keyword_only["items"][0]["operational_signals"] == []
+    assert keyword_only["items"][0]["operational_execution_signals"] == []
+    assert (
+        keyword_only["items"][0]["required_operational_execution_signal_count"]
+        == 1
+    )
     assert operational["covered_ids"] == ["req-environment-measures"]
     assert len(operational["items"][0]["operational_signals"]) >= 2
+    assert len(operational["items"][0]["operational_execution_signals"]) >= 1
 
 
 def test_requirement_coverage_requires_operational_evidence_from_requirement_text():
@@ -154,8 +161,52 @@ def test_requirement_coverage_requires_operational_evidence_from_requirement_tex
     assert keyword_only["missing_ids"] == ["req-legacy-risk"]
     assert keyword_only["items"][0]["requires_operational_detail"] is True
     assert keyword_only["items"][0]["operational_signals"] == []
+    assert keyword_only["items"][0]["operational_execution_signals"] == []
     assert operational["covered_ids"] == ["req-legacy-risk"]
     assert len(operational["items"][0]["operational_signals"]) >= 2
+    assert len(operational["items"][0]["operational_execution_signals"]) >= 1
+
+
+def test_requirement_coverage_requires_active_execution_for_operational_details():
+    items = normalize_requirement_items(
+        [
+            {
+                "id": "req-quality-actions",
+                "text": (
+                    "Describe quality control protocol, inspection record, "
+                    "acceptance evidence, and corrective action."
+                ),
+                "importance": "mandatory",
+                "category": "quality",
+            }
+        ]
+    )
+
+    keyword_only = assess_requirement_coverage(
+        (
+            "The proposal describes quality control protocol, inspection "
+            "record, acceptance evidence, and corrective action."
+        ),
+        items,
+    )
+    active_execution = assess_requirement_coverage(
+        (
+            "The contractor assigns a responsible role, performs the quality "
+            "control protocol, keeps the inspection record, attaches acceptance "
+            "evidence, and documents corrective action."
+        ),
+        items,
+    )
+
+    assert keyword_only["missing_ids"] == ["req-quality-actions"]
+    assert len(keyword_only["items"][0]["operational_signals"]) >= 2
+    assert keyword_only["items"][0]["operational_execution_signals"] == []
+    assert (
+        keyword_only["items"][0]["required_operational_execution_signal_count"]
+        == 1
+    )
+    assert active_execution["covered_ids"] == ["req-quality-actions"]
+    assert len(active_execution["items"][0]["operational_execution_signals"]) >= 1
 
 
 def test_requirement_coverage_keeps_similar_operational_requirements_separate():

@@ -208,8 +208,16 @@ def render_export_readiness_report(readiness: dict[str, Any]) -> str:
                         for signal in item.get("operational_signals") or []
                         if signal
                     ]
+                    operational_execution_signals = [
+                        str(signal)
+                        for signal in item.get("operational_execution_signals") or []
+                        if signal
+                    ]
                     required_operational = item.get(
                         "required_operational_signal_count"
+                    )
+                    required_operational_execution = item.get(
+                        "required_operational_execution_signal_count"
                     )
                     distinctive_terms = [
                         str(term)
@@ -230,6 +238,15 @@ def render_export_readiness_report(readiness: dict[str, Any]) -> str:
                         diagnostics.append(
                             "operational_signals="
                             f"{len(operational_signals)}/{required_operational}"
+                        )
+                    if (
+                        isinstance(required_operational_execution, int)
+                        and required_operational_execution
+                    ):
+                        diagnostics.append(
+                            "execution_actions="
+                            f"{len(operational_execution_signals)}/"
+                            f"{required_operational_execution}"
                         )
                     if isinstance(required_distinctive, int) and required_distinctive:
                         diagnostics.append(

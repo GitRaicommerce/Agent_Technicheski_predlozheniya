@@ -42,12 +42,15 @@ def test_render_export_readiness_report_includes_blockers_and_actions():
                             "reason": "needs operational evidence",
                             "reasons": [
                                 "needs operational evidence",
+                                "needs execution action",
                                 "missing distinctive requirement detail",
                             ],
                             "matched_ratio": 0.8,
                             "coherent_matched_ratio": 0.75,
                             "operational_signals": ["record"],
+                            "operational_execution_signals": [],
                             "required_operational_signal_count": 2,
+                            "required_operational_execution_signal_count": 1,
                             "distinctive_terms": [
                                 "final",
                                 "acceptance",
@@ -121,12 +124,12 @@ def test_render_export_readiness_report_includes_blockers_and_actions():
     assert "Stale section title (`sec-stale`)" in report
     assert "Missing section title (`sec-missing`): 2 missing (req-1, req-2)" in report
     assert (
-        "`req-1` [needs operational evidence, missing distinctive requirement "
-        "detail]: Describe the detailed schedule."
+        "`req-1` [needs operational evidence, needs execution action, missing "
+        "distinctive requirement detail]: Describe the detailed schedule."
     ) in report
     assert (
         "diagnostics: matched_ratio=0.8, coherent_ratio=0.75, "
-        "operational_signals=1/2, distinctive=0/1, "
+        "operational_signals=1/2, execution_actions=0/1, distinctive=0/1, "
         "distinctive_terms=final, acceptance, handover"
     ) in report
     assert (
