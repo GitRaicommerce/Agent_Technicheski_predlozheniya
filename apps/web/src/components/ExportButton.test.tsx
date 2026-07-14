@@ -152,6 +152,11 @@ describe("ExportButton", () => {
           missing_items: [
             {
               id: "req-1",
+              reasons: [
+                "needs operational evidence",
+                "needs coherent passage",
+                "missing distinctive requirement detail",
+              ],
               remediation_guidance:
                 "Regenerate section s1 with operational evidence.",
             },
@@ -174,6 +179,10 @@ describe("ExportButton", () => {
       .toHaveTextContent("2");
     expect(screen.getByTestId("export-requirement-warning"))
       .toHaveTextContent("Regenerate section s1 with operational evidence.");
+    expect(screen.getByTestId("export-requirement-warning"))
+      .toHaveTextContent(
+        "operational evidence, coherent passage, distinctive detail",
+      );
 
     await userEvent.click(screen.getByRole("button", { name: "Отвори Генерации" }));
 

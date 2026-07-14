@@ -41,6 +41,9 @@ export default function ExportButton({
   const [missingRequirementGuidance, setMissingRequirementGuidance] = useState<
     string[]
   >([]);
+  const [missingRequirementReasons, setMissingRequirementReasons] = useState<
+    string[]
+  >([]);
   const [qualityWarning, setQualityWarning] = useState(false);
   const [qualitySectionCount, setQualitySectionCount] = useState<number | null>(null);
   const [qualityWarningSummary, setQualityWarningSummary] =
@@ -70,6 +73,7 @@ export default function ExportButton({
       setMissingRequirementWarning(true);
       setMissingRequirementCount(getMissingRequirementCount(source));
       setMissingRequirementGuidance(getMissingRequirementGuidance(source));
+      setMissingRequirementReasons(getMissingRequirementReasons(source));
       handled = true;
     }
     if (isQualityExportError(source)) {
@@ -96,6 +100,7 @@ export default function ExportButton({
     setMissingRequirementWarning(false);
     setMissingRequirementCount(null);
     setMissingRequirementGuidance([]);
+    setMissingRequirementReasons([]);
     setQualityWarning(false);
     setQualitySectionCount(null);
     setQualityWarningSummary(null);
@@ -228,6 +233,11 @@ export default function ExportButton({
                 <li key={item}>{item}</li>
               ))}
             </ul>
+          )}
+          {missingRequirementReasons.length > 0 && (
+            <p className="mt-1">
+              Причини: {missingRequirementReasons.join(", ")}.
+            </p>
           )}
           {onOpenGenerations && (
             <button
@@ -409,6 +419,55 @@ function getMissingRequirementGuidance(err: unknown): string[] {
     }
   }
   return guidance;
+}
+
+function requirementReasonLabel(reason: string): string {
+  switch (reason) {
+    case "needs operational evidence":
+      return "operational evidence";
+    case "needs coherent passage":
+      return "coherent passage";
+    case "missing distinctive requirement detail":
+      return "distinctive detail";
+    case "missing key terms":
+      return "key terms";
+    case "missing requirement coverage":
+      return "requirement coverage";
+    default:
+      return reason;
+  }
+}
+
+function getMissingRequirementReasons(err: unknown): string[] {
+  const payload = getReadinessPayload(err);
+  if (!payload || typeof payload !== "object") return [];
+
+  const sections = (payload as { missing_requirement_sections?: unknown })
+    .missing_requirement_sections;
+  if (!Array.isArray(sections)) return [];
+
+  const reasons: string[] = [];
+  for (const section of sections) {
+    if (!section || typeof section !== "object") continue;
+    const missingItems = (section as { missing_items?: unknown }).missing_items;
+    if (!Array.isArray(missingItems)) continue;
+    for (const item of missingItems) {
+      if (!item || typeof item !== "object") continue;
+      const rawReasons = (item as { reasons?: unknown }).reasons;
+      const candidates = Array.isArray(rawReasons)
+        ? rawReasons
+        : [(item as { reason?: unknown }).reason];
+      for (const candidate of candidates) {
+        if (typeof candidate !== "string" || !candidate.trim()) continue;
+        const label = requirementReasonLabel(candidate.trim());
+        if (!reasons.includes(label)) {
+          reasons.push(label);
+        }
+        if (reasons.length >= 4) return reasons;
+      }
+    }
+  }
+  return reasons;
 }
 
 function isQualityExportError(err: unknown): boolean {
