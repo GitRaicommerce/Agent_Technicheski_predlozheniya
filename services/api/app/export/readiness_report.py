@@ -32,6 +32,27 @@ def _issue_label(code: str) -> str:
     return labels.get(code, code)
 
 
+def _structure_missing_label(item: dict[str, Any]) -> str:
+    label = _truncate(item.get("label"), limit=80)
+    matched_terms = [
+        str(term)
+        for term in item.get("matched_terms") or []
+        if term
+    ]
+    required_terms = _as_int(item.get("required_terms"))
+    term_count = len([term for term in item.get("terms") or [] if term])
+    if not label:
+        label = "unknown"
+    if not required_terms and not matched_terms:
+        return label
+    denominator = required_terms or term_count
+    suffix = f" ({len(matched_terms)}/{denominator} terms"
+    if matched_terms:
+        suffix += f": {', '.join(matched_terms[:5])}"
+    suffix += ")"
+    return label + suffix
+
+
 def _section_label(section: dict[str, Any]) -> str:
     section_uid = str(section.get("section_uid") or "n/a")
     title = _truncate(section.get("section_title"), limit=90)
@@ -248,9 +269,9 @@ def render_export_readiness_report(readiness: dict[str, Any]) -> str:
                         f"({anchor_count} detected groups/topics)"
                     )
                 missing_labels = [
-                    _truncate(item.get("label"), limit=80)
+                    _structure_missing_label(item)
                     for item in structure_coverage.get("missing") or []
-                    if isinstance(item, dict) and item.get("label")
+                    if isinstance(item, dict)
                 ]
                 if missing_labels:
                     lines.append(

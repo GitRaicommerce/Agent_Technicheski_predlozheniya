@@ -140,6 +140,7 @@
 - Propagated action-execution verdicts into calibration manifests and before/after comparisons, so attached dry-run or failed remediation reports block misleading calibration conclusions until actions are executed with `--execute --wait`.
 - Added a strict `--require-action-ready` gate to the calibration remediation cycle, allowing proof-oriented reruns to stop before building a new bundle when the attached action report is only a dry-run or otherwise not `ready_for_bundle`.
 - Tightened blueprint structure coverage so multi-word drafting topics/groups require enough matched anchor terms before they count as covered, preventing generic repeated wording from passing uneven-distribution quality gates.
+- Exposed blueprint anchor match diagnostics in DOCX readiness reports, showing matched/required terms for missing groups or topics so underdistributed sections are easier to repair.
 
 ## Active Goals
 

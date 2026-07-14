@@ -65,9 +65,28 @@ def test_render_export_readiness_report_includes_blockers_and_actions():
                         "covered_count": 1,
                         "required_count": 3,
                         "missing": [
-                            {"label": "waste"},
-                            {"label": "soil"},
-                            {"label": "water"},
+                            {
+                                "label": "waste segregation",
+                                "terms": ["waste", "segregation"],
+                                "matched_terms": ["waste"],
+                                "required_terms": 2,
+                            },
+                            {
+                                "label": "soil protection",
+                                "terms": ["soil", "protection"],
+                                "matched_terms": ["protection"],
+                                "required_terms": 2,
+                            },
+                            {
+                                "label": "water pollution prevention",
+                                "terms": [
+                                    "water",
+                                    "pollution",
+                                    "prevention",
+                                ],
+                                "matched_terms": [],
+                                "required_terms": 2,
+                            },
                         ],
                     },
                     "issues": [
@@ -92,7 +111,11 @@ def test_render_export_readiness_report_includes_blockers_and_actions():
     assert "missing blueprint groups/topics (`uneven_blueprint_distribution`)" in report
     assert "repetitive padded content (`repetitive_content`)" in report
     assert "structure coverage: 1/3 required (4 detected groups/topics)" in report
-    assert "missing groups/topics: waste, soil, water" in report
+    assert (
+        "missing groups/topics: waste segregation (1/2 terms: waste), "
+        "soil protection (1/2 terms: protection), "
+        "water pollution prevention (0/2 terms)"
+    ) in report
     assert "Остави най-новите" in report
     assert "Регенерирайте избраните stale секции" in report
 
