@@ -396,6 +396,116 @@ async def test_generation_job_targets_requested_sections(mock_db):
 
 
 @pytest.mark.asyncio
+async def test_generation_job_targets_multiple_requested_sections(mock_db):
+    project = _make_project()
+    skipped_uid = str(uuid.uuid4())
+    first_target_uid = str(uuid.uuid4())
+    second_target_uid = str(uuid.uuid4())
+    outline = TpOutline(
+        id=str(uuid.uuid4()),
+        project_id=project.id,
+        outline_json={
+            "sections": [
+                {
+                    "uid": skipped_uid,
+                    "title": "Already fresh",
+                    "requirements": [],
+                    "subsections": [],
+                },
+                {
+                    "uid": first_target_uid,
+                    "title": "Quality controls",
+                    "requirements": [],
+                    "subsections": [],
+                },
+                {
+                    "uid": second_target_uid,
+                    "title": "Risk controls",
+                    "requirements": [],
+                    "subsections": [],
+                },
+            ]
+        },
+        status_locked=True,
+        version=1,
+    )
+    job = SimpleNamespace(
+        id=str(uuid.uuid4()),
+        project_id=project.id,
+        trace_id=str(uuid.uuid4()),
+        job_type="drafting_quality",
+        status="queued",
+        total_sections=0,
+        completed_sections=0,
+        skipped_sections=0,
+        current_section_uid=None,
+        current_section_title=None,
+        result_json={
+            "target_section_uids": [first_target_uid, second_target_uid],
+            "target_reason": "calibration_gap:regenerate_quality_depth",
+        },
+        error=None,
+        completed_at=None,
+        updated_at=None,
+    )
+
+    generation_rows = [
+        SimpleNamespace(section_uid=skipped_uid, evidence_status="ok"),
+        SimpleNamespace(section_uid=first_target_uid, evidence_status="ok"),
+        SimpleNamespace(section_uid=second_target_uid, evidence_status="ok"),
+    ]
+    mock_db.get = AsyncMock(side_effect=[project])
+    mock_db.execute = AsyncMock(side_effect=[_outline_result(outline), generation_rows])
+
+    with (
+        patch(
+            "app.agents.schedule.run_schedule",
+            new=AsyncMock(return_value={"status": "ok", "tp_section_text": "Schedule"}),
+        ),
+        patch(
+            "app.agents.examples.run_examples",
+            new=AsyncMock(return_value={"selected_snippets": []}),
+        ),
+        patch(
+            "app.agents.legislation.run_legislation",
+            new=AsyncMock(return_value={"citations": []}),
+        ),
+        patch(
+            "app.agents.context.build_project_grounding_context",
+            new=AsyncMock(return_value={"schedule": {"tasks": []}}),
+        ),
+        patch(
+            "app.agents.drafting.run_drafting",
+            new=AsyncMock(
+                side_effect=[
+                    {"generation_ids": {"variant_1": str(uuid.uuid4())}},
+                    {"generation_ids": {"variant_1": str(uuid.uuid4())}},
+                ]
+            ),
+        ) as run_drafting,
+    ):
+        await _run_drafting_all_job(job, mock_db)
+
+    assert job.status == "done"
+    assert job.total_sections == 2
+    assert job.skipped_sections == 0
+    assert job.completed_sections == 2
+    assert run_drafting.await_count == 2
+    assert [
+        call.kwargs["section_uid"]
+        for call in run_drafting.await_args_list
+    ] == [first_target_uid, second_target_uid]
+    assert job.result_json["target_section_uids"] == [
+        first_target_uid,
+        second_target_uid,
+    ]
+    assert [section["section_uid"] for section in job.result_json["sections"]] == [
+        first_target_uid,
+        second_target_uid,
+    ]
+
+
+@pytest.mark.asyncio
 async def test_create_drafting_stale_job_targets_selected_stale_sections(mock_db):
     project = _make_project()
     stale_uid = str(uuid.uuid4())
