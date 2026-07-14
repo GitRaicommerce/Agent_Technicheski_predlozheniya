@@ -3,6 +3,11 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from app.agents.drafting_blueprint import build_drafting_blueprint
+from app.agents.drafting import _format_section_drafting_guidance
+from app.agents.generation_jobs import (
+    _merge_section_drafting_guidance,
+    _missing_requirement_target_guidance,
+)
 from app.agents.proposal_quality import assess_generation_depth
 from app.agents.requirements import (
     RequirementItem,
@@ -16,6 +21,7 @@ from app.agents.tender_struct import (
     _extract_explicit_numbered_outline,
 )
 from app.export.readiness_report import render_export_readiness_report
+from app.routers.export import _missing_requirement_coverage
 
 
 def make_chunk(
@@ -775,6 +781,73 @@ def test_common_requirement_coverage_requires_developed_operational_detail():
 
     assert superficial["missing_ids"] == ["req-environment-controls"]
     assert developed["covered_ids"] == ["req-environment-controls"]
+
+
+def test_common_missing_requirement_remediation_flows_into_targeted_drafting_guidance():
+    requirement_items = [
+        {
+            "id": "req-quality-acceptance",
+            "text": (
+                "Describe material conformity, laboratory testing, calibration "
+                "frequency, sampling scope, defect classification, and warranty "
+                "traceability."
+            ),
+            "importance": "mandatory",
+            "category": "quality",
+            "category_label": "Quality control",
+            "topic": "quality acceptance controls",
+        }
+    ]
+    shallow_text = (
+        "The proposal describes material conformity, laboratory testing, "
+        "calibration frequency, sampling scope, defect classification, and "
+        "warranty traceability in general terms."
+    )
+    coverage = assess_requirement_coverage(shallow_text, requirement_items)
+
+    readiness_section = _missing_requirement_coverage(
+        SimpleNamespace(
+            id="gen-quality",
+            section_uid="sec-quality",
+            flags_json={"requirement_coverage": coverage},
+        )
+    )
+    assert readiness_section is not None
+    assert readiness_section["missing_requirement_ids"] == [
+        "req-quality-acceptance"
+    ]
+    missing_item = readiness_section["missing_items"][0]
+    assert missing_item["reason"] == "needs operational evidence"
+    assert "add operational evidence" in missing_item["remediation_guidance"]
+
+    target_guidance = _missing_requirement_target_guidance([readiness_section])
+    section_guidance = _merge_section_drafting_guidance(
+        {
+            "requirement_count": 1,
+            "required_subtopics": ["quality acceptance controls"],
+            "instructions": ["Develop the quality controls as a separate point."],
+        },
+        target_guidance["sec-quality"],
+    )
+    guidance_prompt = _format_section_drafting_guidance(section_guidance)
+
+    assert "SECTION STRUCTURE PLAN" in guidance_prompt
+    assert "Develop the quality controls as a separate point." in guidance_prompt
+    assert "Regenerate or edit the selected section" in guidance_prompt
+    assert "Missing requirements to repair" in guidance_prompt
+    assert "id=req-quality-acceptance [needs operational evidence]" in guidance_prompt
+    assert "repair:" in guidance_prompt
+
+    repaired_text = (
+        "For material conformity, laboratory testing, calibration frequency, "
+        "sampling scope, defect classification, and warranty traceability, the "
+        "contractor assigns a responsible role, keeps inspection records, "
+        "defines escalation, and executes corrective actions with documented "
+        "acceptance evidence."
+    )
+    repaired_coverage = assess_requirement_coverage(repaired_text, requirement_items)
+    assert repaired_coverage["missing_ids"] == []
+    assert repaired_coverage["covered_ids"] == ["req-quality-acceptance"]
 
 
 def test_common_requirement_coverage_rejects_scattered_keyword_coverage():

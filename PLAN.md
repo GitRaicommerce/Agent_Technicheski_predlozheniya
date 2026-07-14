@@ -149,6 +149,7 @@
 - Surfaced per-requirement remediation guidance in the Generations panel, so users can see the exact repair instruction beside each missing checklist item before choosing regeneration or manual edits.
 - Added a short remediation hint to the DOCX export warning for missing requirements, pulling the first actionable guidance items directly from the readiness payload.
 - Connected missing-requirements remediation guidance into regeneration jobs and drafting prompts, so targeted reruns carry the exact missing checklist ids, reasons, and repair instructions from export readiness.
+- Added a common proposal regression scenario proving missing requirement coverage flows through export readiness, targeted regeneration guidance, drafting prompt guidance, and back into a passing deterministic coverage assessment.
 
 ## Active Goals
 
