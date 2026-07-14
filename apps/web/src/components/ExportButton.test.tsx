@@ -227,6 +227,7 @@ describe("ExportButton", () => {
           word_count: 12,
           min_words: 1200,
           blueprint_group_count: 6,
+          blueprint_requirement_id_count: 12,
           suggested_words_per_structure: 260,
         },
       ],
@@ -251,6 +252,8 @@ describe("ExportButton", () => {
       .toHaveTextContent("1200 думи");
     expect(screen.getByTestId("export-quality-warning"))
       .toHaveTextContent("260 думи на група/тема");
+    expect(screen.getByTestId("export-quality-warning"))
+      .toHaveTextContent("12 checklist id");
     expect(qualitySectionsBlockedMock).toHaveBeenNthCalledWith(1, [], []);
     expect(qualitySectionsBlockedMock).toHaveBeenLastCalledWith(
       ["s1"],

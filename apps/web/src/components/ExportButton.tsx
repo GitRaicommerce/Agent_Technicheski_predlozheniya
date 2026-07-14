@@ -16,6 +16,7 @@ interface Props {
 
 interface QualityWarningSummary {
   maxBlueprintGroupCount: number | null;
+  maxBlueprintRequirementIdCount: number | null;
   maxMinWords: number | null;
   maxWordsPerGroupOrTopic: number | null;
 }
@@ -442,6 +443,7 @@ function getQualityWarningSummary(err: unknown): QualityWarningSummary | null {
   if (!Array.isArray(sections)) return null;
 
   let maxBlueprintGroupCount = 0;
+  let maxBlueprintRequirementIdCount = 0;
   let maxMinWords = 0;
   let maxWordsPerGroupOrTopic = 0;
   for (const rawSection of sections) {
@@ -451,6 +453,12 @@ function getQualityWarningSummary(err: unknown): QualityWarningSummary | null {
       maxBlueprintGroupCount = Math.max(
         maxBlueprintGroupCount,
         section.blueprint_group_count,
+      );
+    }
+    if (typeof section.blueprint_requirement_id_count === "number") {
+      maxBlueprintRequirementIdCount = Math.max(
+        maxBlueprintRequirementIdCount,
+        section.blueprint_requirement_id_count,
       );
     }
     if (typeof section.min_words === "number") {
@@ -466,11 +474,13 @@ function getQualityWarningSummary(err: unknown): QualityWarningSummary | null {
 
   if (
     maxBlueprintGroupCount <= 0 &&
+    maxBlueprintRequirementIdCount <= 0 &&
     maxMinWords <= 0 &&
     maxWordsPerGroupOrTopic <= 0
   ) return null;
   return {
     maxBlueprintGroupCount: maxBlueprintGroupCount || null,
+    maxBlueprintRequirementIdCount: maxBlueprintRequirementIdCount || null,
     maxMinWords: maxMinWords || null,
     maxWordsPerGroupOrTopic: maxWordsPerGroupOrTopic || null,
   };
@@ -502,16 +512,25 @@ function formatQualityWarningSummary(
   summary: QualityWarningSummary | null,
 ): string | null {
   const groupCount = summary?.maxBlueprintGroupCount ?? 0;
+  const blueprintRequirementIdCount =
+    summary?.maxBlueprintRequirementIdCount ?? 0;
   const wordsPerGroupOrTopic = summary?.maxWordsPerGroupOrTopic ?? 0;
-  if (groupCount <= 0 && wordsPerGroupOrTopic <= 0) return null;
+  if (
+    groupCount <= 0 &&
+    blueprintRequirementIdCount <= 0 &&
+    wordsPerGroupOrTopic <= 0
+  ) return null;
 
   const minWords = summary?.maxMinWords ?? 0;
   const minWordsText =
     minWords > 0 ? ` и ориентир поне ${formatWordCount(minWords)}` : "";
-  const groupText =
+  let groupText =
     groupCount > 0
       ? `има ${formatBlueprintGroupCount(groupCount)}`
       : "изисква развита структура";
+  if (blueprintRequirementIdCount > 0) {
+    groupText += `, ${blueprintRequirementIdCount} checklist id`;
+  }
   const wordsPerGroupText =
     wordsPerGroupOrTopic > 0
       ? `, ориентир ${formatWordCount(wordsPerGroupOrTopic)} на група/тема`

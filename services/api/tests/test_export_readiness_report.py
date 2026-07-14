@@ -63,6 +63,7 @@ def test_render_export_readiness_report_includes_blockers_and_actions():
                     "requirement_count": 2,
                     "blueprint_group_count": 6,
                     "blueprint_topic_count": 8,
+                    "blueprint_requirement_id_count": 12,
                     "suggested_words_per_structure": 270,
                     "structure_coverage": {
                         "anchor_count": 4,
@@ -114,7 +115,8 @@ def test_render_export_readiness_report_includes_blockers_and_actions():
         "remediation: Regenerate or edit the selected section so `req-1` "
         "has a dedicated paragraph."
     ) in report
-    assert "| Section | Words | Min words | Words per group/topic | Sentences | Min sentences | Requirements | Blueprint groups | Topics | Issues |" in report
+    assert "| Section | Words | Min words | Words per group/topic | Sentences | Min sentences | Requirements | Blueprint groups | Topics | Blueprint req ids | Issues |" in report
+    assert "| Shallow section title (`sec-shallow`) | 180 | 1200 | 270 | 3 | 10 | 2 | 6 | 8 | 12 |" in report
     assert "too short for mapped requirements (`too_short_for_requirements`)" in report
     assert "missing blueprint groups/topics (`uneven_blueprint_distribution`)" in report
     assert "repetitive padded content (`repetitive_content`)" in report

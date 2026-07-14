@@ -1031,6 +1031,9 @@ function qualityDepthDiagnostics(detail: ExportQualitySection): string[] {
   if (typeof detail.blueprint_topic_count === "number") {
     diagnostics.push(`${detail.blueprint_topic_count} теми`);
   }
+  if (typeof detail.blueprint_requirement_id_count === "number") {
+    diagnostics.push(`${detail.blueprint_requirement_id_count} checklist id`);
+  }
   if (typeof detail.suggested_words_per_structure === "number") {
     diagnostics.push(`${detail.suggested_words_per_structure} думи на група/тема`);
   }

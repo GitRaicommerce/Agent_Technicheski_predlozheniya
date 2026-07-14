@@ -412,6 +412,7 @@ async def test_export_docx_uses_drafting_blueprint_for_quality_gate(client, mock
     assert quality_section["requirement_count"] == 2
     assert quality_section["blueprint_group_count"] == 1
     assert quality_section["blueprint_topic_count"] == 6
+    assert quality_section["blueprint_requirement_id_count"] == 6
     assert quality_section["min_words"] >= 1200
     assert "suggested_words_per_structure" in quality_section
     assert quality_section["structure_coverage"]["anchor_count"] == 6

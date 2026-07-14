@@ -655,6 +655,7 @@ describe("GenerationsPanel", () => {
             min_sentences: 10,
             blueprint_group_count: 5,
             blueprint_topic_count: 6,
+            blueprint_requirement_id_count: 11,
             suggested_words_per_structure: 280,
             structure_coverage: {
               anchor_count: 4,
@@ -719,6 +720,8 @@ describe("GenerationsPanel", () => {
       .toHaveTextContent("280 думи на група/тема");
     expect(screen.getByTestId("generation-quality-depth-sec-quality"))
       .toHaveTextContent("1/3 покрити групи/теми");
+    expect(screen.getByTestId("generation-quality-depth-sec-quality"))
+      .toHaveTextContent("11 checklist id");
     expect(screen.getByTestId("generation-quality-depth-sec-quality"))
       .toHaveTextContent(
         "waste segregation (1/2: waste), soil protection (1/2: protection)",
