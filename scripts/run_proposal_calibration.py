@@ -378,6 +378,27 @@ def _section_target_request(sections: list[dict[str, Any]]) -> dict[str, list[st
     return request_json
 
 
+def _request_target_label(request_json: dict[str, Any] | None) -> str:
+    if not isinstance(request_json, dict):
+        return ""
+    section_uids = [
+        str(item).strip()
+        for item in request_json.get("section_uids") or []
+        if str(item).strip()
+    ]
+    title_hints = [
+        str(item).strip()
+        for item in request_json.get("section_title_hints") or []
+        if str(item).strip()
+    ]
+    parts: list[str] = []
+    if section_uids:
+        parts.append("uids=" + ", ".join(section_uids[:6]))
+    if title_hints:
+        parts.append("titles=" + ", ".join(title_hints[:6]))
+    return "; ".join(parts)
+
+
 def _summarize_labels(labels: list[str], limit: int = 6) -> str:
     visible = labels[:limit]
     suffix = f" (+{len(labels) - limit} more)" if len(labels) > limit else ""
@@ -675,6 +696,10 @@ def render_manifest(
         section_uid_by_generated_title=section_uid_by_generated_title,
     )
     readiness_actions = readiness_priority_actions(readiness)
+    structured_readiness_actions = structured_readiness_priority_actions(
+        readiness,
+        project_id=project_id,
+    )
     action_report_paths = action_report_paths or []
     action_execution_reports = action_execution_reports or []
     action_summary = action_execution_summary(action_execution_reports)
@@ -779,10 +804,15 @@ def render_manifest(
             "- Readiness blockers come first because they affect exportability and "
             "can distort reference-gap interpretation."
         )
-        lines.extend(
-            f"{index}. {action}"
-            for index, action in enumerate(readiness_actions, start=1)
-        )
+        for index, action in enumerate(readiness_actions, start=1):
+            target_label = ""
+            structured_index = index - 1
+            if structured_index < len(structured_readiness_actions):
+                target_label = _request_target_label(
+                    structured_readiness_actions[structured_index].get("request_json")
+                )
+            suffix = f" (targets: {target_label})" if target_label else ""
+            lines.append(f"{index}. {action}{suffix}")
         next_index = len(readiness_actions) + 1
     else:
         lines.append(

@@ -153,6 +153,7 @@
 - Extended calibration action execution reports with target summaries from remediation request payloads, making dry-run and executed calibration reports show which section ids or title hints each action will affect.
 - Added section target payloads to calibration readiness remediation actions for missing-requirement and shallow-section blockers, so generated manifests can queue targeted regeneration directly from DOCX readiness evidence.
 - Preserved missing-requirement remediation guidance for targeted calibration actions by routing `regenerate_missing_requirements` section-specific requests through the readiness-aware requirements job builder.
+- Surfaced readiness action target summaries in the Markdown calibration manifest, so reviewers can see the exact section ids and title hints that targeted remediation actions will use without opening the JSON.
 
 ## Active Goals
 

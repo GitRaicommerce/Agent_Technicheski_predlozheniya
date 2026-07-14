@@ -83,11 +83,19 @@ class RunProposalCalibrationTests(unittest.TestCase):
                 "blockers": [
                     {"code": "duplicate_selected", "count": 2},
                     {"code": "stale_evidence", "count": 1},
+                    {"code": "missing_requirements", "count": 1},
                 ],
                 "duplicate_selected_sections": [
                     {"section_title": "Organization", "selected_count": 2}
                 ],
                 "stale_section_details": [{"section_title": "Schedule"}],
+                "missing_requirement_sections": [
+                    {
+                        "section_uid": "sec-quality",
+                        "section_title": "Quality",
+                        "missing_count": 2,
+                    }
+                ],
             },
             snapshot_warnings=3,
             gap_focus_counts={
@@ -142,6 +150,11 @@ class RunProposalCalibrationTests(unittest.TestCase):
             manifest,
         )
         self.assertIn("`Остави най-новите`", manifest)
+        self.assertIn(
+            "`missing_requirements` action_key=`regenerate_missing_requirements`",
+            manifest,
+        )
+        self.assertIn("targets: uids=sec-quality; titles=Quality", manifest)
         self.assertIn(
             "Gap `outline mapping` ui_action=`Review outline mapping`: "
             "regenerate/reference-align",
