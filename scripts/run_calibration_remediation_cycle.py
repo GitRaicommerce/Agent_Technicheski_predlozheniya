@@ -73,7 +73,10 @@ def action_report_ready(path: Path) -> bool:
     payload = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
         raise ValueError(f"{path} must contain a JSON object")
-    return bool(payload.get("ready_for_bundle"))
+    if not bool(payload.get("ready_for_bundle")):
+        return False
+    evidence_level = str(payload.get("evidence_level") or "").strip()
+    return evidence_level in {"", "proof"}
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:

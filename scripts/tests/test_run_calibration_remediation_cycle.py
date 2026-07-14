@@ -456,6 +456,42 @@ class CalibrationRemediationCycleTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "JSON object"):
                 action_report_ready(report_path)
 
+    def test_action_report_ready_requires_proof_evidence_when_present(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report_path = Path(tmp) / "execution.json"
+            report_path.write_text(
+                json.dumps(
+                    {
+                        "ready_for_bundle": True,
+                        "evidence_level": "planned",
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            self.assertFalse(action_report_ready(report_path))
+
+    def test_action_report_ready_accepts_proof_and_legacy_ready_reports(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            proof_path = Path(tmp) / "proof.json"
+            legacy_path = Path(tmp) / "legacy.json"
+            proof_path.write_text(
+                json.dumps(
+                    {
+                        "ready_for_bundle": True,
+                        "evidence_level": "proof",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            legacy_path.write_text(
+                json.dumps({"ready_for_bundle": True}),
+                encoding="utf-8",
+            )
+
+            self.assertTrue(action_report_ready(proof_path))
+            self.assertTrue(action_report_ready(legacy_path))
+
 
 if __name__ == "__main__":
     unittest.main()
