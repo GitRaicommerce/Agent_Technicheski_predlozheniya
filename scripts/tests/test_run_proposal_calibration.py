@@ -379,6 +379,41 @@ class RunProposalCalibrationTests(unittest.TestCase):
 
         self.assertEqual(mapping, {"Quality generated": "sec-quality"})
 
+    def test_request_target_label_marks_truncated_targets(self):
+        label = calibration._request_target_label(
+            {
+                "section_uids": [
+                    "sec-1",
+                    "sec-2",
+                    "sec-3",
+                    "sec-4",
+                    "sec-5",
+                    "sec-6",
+                    "sec-7",
+                ],
+                "section_title_hints": [
+                    "Title 1",
+                    "Title 2",
+                    "Title 3",
+                    "Title 4",
+                    "Title 5",
+                    "Title 6",
+                    "Title 7",
+                    "Title 8",
+                ],
+            }
+        )
+
+        self.assertEqual(
+            label,
+            (
+                "uids=sec-1, sec-2, sec-3, sec-4, sec-5, sec-6; "
+                "+1 more uids; "
+                "titles=Title 1, Title 2, Title 3, Title 4, Title 5, Title 6; "
+                "+2 more titles"
+            ),
+        )
+
     def test_readiness_priority_actions_summarize_specific_sections(self):
         actions = readiness_priority_actions(
             {
