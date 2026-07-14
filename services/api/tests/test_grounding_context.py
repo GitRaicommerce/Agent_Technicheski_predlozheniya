@@ -364,18 +364,18 @@ async def test_drafting_repair_feedback_names_missing_blueprint_topics(mock_db):
     section_uid = str(uuid.uuid4())
     requirement_items = [
         {
-            "id": f"req-{topic}",
+            "id": requirement_id,
             "text": text,
             "importance": "mandatory",
             "category": "environment",
             "category_label": "Environmental protection",
             "topic": topic,
         }
-        for topic, text in [
-            ("dust", "Describe dust suppression measures during execution."),
-            ("waste", "Describe waste segregation, storage, transport, and handover."),
-            ("soil", "Describe soil protection and clean-up controls."),
-            ("water", "Describe water and pollution prevention controls."),
+        for requirement_id, topic, text in [
+            ("req-dust", "dust suppression", "Describe dust suppression measures during execution."),
+            ("req-waste", "waste segregation", "Describe waste segregation, storage, transport, and handover."),
+            ("req-soil", "soil protection", "Describe soil protection and clean-up controls."),
+            ("req-water", "water pollution prevention", "Describe water and pollution prevention controls."),
         ]
     ]
     dust_only_sentence = (
@@ -439,9 +439,9 @@ async def test_drafting_repair_feedback_names_missing_blueprint_topics(mock_db):
     assert llm_call.await_count == 2
     assert "QUALITY REPAIR REQUIRED" in repair_prompt
     assert "missing blueprint groups/topics" in repair_prompt
-    assert "waste" in repair_prompt
-    assert "soil" in repair_prompt
-    assert "water" in repair_prompt
+    assert "waste segregation (0/2 anchor terms matched)" in repair_prompt
+    assert "soil protection (0/2 anchor terms matched)" in repair_prompt
+    assert "water pollution prevention (0/2 anchor terms matched)" in repair_prompt
     assert saved_generation.text == balanced_text
     assert saved_generation.flags_json["quality_repair_attempted"] is True
     assert saved_generation.flags_json["quality_repair_attempt_count"] == 1

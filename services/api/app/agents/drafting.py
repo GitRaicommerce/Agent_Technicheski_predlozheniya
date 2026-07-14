@@ -182,7 +182,7 @@ def _quality_repair_feedback(
         structure_coverage = depth_assessment.get("structure_coverage")
         if isinstance(structure_coverage, dict):
             missing_labels = [
-                str(item.get("label"))
+                _structure_missing_label(item)
                 for item in structure_coverage.get("missing") or []
                 if isinstance(item, dict) and item.get("label")
             ]
@@ -199,6 +199,29 @@ def _quality_repair_feedback(
         "corrective actions from the supplied sources."
     )
     return "\n".join(lines)
+
+
+def _structure_missing_label(item: dict[str, Any]) -> str:
+    label = str(item.get("label") or "").strip()
+    if not label:
+        return ""
+    matched_terms = [
+        str(term)
+        for term in item.get("matched_terms") or []
+        if term
+    ]
+    terms = [str(term) for term in item.get("terms") or [] if term]
+    required_terms = item.get("required_terms")
+    if not isinstance(required_terms, int) or required_terms <= 0:
+        required_terms = len(terms)
+    if required_terms <= 0 and not matched_terms:
+        return label
+    if matched_terms:
+        return (
+            f"{label} ({len(matched_terms)}/{required_terms} anchor terms "
+            f"matched: {', '.join(matched_terms[:5])})"
+        )
+    return f"{label} (0/{required_terms} anchor terms matched)"
 
 
 def _needs_quality_repair(
