@@ -61,6 +61,38 @@ def _display_path(path: Path) -> str:
     return path.as_posix()
 
 
+def load_action_execution_reports(paths: list[Path]) -> list[dict[str, Any]]:
+    reports: list[dict[str, Any]] = []
+    for path in paths:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(payload, dict):
+            raise ValueError(f"Action execution report {path} must be a JSON object")
+        reports.append(payload)
+    return reports
+
+
+def action_execution_summary(reports: list[dict[str, Any]]) -> dict[str, Any]:
+    status_counts: dict[str, int] = {}
+    total_actions = 0
+    for report in reports:
+        total_actions += int(report.get("total_actions") or 0)
+        raw_counts = report.get("status_counts") or {}
+        if not isinstance(raw_counts, dict):
+            continue
+        for status, count in raw_counts.items():
+            status_key = str(status or "unknown")
+            try:
+                status_count = int(count)
+            except (TypeError, ValueError):
+                status_count = 0
+            status_counts[status_key] = status_counts.get(status_key, 0) + status_count
+    return {
+        "report_count": len(reports),
+        "total_actions": total_actions,
+        "status_counts": status_counts,
+    }
+
+
 def snapshot_warning_count(markdown: str) -> int:
     in_warnings = False
     count = 0
@@ -558,6 +590,8 @@ def render_manifest(
     gap_focus_counts: dict[str, int] | None = None,
     gap_priority_rows: list[dict[str, Any]] | None = None,
     section_uid_by_generated_title: dict[str, str] | None = None,
+    action_report_paths: list[Path] | None = None,
+    action_execution_reports: list[dict[str, Any]] | None = None,
 ) -> str:
     readiness = readiness or {}
     blockers = [
@@ -573,6 +607,9 @@ def render_manifest(
         section_uid_by_generated_title=section_uid_by_generated_title,
     )
     readiness_actions = readiness_priority_actions(readiness)
+    action_report_paths = action_report_paths or []
+    action_execution_reports = action_execution_reports or []
+    action_summary = action_execution_summary(action_execution_reports)
     lines = [
         "# Proposal calibration bundle",
         "",
@@ -627,6 +664,26 @@ def render_manifest(
             lines.append(f"- Generated/reference volume ratio: `{volume_ratio:.2f}`")
     else:
         lines.append("- `n/a`: Gap summary metrics were not found in the report.")
+    lines.extend(["", "## Remediation action execution evidence", ""])
+    if action_report_paths:
+        lines.append(
+            (
+                "- Action execution reports: "
+                f"`{action_summary['report_count']}` files, "
+                f"`{action_summary['total_actions']}` actions"
+            )
+        )
+        for path in action_report_paths:
+            lines.append(f"  - `{_display_path(path)}`")
+        status_counts = action_summary.get("status_counts") or {}
+        if status_counts:
+            lines.append("- Final action/job statuses:")
+            for status, count in sorted(status_counts.items()):
+                lines.append(f"  - `{status}`: `{count}`")
+    else:
+        lines.append(
+            "- `none`: No remediation action execution report was attached to this bundle."
+        )
     lines.extend(["", "## Gap calibration focus summary", ""])
     if gap_focus_counts:
         for focus, count in sorted(
@@ -718,6 +775,8 @@ def render_manifest_json(
     gap_focus_counts: dict[str, int] | None = None,
     gap_priority_rows: list[dict[str, Any]] | None = None,
     section_uid_by_generated_title: dict[str, str] | None = None,
+    action_report_paths: list[Path] | None = None,
+    action_execution_reports: list[dict[str, Any]] | None = None,
 ) -> str:
     readiness = readiness or {}
     blockers = [
@@ -725,6 +784,8 @@ def render_manifest_json(
         for item in readiness.get("blockers") or []
         if isinstance(item, dict)
     ]
+    action_report_paths = action_report_paths or []
+    action_execution_reports = action_execution_reports or []
     payload = {
         "schema_version": "calibration_manifest.v1",
         "project_id": project_id,
@@ -736,6 +797,9 @@ def render_manifest_json(
             "readiness_report": _display_path(readiness_report),
             "gap_report": _display_path(gap_report),
             "tenders": [_display_path(path) for path in tenders],
+            "action_execution_reports": [
+                _display_path(path) for path in action_report_paths
+            ],
         },
         "calibration_gates": {
             "snapshot_warnings": snapshot_warnings,
@@ -746,6 +810,10 @@ def render_manifest_json(
         },
         "gap_quality_scorecard": gap_summary or {},
         "gap_calibration_focus_counts": gap_focus_counts or {},
+        "action_execution_summary": action_execution_summary(
+            action_execution_reports
+        ),
+        "action_execution_reports": action_execution_reports,
         "readiness_actions": structured_readiness_priority_actions(
             readiness,
             project_id=project_id,
@@ -794,6 +862,7 @@ async def run_calibration_bundle(
     out_dir: Path,
     tenders: list[Path],
     previous_manifest: Path | None = None,
+    action_reports: list[Path] | None = None,
 ) -> dict[str, Path]:
     paths = calibration_output_paths(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -842,6 +911,8 @@ async def run_calibration_bundle(
     gap_focus_counts = gap_calibration_focus_counts(report)
     gap_priority_rows = gap_regeneration_priority_rows(report)
     section_uid_by_generated_title = generated_section_uid_map(effective_text)
+    action_report_paths = action_reports or []
+    action_execution_reports = load_action_execution_reports(action_report_paths)
     paths["manifest"].write_text(
         render_manifest(
             project_id=project_id,
@@ -857,6 +928,8 @@ async def run_calibration_bundle(
             gap_focus_counts=gap_focus_counts,
             gap_priority_rows=gap_priority_rows,
             section_uid_by_generated_title=section_uid_by_generated_title,
+            action_report_paths=action_report_paths,
+            action_execution_reports=action_execution_reports,
         ),
         encoding="utf-8",
     )
@@ -874,6 +947,8 @@ async def run_calibration_bundle(
         gap_focus_counts=gap_focus_counts,
         gap_priority_rows=gap_priority_rows,
         section_uid_by_generated_title=section_uid_by_generated_title,
+        action_report_paths=action_report_paths,
+        action_execution_reports=action_execution_reports,
     )
     paths["manifest_json"].write_text(
         manifest_json_text,
@@ -925,6 +1000,16 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
             "before/after calibration_manifest_comparison.md report."
         ),
     )
+    parser.add_argument(
+        "--action-report",
+        action="append",
+        default=[],
+        type=Path,
+        help=(
+            "JSON report from run_calibration_manifest_actions.py --out-json. "
+            "Can be passed multiple times."
+        ),
+    )
     return parser.parse_args(argv)
 
 
@@ -937,6 +1022,7 @@ def main(argv: list[str]) -> int:
             out_dir=args.out_dir,
             tenders=args.tender,
             previous_manifest=args.previous_manifest,
+            action_reports=args.action_report,
         )
     )
     print(f"Wrote {paths['manifest']}")

@@ -24,7 +24,9 @@ gap_calibration_focus_counts = calibration.gap_calibration_focus_counts
 gap_regeneration_priority_rows = calibration.gap_regeneration_priority_rows
 gap_summary_metrics = calibration.gap_summary_metrics
 generated_section_uid_map = calibration.generated_section_uid_map
+action_execution_summary = calibration.action_execution_summary
 enrich_gap_priority_rows = calibration.enrich_gap_priority_rows
+load_action_execution_reports = calibration.load_action_execution_reports
 readiness_priority_actions = calibration.readiness_priority_actions
 render_manifest = calibration.render_manifest
 render_manifest_json = calibration.render_manifest_json
@@ -171,6 +173,37 @@ class RunProposalCalibrationTests(unittest.TestCase):
             metrics["generated_reference_volume_ratio"],
             9122 / 62445,
         )
+
+    def test_action_execution_summary_aggregates_report_counts(self):
+        summary = action_execution_summary(
+            [
+                {
+                    "total_actions": 2,
+                    "status_counts": {"done": 1, "error": 1},
+                },
+                {
+                    "total_actions": 1,
+                    "status_counts": {"done": 1},
+                },
+            ]
+        )
+
+        self.assertEqual(
+            summary,
+            {
+                "report_count": 2,
+                "total_actions": 3,
+                "status_counts": {"done": 2, "error": 1},
+            },
+        )
+
+    def test_load_action_execution_reports_rejects_non_object_payload(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report_path = Path(tmp) / "execution.json"
+            report_path.write_text("[]", encoding="utf-8")
+
+            with self.assertRaisesRegex(ValueError, "JSON object"):
+                load_action_execution_reports([report_path])
 
     def test_gap_calibration_focus_counts_reads_diagnostics_table_only(self):
         counts = gap_calibration_focus_counts(
@@ -394,6 +427,14 @@ class RunProposalCalibrationTests(unittest.TestCase):
                     }
                 ],
                 section_uid_by_generated_title={"A generated": "sec-a"},
+                action_report_paths=[Path("out/actions.json")],
+                action_execution_reports=[
+                    {
+                        "schema_version": "calibration_action_execution.v1",
+                        "total_actions": 2,
+                        "status_counts": {"done": 1, "error": 1},
+                    }
+                ],
             )
         )
 
@@ -447,6 +488,18 @@ class RunProposalCalibrationTests(unittest.TestCase):
                 "section_uids": ["sec-a"],
                 "section_title_hints": ["A generated"],
             },
+        )
+        self.assertEqual(
+            manifest["paths"]["action_execution_reports"],
+            ["out/actions.json"],
+        )
+        self.assertEqual(
+            manifest["action_execution_summary"]["status_counts"],
+            {"done": 1, "error": 1},
+        )
+        self.assertEqual(
+            manifest["action_execution_reports"][0]["schema_version"],
+            "calibration_action_execution.v1",
         )
 
     def test_snapshot_warning_count_reads_warning_section_only(self):
@@ -545,12 +598,30 @@ class RunProposalCalibrationTests(unittest.TestCase):
         calibration.render_report = fake_render_report
         try:
             with tempfile.TemporaryDirectory() as tmp:
+                action_report = Path(tmp) / "execution.json"
+                action_report.write_text(
+                    json.dumps(
+                        {
+                            "schema_version": "calibration_action_execution.v1",
+                            "total_actions": 1,
+                            "status_counts": {"done": 1},
+                            "actions": [
+                                {
+                                    "action_key": "regenerate_stale",
+                                    "final_status": "done",
+                                }
+                            ],
+                        }
+                    ),
+                    encoding="utf-8",
+                )
                 paths = asyncio.run(
                     run_calibration_bundle(
                         project_id="project-1",
                         reference=Path("reference.md"),
                         out_dir=Path(tmp),
                         tenders=[Path("tender.md")],
+                        action_reports=[action_report],
                     )
                 )
 
@@ -608,6 +679,14 @@ class RunProposalCalibrationTests(unittest.TestCase):
                     paths["manifest"].read_text(encoding="utf-8"),
                 )
                 self.assertIn(
+                    "Action execution reports: `1` files, `1` actions",
+                    paths["manifest"].read_text(encoding="utf-8"),
+                )
+                self.assertIn(
+                    "`done`: `1`",
+                    paths["manifest"].read_text(encoding="utf-8"),
+                )
+                self.assertIn(
                     "Regeneration priority shortlist",
                     paths["manifest"].read_text(encoding="utf-8"),
                 )
@@ -630,6 +709,14 @@ class RunProposalCalibrationTests(unittest.TestCase):
                         "section_uids": ["sec-a"],
                         "section_title_hints": ["Section A"],
                     },
+                )
+                self.assertEqual(
+                    manifest_json["paths"]["action_execution_reports"],
+                    [str(action_report).replace("\\", "/")],
+                )
+                self.assertEqual(
+                    manifest_json["action_execution_summary"]["status_counts"],
+                    {"done": 1},
                 )
         finally:
             calibration.load_snapshot = original_load_snapshot
