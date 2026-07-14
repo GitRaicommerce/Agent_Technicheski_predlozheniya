@@ -147,6 +147,72 @@ class CalibrationManifestActionTests(unittest.TestCase):
             "gap=grounding and checklist coverage, reference=Environment",
         )
 
+    def test_manifest_actions_keep_same_endpoint_when_targets_differ(self):
+        manifest = {
+            "gap_priority_rows": [
+                {
+                    "focus": "drafting depth",
+                    "reference_section": "Quality",
+                    "action_key": "regenerate_quality_depth",
+                    "api_method": "POST",
+                    "api_path": "/api/v1/agents/project-1/remediation-actions/regenerate_quality_depth",
+                    "request_json": {"section_uids": ["sec-quality"]},
+                },
+                {
+                    "focus": "drafting depth",
+                    "reference_section": "Environment",
+                    "action_key": "regenerate_quality_depth",
+                    "api_method": "POST",
+                    "api_path": "/api/v1/agents/project-1/remediation-actions/regenerate_quality_depth",
+                    "request_json": {"section_uids": ["sec-environment"]},
+                },
+            ],
+        }
+
+        actions = manifest_actions(manifest)
+
+        self.assertEqual(len(actions), 2)
+        self.assertEqual(
+            [action.request_json for action in actions],
+            [
+                {"section_uids": ["sec-quality"]},
+                {"section_uids": ["sec-environment"]},
+            ],
+        )
+
+    def test_manifest_actions_dedupe_identical_target_payloads(self):
+        manifest = {
+            "readiness_actions": [
+                {
+                    "action_key": "regenerate_quality_depth",
+                    "api_method": "POST",
+                    "api_path": "/api/v1/agents/project-1/remediation-actions/regenerate_quality_depth",
+                    "request_json": {
+                        "section_uids": ["sec-quality"],
+                        "section_title_hints": ["Quality"],
+                    },
+                }
+            ],
+            "gap_priority_rows": [
+                {
+                    "focus": "drafting depth",
+                    "reference_section": "Quality",
+                    "action_key": "regenerate_quality_depth",
+                    "api_method": "POST",
+                    "api_path": "/api/v1/agents/project-1/remediation-actions/regenerate_quality_depth",
+                    "request_json": {
+                        "section_title_hints": ["Quality"],
+                        "section_uids": ["sec-quality"],
+                    },
+                }
+            ],
+        }
+
+        actions = manifest_actions(manifest)
+
+        self.assertEqual(len(actions), 1)
+        self.assertEqual(actions[0].source, "readiness_actions")
+
     def test_action_url_substitutes_project_id_template(self):
         url = action_url(
             "http://localhost:8000",

@@ -36,6 +36,15 @@ def load_manifest(path: Path) -> dict[str, Any]:
     return payload
 
 
+def _action_dedupe_key(
+    action_key: str,
+    api_path: str,
+    request_json: dict[str, Any] | None,
+) -> tuple[str, str, str]:
+    request_part = json.dumps(request_json or {}, ensure_ascii=False, sort_keys=True)
+    return (action_key, api_path, request_part)
+
+
 def manifest_actions(manifest: dict[str, Any]) -> list[ManifestAction]:
     raw_readiness_actions = manifest.get("readiness_actions") or []
     if not isinstance(raw_readiness_actions, list):
@@ -45,7 +54,7 @@ def manifest_actions(manifest: dict[str, Any]) -> list[ManifestAction]:
         raise ValueError("Manifest gap_priority_rows must be a list")
 
     actions: list[ManifestAction] = []
-    seen: set[tuple[str, str]] = set()
+    seen: set[tuple[str, str, str]] = set()
     for index, item in enumerate(raw_readiness_actions, start=1):
         if not isinstance(item, dict):
             raise ValueError(f"Manifest readiness action #{index} must be an object")
@@ -65,7 +74,7 @@ def manifest_actions(manifest: dict[str, Any]) -> list[ManifestAction]:
                 "Manifest readiness action "
                 f"#{index} request_json must be an object"
             )
-        seen.add((action_key, api_path))
+        seen.add(_action_dedupe_key(action_key, api_path, request_json))
         actions.append(
             ManifestAction(
                 action_key=action_key,
@@ -86,16 +95,16 @@ def manifest_actions(manifest: dict[str, Any]) -> list[ManifestAction]:
         api_path = str(item.get("api_path") or "").strip()
         if not action_key or not api_path:
             continue
-        dedupe_key = (action_key, api_path)
-        if dedupe_key in seen:
-            continue
-        seen.add(dedupe_key)
-        api_method = str(item.get("api_method") or "POST").strip().upper()
         request_json = item.get("request_json")
         if request_json is not None and not isinstance(request_json, dict):
             raise ValueError(
                 f"Manifest gap priority row #{index} request_json must be an object"
             )
+        dedupe_key = _action_dedupe_key(action_key, api_path, request_json)
+        if dedupe_key in seen:
+            continue
+        seen.add(dedupe_key)
+        api_method = str(item.get("api_method") or "POST").strip().upper()
         reference_section = str(item.get("reference_section") or "").strip()
         focus = str(item.get("focus") or "").strip()
         summary_parts = []

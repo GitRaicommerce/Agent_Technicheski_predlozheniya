@@ -156,6 +156,7 @@
 - Surfaced readiness action target summaries in the Markdown calibration manifest, so reviewers can see the exact section ids and title hints that targeted remediation actions will use without opening the JSON.
 - Extended before/after calibration manifest comparisons with executable action target deltas, so reviewers can see when the same remediation action now points to different section ids or title hints after reruns.
 - Hardened strict calibration remediation cycles by requiring real `--execute --wait` evidence and explicit `--all` or `--action-key` selection before a proof-oriented rerun can proceed.
+- Fixed calibration action deduplication so identical bulk remediation actions are still collapsed, but same-endpoint actions with different section target payloads are preserved and executed separately.
 
 ## Active Goals
 
