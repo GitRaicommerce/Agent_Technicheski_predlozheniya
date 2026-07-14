@@ -28,6 +28,7 @@ job_status_url = manifest_actions_module.job_status_url
 load_manifest = manifest_actions_module.load_manifest
 main = manifest_actions_module.main
 manifest_actions = manifest_actions_module.manifest_actions
+missing_reason_summary = manifest_actions_module.missing_reason_summary
 render_execution_report_json = manifest_actions_module.render_execution_report_json
 render_execution_report_markdown = manifest_actions_module.render_execution_report_markdown
 request_target_summary = manifest_actions_module.request_target_summary
@@ -72,6 +73,39 @@ class CalibrationManifestActionTests(unittest.TestCase):
         self.assertEqual(actions[0].api_method, "POST")
         self.assertEqual(actions[0].source, "readiness_actions")
         self.assertEqual(actions[0].section_count, 2)
+
+    def test_manifest_actions_preserve_missing_reason_counts(self):
+        manifest = {
+            "readiness_actions": [
+                {
+                    "action_key": "regenerate_missing_requirements",
+                    "api_method": "POST",
+                    "api_path": "/api/v1/agents/project-1/remediation-actions/regenerate_missing_requirements",
+                    "section_count": 2,
+                    "missing_reason_counts": {
+                        "missing distinctive requirement detail": 2,
+                        "needs operational evidence": 1,
+                    },
+                }
+            ]
+        }
+
+        actions = manifest_actions(manifest)
+
+        self.assertEqual(
+            actions[0].missing_reason_counts,
+            {
+                "missing distinctive requirement detail": 2,
+                "needs operational evidence": 1,
+            },
+        )
+        self.assertEqual(
+            missing_reason_summary(actions[0]),
+            (
+                "missing distinctive requirement detail=2; "
+                "needs operational evidence=1"
+            ),
+        )
 
     def test_manifest_actions_synthesize_dispatcher_path_for_legacy_readiness_rows(self):
         manifest = {
@@ -473,6 +507,10 @@ class CalibrationManifestActionTests(unittest.TestCase):
             source="readiness_actions",
             section_count=2,
             summary="Section A | Section B",
+            missing_reason_counts={
+                "missing distinctive requirement detail": 2,
+                "needs operational evidence": 1,
+            },
             request_json={
                 "section_uids": ["sec-a"],
                 "section_title_hints": ["Section A"],
@@ -509,12 +547,27 @@ class CalibrationManifestActionTests(unittest.TestCase):
             payload["actions"][0]["target_summary"],
             "uids=sec-a; titles=Section A",
         )
+        self.assertEqual(
+            payload["actions"][0]["missing_reason_counts"],
+            {
+                "missing distinctive requirement detail": 2,
+                "needs operational evidence": 1,
+            },
+        )
+        self.assertEqual(
+            payload["actions"][0]["missing_reason_summary"],
+            (
+                "missing distinctive requirement detail=2; "
+                "needs operational evidence=1"
+            ),
+        )
         self.assertIn("Ready for calibration bundle: `no`", markdown)
         self.assertIn("Evidence level: `planned`", markdown)
         self.assertIn("Has unexecuted actions: `yes`", markdown)
         self.assertIn(
             "| regenerate_stale | readiness_actions | no | planned | 2 | "
-            "uids=sec-a; titles=Section A |",
+            "uids=sec-a; titles=Section A | "
+            "missing distinctive requirement detail=2; needs operational evidence=1 |",
             markdown,
         )
         self.assertIn("Section A \\| Section B", markdown)

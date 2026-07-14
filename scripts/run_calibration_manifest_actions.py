@@ -27,6 +27,7 @@ class ManifestAction:
     blocker_code: str = ""
     section_count: int = 0
     summary: str = ""
+    missing_reason_counts: dict[str, int] | None = None
 
 
 def load_manifest(path: Path) -> dict[str, Any]:
@@ -74,6 +75,15 @@ def manifest_actions(manifest: dict[str, Any]) -> list[ManifestAction]:
                 "Manifest readiness action "
                 f"#{index} request_json must be an object"
             )
+        missing_reason_counts = item.get("missing_reason_counts")
+        if missing_reason_counts is not None and not isinstance(
+            missing_reason_counts,
+            dict,
+        ):
+            raise ValueError(
+                "Manifest readiness action "
+                f"#{index} missing_reason_counts must be an object"
+            )
         dedupe_key = _action_dedupe_key(action_key, api_path, request_json)
         if dedupe_key in seen:
             continue
@@ -88,6 +98,12 @@ def manifest_actions(manifest: dict[str, Any]) -> list[ManifestAction]:
                 blocker_code=str(item.get("blocker_code") or ""),
                 section_count=int(item.get("section_count") or 0),
                 summary=str(item.get("summary") or ""),
+                missing_reason_counts={
+                    str(reason): int(count)
+                    for reason, count in (missing_reason_counts or {}).items()
+                    if str(reason).strip()
+                }
+                or None,
             )
         )
 
@@ -316,6 +332,19 @@ def action_target_summary(action: ManifestAction) -> str:
     return ""
 
 
+def missing_reason_summary(action: ManifestAction) -> str:
+    if not action.missing_reason_counts:
+        return ""
+    parts = [
+        f"{reason}={count}"
+        for reason, count in sorted(
+            action.missing_reason_counts.items(),
+            key=lambda item: (-item[1], item[0]),
+        )
+    ]
+    return "; ".join(parts[:4])
+
+
 def action_execution_record(
     action: ManifestAction,
     *,
@@ -340,6 +369,8 @@ def action_execution_record(
         "blocker_code": action.blocker_code,
         "section_count": action.section_count,
         "summary": action.summary,
+        "missing_reason_counts": action.missing_reason_counts or {},
+        "missing_reason_summary": missing_reason_summary(action),
         "request_json": action.request_json or {},
         "target_summary": action_target_summary(action),
         "executed": executed,
@@ -427,8 +458,8 @@ def render_execution_report_markdown(records: list[dict[str, Any]]) -> str:
         f"- Has unexecuted actions: `{'yes' if summary['has_unexecuted_actions'] else 'no'}`",
         f"- Recommendation: {summary['recommendation']}",
         "",
-        "| Action key | Source | Executed | Final status | Sections | Targets | Summary |",
-        "| --- | --- | --- | --- | ---: | --- | --- |",
+        "| Action key | Source | Executed | Final status | Sections | Targets | Missing reasons | Summary |",
+        "| --- | --- | --- | --- | ---: | --- | --- | --- |",
     ]
     for record in records:
         lines.append(
@@ -441,6 +472,10 @@ def render_execution_report_markdown(records: list[dict[str, Any]]) -> str:
                     str(record.get("final_status") or "unknown"),
                     str(record.get("section_count") or 0),
                     str(record.get("target_summary") or "").replace("|", "\\|"),
+                    str(record.get("missing_reason_summary") or "").replace(
+                        "|",
+                        "\\|",
+                    ),
                     str(record.get("summary") or "").replace("|", "\\|"),
                 ]
             )
