@@ -112,7 +112,7 @@ async def test_export_readiness_aggregates_multiple_blockers(client, mock_db):
     missing_generation.text = "Text with missing requirements."
     missing_generation.flags_json = {
         "requirement_coverage": {
-            "missing_ids": ["req-1", "req-2"],
+            "missing_ids": ["req-1", "req-2", "req-3"],
             "items": [
                 {"id": "req-1", "text": "First missing", "status": "missing"},
                 {
@@ -127,6 +127,16 @@ async def test_export_readiness_aggregates_multiple_blockers(client, mock_db):
                     "requires_operational_detail": True,
                     "operational_signals": ["record"],
                     "required_operational_signal_count": 2,
+                },
+                {
+                    "id": "req-3",
+                    "text": "Final acceptance and handover controls.",
+                    "status": "missing",
+                    "distinctive_terms": ["final", "acceptance", "handover"],
+                    "distinctive_matches": [],
+                    "required_distinctive_count": 1,
+                    "matched_terms": ["control", "record", "role"],
+                    "required_match_count": 3,
                 },
             ],
         }
@@ -177,7 +187,7 @@ async def test_export_readiness_aggregates_multiple_blockers(client, mock_db):
     ]
     assert detail["duplicate_selected_count"] == 1
     assert detail["stale_section_count"] == 1
-    assert detail["missing_requirement_count"] == 2
+    assert detail["missing_requirement_count"] == 3
     missing_items = detail["missing_requirement_sections"][0]["missing_items"]
     assert missing_items[0]["reason"] == "missing requirement coverage"
     assert missing_items[1]["reason"] == "needs operational evidence"
@@ -191,6 +201,15 @@ async def test_export_readiness_aggregates_multiple_blockers(client, mock_db):
     assert "add operational evidence" in missing_items[1]["remediation_guidance"]
     assert missing_items[1]["operational_signals"] == ["record"]
     assert missing_items[1]["required_operational_signal_count"] == 2
+    assert missing_items[2]["reason"] == "missing distinctive requirement detail"
+    assert missing_items[2]["distinctive_terms"] == [
+        "final",
+        "acceptance",
+        "handover",
+    ]
+    assert "include distinctive requirement details" in missing_items[2][
+        "remediation_guidance"
+    ]
     assert detail["quality_section_count"] == 1
 
 

@@ -18,11 +18,16 @@ def _missing_requirement_reason(item: dict) -> str:
     required_match_count = item.get("required_match_count")
     required_coherent_match_count = item.get("required_coherent_match_count")
     required_operational_signal_count = item.get("required_operational_signal_count")
+    distinctive_matches = item.get("distinctive_matches")
+    required_distinctive_count = item.get("required_distinctive_count")
 
     matched_count = len(matched_terms) if isinstance(matched_terms, list) else 0
     coherent_count = len(coherent_terms) if isinstance(coherent_terms, list) else 0
     operational_count = (
         len(operational_signals) if isinstance(operational_signals, list) else 0
+    )
+    distinctive_count = (
+        len(distinctive_matches) if isinstance(distinctive_matches, list) else 0
     )
 
     if (
@@ -36,6 +41,11 @@ def _missing_requirement_reason(item: dict) -> str:
         and coherent_count < required_coherent_match_count
     ):
         return "needs coherent passage"
+    if (
+        isinstance(required_distinctive_count, int)
+        and distinctive_count < required_distinctive_count
+    ):
+        return "missing distinctive requirement detail"
     if isinstance(required_match_count, int) and matched_count < required_match_count:
         return "missing key terms"
     return "missing requirement coverage"
@@ -56,6 +66,27 @@ def _missing_requirement_remediation_guidance(item: dict) -> str:
     if missing_terms:
         guidance.append(
             "include the missing concepts: " + ", ".join(missing_terms[:8])
+        )
+
+    distinctive_terms = [
+        str(term)
+        for term in item.get("distinctive_terms") or []
+        if term
+    ]
+    distinctive_matches = [
+        str(term)
+        for term in item.get("distinctive_matches") or []
+        if term
+    ]
+    required_distinctive_count = item.get("required_distinctive_count")
+    if (
+        isinstance(required_distinctive_count, int)
+        and required_distinctive_count > 0
+        and len(distinctive_matches) < required_distinctive_count
+    ):
+        guidance.append(
+            "include distinctive requirement details such as "
+            + ", ".join(distinctive_terms[:8])
         )
 
     coherent_terms = [
@@ -121,6 +152,11 @@ def _missing_requirement_coverage(generation: Generation) -> dict | None:
                 "missing_terms": item.get("missing_terms") or [],
                 "matched_terms": item.get("matched_terms") or [],
                 "required_match_count": item.get("required_match_count"),
+                "distinctive_terms": item.get("distinctive_terms") or [],
+                "distinctive_matches": item.get("distinctive_matches") or [],
+                "required_distinctive_count": item.get(
+                    "required_distinctive_count"
+                ),
                 "coherent_matched_terms": item.get("coherent_matched_terms") or [],
                 "required_coherent_match_count": item.get(
                     "required_coherent_match_count"

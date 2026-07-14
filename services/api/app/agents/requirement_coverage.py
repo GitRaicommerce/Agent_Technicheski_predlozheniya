@@ -90,6 +90,25 @@ OPERATIONAL_SIGNAL_TERMS = (
     "\u043f\u043e\u0441\u043b\u0435\u0434\u043e\u0432",
 )
 
+GENERIC_COVERAGE_TERMS = {
+    "action",
+    "actions",
+    "control",
+    "controls",
+    "corrective",
+    "describe",
+    "evidence",
+    "inspection",
+    "monitoring",
+    "protocol",
+    "protocols",
+    "quality",
+    "record",
+    "records",
+    "responsible",
+    "role",
+}
+
 
 def _normalize(value: Any) -> str:
     return re.sub(r"\s+", " ", str(value or "").lower()).strip()
@@ -131,6 +150,15 @@ def _operational_signal_terms(text: str) -> list[str]:
             if signal in normalized
         }
     )
+
+
+def _distinctive_terms(tokens: list[str]) -> list[str]:
+    return [
+        token
+        for token in tokens
+        if token not in GENERIC_COVERAGE_TERMS
+        and not any(signal == token for signal in OPERATIONAL_SIGNAL_TERMS)
+    ]
 
 
 def _requires_operational_detail(item: dict[str, Any]) -> bool:
@@ -269,8 +297,11 @@ def assess_requirement_coverage(
             generated_text,
         )
         operational_signals = _operational_signal_terms(best_window)
+        distinctive_terms = _distinctive_terms(requirement_tokens)
+        distinctive_matches = sorted(set(distinctive_terms) & set(window_terms))
         requires_operational_detail = _requires_operational_detail(item)
         required_operational_signal_count = 2 if requires_operational_detail else 0
+        required_distinctive_count = 1 if len(distinctive_terms) >= 3 else 0
 
         if not requirement_tokens:
             required_matches = 0
@@ -296,9 +327,17 @@ def assess_requirement_coverage(
         operationally_developed = (
             len(operational_signals) >= required_operational_signal_count
         )
+        distinctively_matched = (
+            len(distinctive_matches) >= required_distinctive_count
+        )
         status = (
             "covered"
-            if globally_covered and locally_coherent and operationally_developed
+            if (
+                globally_covered
+                and locally_coherent
+                and operationally_developed
+                and distinctively_matched
+            )
             else "missing"
         )
         requirement_id = str(item.get("id"))
@@ -320,6 +359,9 @@ def assess_requirement_coverage(
                 "status": status,
                 "matched_terms": matched_terms,
                 "missing_terms": missing_terms,
+                "distinctive_terms": distinctive_terms,
+                "distinctive_matches": distinctive_matches,
+                "required_distinctive_count": required_distinctive_count,
                 "matched_ratio": round(matched_ratio, 3),
                 "coherent_matched_terms": window_terms,
                 "coherent_matched_ratio": round(window_ratio, 3),

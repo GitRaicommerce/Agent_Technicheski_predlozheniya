@@ -8,7 +8,7 @@ import pytest
 from sqlalchemy.sql.dml import Update
 
 from app.agents.context import build_project_grounding_context
-from app.agents.drafting import run_drafting
+from app.agents.drafting import _quality_repair_feedback, run_drafting
 
 
 def _scalar_result(items):
@@ -36,6 +36,28 @@ def _varied_operational_text(topics: list[str], repeats: int = 8) -> str:
                 "interface. "
             )
     return "".join(sentences)
+
+
+def test_quality_repair_feedback_names_missing_distinctive_requirement_details():
+    feedback = _quality_repair_feedback(
+        requirement_coverage={
+            "items": [
+                {
+                    "id": "req-final-acceptance",
+                    "text": "Describe final acceptance and handover controls.",
+                    "status": "missing",
+                    "distinctive_terms": ["final", "acceptance", "handover"],
+                    "distinctive_matches": [],
+                    "required_distinctive_count": 1,
+                }
+            ]
+        },
+        depth_assessment={"issues": []},
+    )
+
+    assert "distinctive detail: 0/1 required" in feedback
+    assert "distinctive terms: final, acceptance, handover" in feedback
+    assert "make it distinct from similar checklist items" in feedback
 
 
 @pytest.mark.asyncio

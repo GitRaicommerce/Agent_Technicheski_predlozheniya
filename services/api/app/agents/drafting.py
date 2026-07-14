@@ -161,6 +161,33 @@ def _quality_repair_feedback(
                 reason_bits.append(
                     "missing terms: " + ", ".join(map(str, item["missing_terms"][:8]))
                 )
+            distinctive_terms = [
+                str(term)
+                for term in item.get("distinctive_terms") or []
+                if term
+            ]
+            distinctive_matches = [
+                str(term)
+                for term in item.get("distinctive_matches") or []
+                if term
+            ]
+            required_distinctive_count = item.get("required_distinctive_count")
+            if (
+                isinstance(required_distinctive_count, int)
+                and required_distinctive_count > 0
+            ):
+                reason_bits.append(
+                    "distinctive detail: "
+                    f"{len(distinctive_matches)}/{required_distinctive_count} "
+                    "required"
+                )
+            if distinctive_terms and len(distinctive_matches) < max(
+                1,
+                int(required_distinctive_count or 0),
+            ):
+                reason_bits.append(
+                    "distinctive terms: " + ", ".join(distinctive_terms[:8])
+                )
             coherent_terms = [
                 str(term)
                 for term in item.get("coherent_matched_terms") or []
@@ -256,6 +283,28 @@ def _requirement_repair_steps(items: list[dict[str, Any]]) -> list[str]:
             step_bits.append(
                 "bring in the missing concepts: "
                 + ", ".join(missing_terms[:8])
+            )
+        distinctive_terms = [
+            str(term)
+            for term in item.get("distinctive_terms") or []
+            if term
+        ]
+        distinctive_matches = [
+            str(term)
+            for term in item.get("distinctive_matches") or []
+            if term
+        ]
+        required_distinctive_count = item.get("required_distinctive_count")
+        if (
+            isinstance(required_distinctive_count, int)
+            and required_distinctive_count > 0
+            and len(distinctive_matches) < required_distinctive_count
+            and distinctive_terms
+        ):
+            step_bits.append(
+                "make it distinct from similar checklist items by explicitly "
+                "covering: "
+                + ", ".join(distinctive_terms[:8])
             )
         coherent_terms = [
             str(term)

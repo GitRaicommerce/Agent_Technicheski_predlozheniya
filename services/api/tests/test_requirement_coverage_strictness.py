@@ -119,3 +119,63 @@ def test_requirement_coverage_requires_operational_evidence_for_operational_cate
     assert keyword_only["items"][0]["operational_signals"] == []
     assert operational["covered_ids"] == ["req-environment-measures"]
     assert len(operational["items"][0]["operational_signals"]) >= 2
+
+
+def test_requirement_coverage_keeps_similar_operational_requirements_separate():
+    items = normalize_requirement_items(
+        [
+            {
+                "id": "req-input-control",
+                "text": (
+                    "Describe input quality control for delivered materials, "
+                    "inspection protocol, responsible role, and rejection record."
+                ),
+                "importance": "mandatory",
+                "category": "quality",
+                "category_label": "Quality control",
+            },
+            {
+                "id": "req-final-acceptance",
+                "text": (
+                    "Describe final acceptance control for completed works, "
+                    "handover protocol, responsible role, and corrective record."
+                ),
+                "importance": "mandatory",
+                "category": "quality",
+                "category_label": "Quality control",
+            },
+        ]
+    )
+
+    only_input_control = assess_requirement_coverage(
+        (
+            "For delivered materials, the contractor performs input quality "
+            "control through an inspection protocol, assigns a responsible "
+            "role, keeps a rejection record, and applies corrective actions."
+        ),
+        items,
+    )
+    both_controls = assess_requirement_coverage(
+        (
+            "For delivered materials, the contractor performs input quality "
+            "control through an inspection protocol, assigns a responsible "
+            "role, keeps a rejection record, and applies corrective actions. "
+            "For completed works, the contractor performs final acceptance "
+            "control through a handover protocol, assigns a responsible role, "
+            "keeps a corrective record, and documents acceptance evidence."
+        ),
+        items,
+    )
+
+    assert only_input_control["covered_ids"] == ["req-input-control"]
+    assert only_input_control["missing_ids"] == ["req-final-acceptance"]
+    final_item = only_input_control["items"][1]
+    assert final_item["required_distinctive_count"] == 1
+    assert final_item["distinctive_matches"] == []
+    assert {"final", "acceptance", "completed", "works", "handover"} & set(
+        final_item["distinctive_terms"]
+    )
+    assert both_controls["covered_ids"] == [
+        "req-input-control",
+        "req-final-acceptance",
+    ]
