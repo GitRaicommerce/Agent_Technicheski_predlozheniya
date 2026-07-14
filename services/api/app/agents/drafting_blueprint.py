@@ -174,7 +174,9 @@ def build_drafting_blueprint(
             {
                 "category": _clean(item.get("category")) or key,
                 "label": _group_label(item),
+                "requirement_ids": [],
                 "requirements": [],
+                "additional_requirements": [],
                 "topics": [],
                 "topic_details": [],
                 "guidance": _guidance_for_group(_clean(item.get("category"))),
@@ -184,6 +186,8 @@ def build_drafting_blueprint(
         if topic and topic not in group["topics"]:
             group["topics"].append(topic)
             group["topic_details"].append({"topic": topic, "requirement_ids": []})
+        if requirement_id not in group["requirement_ids"]:
+            group["requirement_ids"].append(requirement_id)
         if len(group["requirements"]) < max_items_per_group:
             group["requirements"].append(
                 {
@@ -191,6 +195,14 @@ def build_drafting_blueprint(
                     "text": text,
                     "importance": _clean(item.get("importance")) or "mandatory",
                     "response_plan": _response_plan_for_item(item),
+                }
+            )
+        else:
+            group["additional_requirements"].append(
+                {
+                    "id": requirement_id,
+                    "topic": topic,
+                    "text": _clean(item.get("text"), limit=180),
                 }
             )
         for topic_detail in group["topic_details"]:
@@ -266,5 +278,20 @@ def format_drafting_blueprint_for_prompt(blueprint: dict[str, Any]) -> str:
                 source_ref = _clean(response_plan.get("source_ref"))
                 if source_ref:
                     lines.append(f"     source reference: {source_ref}")
+        additional_requirements = [
+            item
+            for item in group.get("additional_requirements") or []
+            if isinstance(item, dict) and item.get("id")
+        ]
+        if additional_requirements:
+            lines.append(
+                "   - additional requirements to cover explicitly "
+                "(compact list beyond the detailed response-plan limit):"
+            )
+            for item in additional_requirements:
+                topic = _clean(item.get("topic"))
+                suffix = f" [{topic}]" if topic else ""
+                text = _clean(item.get("text"), limit=180)
+                lines.append(f"     - {item.get('id')}{suffix}: {text}")
 
     return "\n".join(lines)

@@ -132,3 +132,40 @@ def test_drafting_blueprint_keeps_distinct_topics_inside_one_category():
         {"topic": "waste", "requirement_ids": ["req-waste"]},
         {"topic": "soil", "requirement_ids": ["req-soil"]},
     ]
+
+
+def test_drafting_blueprint_keeps_overflow_requirements_visible_in_prompt():
+    requirement_items = [
+        {
+            "id": f"req-quality-{index}",
+            "text": f"Describe quality control measure {index}.",
+            "importance": "mandatory",
+            "category": "quality",
+            "category_label": "Quality control",
+            "topic": f"quality topic {index}",
+        }
+        for index in range(1, 14)
+    ]
+
+    blueprint = build_drafting_blueprint(
+        section_title="Quality control",
+        requirement_items=requirement_items,
+        max_items_per_group=10,
+    )
+    prompt = format_drafting_blueprint_for_prompt(blueprint)
+
+    group = blueprint["groups"][0]
+    assert group["requirement_ids"] == [
+        f"req-quality-{index}" for index in range(1, 14)
+    ]
+    assert [item["id"] for item in group["requirements"]] == [
+        f"req-quality-{index}" for index in range(1, 11)
+    ]
+    assert [item["id"] for item in group["additional_requirements"]] == [
+        "req-quality-11",
+        "req-quality-12",
+        "req-quality-13",
+    ]
+    assert "additional requirements to cover explicitly" in prompt
+    assert "req-quality-11 [quality topic 11]" in prompt
+    assert "req-quality-13 [quality topic 13]" in prompt

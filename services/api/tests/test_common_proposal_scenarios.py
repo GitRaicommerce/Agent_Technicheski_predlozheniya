@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from app.agents.drafting_blueprint import build_drafting_blueprint
+from app.agents.drafting_blueprint import (
+    build_drafting_blueprint,
+    format_drafting_blueprint_for_prompt,
+)
 from app.agents.drafting import _format_section_drafting_guidance
 from app.agents.generation_jobs import (
     _merge_section_drafting_guidance,
@@ -647,6 +650,42 @@ def test_common_blueprint_creates_response_plan_for_each_requirement():
         "chunk-quality",
         "chunk-risk",
     }
+
+
+def test_common_blueprint_keeps_many_specific_requirements_visible():
+    requirement_items = [
+        {
+            "id": f"req-specific-{index}",
+            "text": (
+                f"Describe tender-specific operational condition {index} "
+                "with responsible role, evidence record, and acceptance step."
+            ),
+            "importance": "mandatory",
+            "category": SPECIFIC_REQUIREMENTS_CATEGORY,
+            "category_label": "Specific tender requirements",
+            "topic": f"specific condition {index}",
+        }
+        for index in range(1, 15)
+    ]
+
+    blueprint = build_drafting_blueprint(
+        section_title="Specific tender requirements",
+        requirement_items=requirement_items,
+        max_items_per_group=10,
+    )
+    prompt = format_drafting_blueprint_for_prompt(blueprint)
+
+    group = blueprint["groups"][0]
+    assert len(group["requirements"]) == 10
+    assert [item["id"] for item in group["additional_requirements"]] == [
+        "req-specific-11",
+        "req-specific-12",
+        "req-specific-13",
+        "req-specific-14",
+    ]
+    assert "additional requirements to cover explicitly" in prompt
+    assert "req-specific-14 [specific condition 14]" in prompt
+    assert "Do not hide unusual or one-off requirements" in prompt
 
 
 def test_common_readiness_report_guides_mixed_blocker_remediation():

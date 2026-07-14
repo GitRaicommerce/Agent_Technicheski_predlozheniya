@@ -162,6 +162,7 @@
 - Made calibration action execution target summaries explicit when long target lists are truncated, so dry-run and execute reports show that additional section ids or title hints exist.
 - Made Markdown calibration manifest target summaries explicit when long readiness-action target lists are truncated, matching the action execution and comparison reports.
 - Hardened calibration action selection deduplication for readiness actions too, so identical target payloads are executed once while distinct same-endpoint targets are preserved.
+- Kept overflow checklist requirements visible in drafting blueprints and prompts, so sections with many same-category requirements still expose every requirement id instead of only the first detailed response-plan items.
 
 ## Active Goals
 
