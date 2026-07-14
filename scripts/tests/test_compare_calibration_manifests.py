@@ -91,6 +91,8 @@ class CompareCalibrationManifestsTests(unittest.TestCase):
             summary["gap_action_counts"],
             {"regenerate_quality_depth": 1},
         )
+        self.assertEqual(summary["readiness_action_target_counts"], {})
+        self.assertEqual(summary["gap_action_target_counts"], {})
         self.assertEqual(summary["execution_report_count"], 1)
         self.assertEqual(summary["executed_action_count"], 2)
         self.assertFalse(summary["action_evidence_ready"])
@@ -141,6 +143,111 @@ class CompareCalibrationManifestsTests(unittest.TestCase):
         self.assertIn("| executed actions | 0 | 2 | +2 |", text)
         self.assertIn("| `done` | 0 | 2 | +2 |", text)
         self.assertIn("Run detailed regeneration", text)
+
+    def test_summarize_manifest_reads_action_targets(self):
+        summary = summarize_manifest(
+            manifest(
+                readiness_actions=[
+                    {
+                        "action_key": "regenerate_missing_requirements",
+                        "request_json": {
+                            "section_uids": ["sec-quality"],
+                            "section_title_hints": ["Quality controls"],
+                        },
+                    }
+                ],
+                gap_rows=[
+                    {
+                        "action_key": "regenerate_quality_depth",
+                        "request_json": {
+                            "section_title_hints": ["Environmental measures"]
+                        },
+                    }
+                ],
+            )
+        )
+
+        self.assertEqual(
+            summary["readiness_action_target_counts"],
+            {
+                (
+                    "regenerate_missing_requirements",
+                    "uids=sec-quality; titles=Quality controls",
+                ): 1,
+            },
+        )
+        self.assertEqual(
+            summary["gap_action_target_counts"],
+            {
+                (
+                    "regenerate_quality_depth",
+                    "titles=Environmental measures",
+                ): 1,
+            },
+        )
+
+    def test_render_comparison_shows_action_target_deltas(self):
+        before = manifest(
+            readiness_actions=[
+                {
+                    "action_key": "regenerate_missing_requirements",
+                    "request_json": {
+                        "section_uids": ["sec-quality"],
+                        "section_title_hints": ["Quality"],
+                    },
+                }
+            ],
+            gap_rows=[
+                {
+                    "action_key": "regenerate_quality_depth",
+                    "request_json": {"section_title_hints": ["Old section"]},
+                }
+            ],
+        )
+        after = manifest(
+            readiness_actions=[
+                {
+                    "action_key": "regenerate_missing_requirements",
+                    "request_json": {
+                        "section_uids": ["sec-environment"],
+                        "section_title_hints": ["Environment"],
+                    },
+                }
+            ],
+            gap_rows=[
+                {
+                    "action_key": "regenerate_quality_depth",
+                    "request_json": {
+                        "section_uids": ["sec-a"],
+                        "section_title_hints": ["New section"],
+                    },
+                }
+            ],
+        )
+
+        text = render_comparison(before, after)
+
+        self.assertIn("## Executable action target deltas", text)
+        self.assertIn(
+            "| readiness_actions | `regenerate_missing_requirements` | "
+            "uids=sec-quality; titles=Quality | 1 | 0 | -1 |",
+            text,
+        )
+        self.assertIn(
+            "| readiness_actions | `regenerate_missing_requirements` | "
+            "uids=sec-environment; titles=Environment | 0 | 1 | +1 |",
+            text,
+        )
+        self.assertIn(
+            "| gap_priority_rows | `regenerate_quality_depth` | "
+            "titles=Old section | 1 | 0 | -1 |",
+            text,
+        )
+        self.assertIn(
+            "| gap_priority_rows | `regenerate_quality_depth` | "
+            "uids=sec-a; titles=New section | 0 | 1 | +1 |",
+            text,
+        )
 
     def test_render_comparison_prioritizes_remaining_readiness_blockers(self):
         text = render_comparison(

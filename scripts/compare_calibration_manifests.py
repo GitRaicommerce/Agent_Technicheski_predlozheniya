@@ -49,6 +49,42 @@ def _action_counts(rows: list[Any]) -> dict[str, int]:
     return counts
 
 
+def _string_items(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item).strip() for item in value if str(item).strip()]
+
+
+def _request_target_summary(request_json: Any) -> str:
+    if not isinstance(request_json, dict):
+        return ""
+    section_uids = _string_items(request_json.get("section_uids"))
+    title_hints = _string_items(request_json.get("section_title_hints"))
+    parts: list[str] = []
+    if section_uids:
+        parts.append("uids=" + ", ".join(section_uids[:6]))
+        if len(section_uids) > 6:
+            parts.append(f"+{len(section_uids) - 6} more uids")
+    if title_hints:
+        parts.append("titles=" + ", ".join(title_hints[:4]))
+        if len(title_hints) > 4:
+            parts.append(f"+{len(title_hints) - 4} more titles")
+    return "; ".join(parts)
+
+
+def _action_target_counts(rows: list[Any]) -> dict[tuple[str, str], int]:
+    counts: dict[tuple[str, str], int] = {}
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        action_key = str(row.get("action_key") or "").strip()
+        target_summary = _request_target_summary(row.get("request_json"))
+        if action_key and target_summary:
+            key = (action_key, target_summary)
+            counts[key] = counts.get(key, 0) + 1
+    return counts
+
+
 def _status_counts(value: Any) -> dict[str, int]:
     if not isinstance(value, dict):
         return {}
@@ -112,6 +148,8 @@ def summarize_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
         },
         "readiness_action_counts": _action_counts(readiness_actions),
         "gap_action_counts": _action_counts(gap_rows),
+        "readiness_action_target_counts": _action_target_counts(readiness_actions),
+        "gap_action_target_counts": _action_target_counts(gap_rows),
         "executed_action_count": _int_value(
             _executed_action_count(action_execution_summary)
             if isinstance(action_execution_summary, dict)
@@ -163,6 +201,17 @@ def _sorted_keys(*maps: dict[str, int]) -> list[str]:
     for item in maps:
         keys.update(item)
     return sorted(keys)
+
+
+def _sorted_target_keys(*maps: dict[tuple[str, str], int]) -> list[tuple[str, str]]:
+    keys: set[tuple[str, str]] = set()
+    for item in maps:
+        keys.update(item)
+    return sorted(keys)
+
+
+def _escape_md_cell(value: str) -> str:
+    return value.replace("|", "\\|")
 
 
 def _direction_for_metric(metric: str, before: Any, after: Any) -> str:
@@ -315,6 +364,41 @@ def render_comparison(before_manifest: dict[str, Any], after_manifest: dict[str,
                 f"| {source} | `{action_key}` | {before_count} | {after_count} | "
                 f"{_format_delta(before_count, after_count)} |"
             )
+
+    lines.extend(
+        [
+            "",
+            "## Executable action target deltas",
+            "",
+            "| Source | Action key | Targets | Before | After | Delta |",
+            "| --- | --- | --- | ---: | ---: | ---: |",
+        ]
+    )
+    target_sources = [
+        (
+            "readiness_actions",
+            before["readiness_action_target_counts"],
+            after["readiness_action_target_counts"],
+        ),
+        (
+            "gap_priority_rows",
+            before["gap_action_target_counts"],
+            after["gap_action_target_counts"],
+        ),
+    ]
+    target_rows_added = False
+    for source, before_counts, after_counts in target_sources:
+        for action_key, target_summary in _sorted_target_keys(before_counts, after_counts):
+            before_count = before_counts.get((action_key, target_summary), 0)
+            after_count = after_counts.get((action_key, target_summary), 0)
+            target_rows_added = True
+            lines.append(
+                f"| {source} | `{action_key}` | {_escape_md_cell(target_summary)} | "
+                f"{before_count} | {after_count} | "
+                f"{_format_delta(before_count, after_count)} |"
+            )
+    if not target_rows_added:
+        lines.append("| n/a | n/a | no section-specific action targets | 0 | 0 | +0 |")
 
     lines.extend(
         [

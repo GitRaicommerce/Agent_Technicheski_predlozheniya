@@ -154,6 +154,7 @@
 - Added section target payloads to calibration readiness remediation actions for missing-requirement and shallow-section blockers, so generated manifests can queue targeted regeneration directly from DOCX readiness evidence.
 - Preserved missing-requirement remediation guidance for targeted calibration actions by routing `regenerate_missing_requirements` section-specific requests through the readiness-aware requirements job builder.
 - Surfaced readiness action target summaries in the Markdown calibration manifest, so reviewers can see the exact section ids and title hints that targeted remediation actions will use without opening the JSON.
+- Extended before/after calibration manifest comparisons with executable action target deltas, so reviewers can see when the same remediation action now points to different section ids or title hints after reruns.
 
 ## Active Goals
 
@@ -167,7 +168,7 @@
 1. Use `scripts/run_calibration_remediation_cycle.py --actions-only` against the Pernik manifest to validate the planned remediation actions and reports without rebuilding the bundle; then use `--execute --wait --require-action-ready` or the Generations bulk duplicate resolver to clear Pernik's legacy duplicate selected generations.
 2. Use the calibration remediation cycle script with `--execute --wait` or Generations panel bulk stale-regeneration action for Pernik after duplicate selections are resolved; then use the bulk missing-requirements and quality/depth regeneration actions for any remaining requirement-coverage or blueprint-aware shallow sections reported by export preflight or gap-priority diagnostics.
 3. After resolving Pernik's duplicate selected variants and stale selected sections, regenerate affected sections so the section structure plan and iterative drafting quality-repair pass can improve subtopic coverage, checklist coverage, and depth before export readiness is checked again.
-4. Re-run the Pernik calibration bundle after remediation with `--action-report` and compare the regenerated output against the winning proposal, focusing on the manifest word-volume scorecard, section-level drafting-depth diagnostics, executed remediation evidence, and the before/after calibration manifest comparison report's execution-status deltas.
+4. Re-run the Pernik calibration bundle after remediation with `--action-report` and compare the regenerated output against the winning proposal, focusing on the manifest word-volume scorecard, section-level drafting-depth diagnostics, executed remediation evidence, execution-status deltas, and action target deltas in the before/after calibration manifest comparison report.
 5. Expand generated documentation with more precise backend endpoint and workflow coverage.
 6. Continue broadening common tender regression coverage with more real-world noisy PDF extraction and DOCX readiness combinations.
 
