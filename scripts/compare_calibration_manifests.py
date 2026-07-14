@@ -111,6 +111,28 @@ def _executed_action_count(summary: dict[str, Any]) -> int:
     return _int_value(summary.get("total_actions"))
 
 
+def _action_evidence_level(summary: dict[str, Any]) -> str:
+    explicit = str(summary.get("evidence_level") or "").strip()
+    if explicit:
+        return explicit
+    if bool(summary.get("ready_for_bundle")):
+        return "proof"
+    failure_count = _int_value(summary.get("failure_report_count"))
+    unexecuted_count = _int_value(summary.get("unexecuted_report_count"))
+    status_counts = _status_counts(summary)
+    if failure_count or any(
+        status not in {"done", "executed", "planned"}
+        and count > 0
+        for status, count in status_counts.items()
+    ):
+        return "failed"
+    if unexecuted_count or status_counts.get("planned", 0) > 0:
+        return "planned"
+    if status_counts or _int_value(summary.get("report_count")):
+        return "insufficient"
+    return "none"
+
+
 def summarize_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
     gates = manifest.get("calibration_gates") or {}
     scorecard = manifest.get("gap_quality_scorecard") or {}
@@ -159,6 +181,11 @@ def summarize_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
             action_execution_summary.get("ready_for_bundle")
             if isinstance(action_execution_summary, dict)
             else False
+        ),
+        "action_evidence_level": (
+            _action_evidence_level(action_execution_summary)
+            if isinstance(action_execution_summary, dict)
+            else "none"
         ),
         "action_evidence_failures": _int_value(
             action_execution_summary.get("failure_report_count")
@@ -412,6 +439,11 @@ def render_comparison(before_manifest: dict[str, Any], after_manifest: dict[str,
                 f"{int(before['action_evidence_ready'])} | "
                 f"{int(after['action_evidence_ready'])} | "
                 f"{_format_delta(int(before['action_evidence_ready']), int(after['action_evidence_ready']))} |"
+            ),
+            (
+                "| action evidence level | "
+                f"`{before['action_evidence_level']}` | "
+                f"`{after['action_evidence_level']}` | n/a |"
             ),
             (
                 "| execution reports | "

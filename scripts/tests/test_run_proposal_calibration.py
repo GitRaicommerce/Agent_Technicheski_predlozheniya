@@ -223,6 +223,7 @@ class RunProposalCalibrationTests(unittest.TestCase):
         self.assertEqual(summary["unexecuted_report_count"], 0)
         self.assertTrue(summary["has_failures"])
         self.assertFalse(summary["ready_for_bundle"])
+        self.assertEqual(summary["evidence_level"], "failed")
 
     def test_action_execution_summary_derives_legacy_report_verdicts(self):
         summary = action_execution_summary(
@@ -238,6 +239,7 @@ class RunProposalCalibrationTests(unittest.TestCase):
         self.assertEqual(summary["unexecuted_report_count"], 1)
         self.assertTrue(summary["has_unexecuted_actions"])
         self.assertFalse(summary["ready_for_bundle"])
+        self.assertEqual(summary["evidence_level"], "planned")
 
     def test_load_action_execution_reports_rejects_non_object_payload(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -608,6 +610,7 @@ class RunProposalCalibrationTests(unittest.TestCase):
         )
         self.assertFalse(manifest["action_execution_summary"]["ready_for_bundle"])
         self.assertTrue(manifest["action_execution_summary"]["has_failures"])
+        self.assertEqual(manifest["action_execution_summary"]["evidence_level"], "failed")
         self.assertEqual(
             manifest["action_execution_reports"][0]["schema_version"],
             "calibration_action_execution.v1",
@@ -796,6 +799,10 @@ class RunProposalCalibrationTests(unittest.TestCase):
                     paths["manifest"].read_text(encoding="utf-8"),
                 )
                 self.assertIn(
+                    "Action evidence level: `proof`",
+                    paths["manifest"].read_text(encoding="utf-8"),
+                )
+                self.assertIn(
                     "Action evidence ready for next bundle: `yes`",
                     paths["manifest"].read_text(encoding="utf-8"),
                 )
@@ -834,6 +841,10 @@ class RunProposalCalibrationTests(unittest.TestCase):
                 self.assertEqual(
                     manifest_json["action_execution_summary"]["status_counts"],
                     {"done": 1},
+                )
+                self.assertEqual(
+                    manifest_json["action_execution_summary"]["evidence_level"],
+                    "proof",
                 )
         finally:
             calibration.load_snapshot = original_load_snapshot

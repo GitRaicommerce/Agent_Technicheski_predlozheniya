@@ -74,6 +74,7 @@ class CompareCalibrationManifestsTests(unittest.TestCase):
                     "executed_actions": 2,
                     "status_counts": {"done": 1, "error": 1},
                     "ready_for_bundle": False,
+                    "evidence_level": "failed",
                     "failure_report_count": 1,
                 },
             )
@@ -96,6 +97,7 @@ class CompareCalibrationManifestsTests(unittest.TestCase):
         self.assertEqual(summary["execution_report_count"], 1)
         self.assertEqual(summary["executed_action_count"], 2)
         self.assertFalse(summary["action_evidence_ready"])
+        self.assertEqual(summary["action_evidence_level"], "failed")
         self.assertEqual(summary["action_evidence_failures"], 1)
         self.assertEqual(
             summary["execution_status_counts"],
@@ -140,6 +142,7 @@ class CompareCalibrationManifestsTests(unittest.TestCase):
         )
         self.assertIn("## Action execution evidence", text)
         self.assertIn("| action evidence ready | 0 | 1 | +1 |", text)
+        self.assertIn("| action evidence level | `none` | `proof` | n/a |", text)
         self.assertIn("| executed actions | 0 | 2 | +2 |", text)
         self.assertIn("| `done` | 0 | 2 | +2 |", text)
         self.assertIn("Run detailed regeneration", text)

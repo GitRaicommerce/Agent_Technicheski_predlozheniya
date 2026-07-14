@@ -368,6 +368,14 @@ def action_execution_summary(records: list[dict[str, Any]]) -> dict[str, Any]:
     has_unexecuted_actions = planned_count > 0
     ready_for_bundle = bool(records) and not has_failures and not has_unexecuted_actions
     if not records:
+        evidence_level = "none"
+    elif has_failures:
+        evidence_level = "failed"
+    elif has_unexecuted_actions:
+        evidence_level = "planned"
+    else:
+        evidence_level = "proof"
+    if not records:
         recommendation = "No executable remediation actions were found in the manifest."
     elif has_failures:
         recommendation = (
@@ -391,6 +399,7 @@ def action_execution_summary(records: list[dict[str, Any]]) -> dict[str, Any]:
         "has_failures": has_failures,
         "has_unexecuted_actions": has_unexecuted_actions,
         "ready_for_bundle": ready_for_bundle,
+        "evidence_level": evidence_level,
         "recommendation": recommendation,
     }
 
@@ -412,6 +421,7 @@ def render_execution_report_markdown(records: list[dict[str, Any]]) -> str:
         "",
         f"- Total actions: `{summary['total_actions']}`",
         f"- Executed actions: `{summary['executed_actions']}`",
+        f"- Evidence level: `{summary['evidence_level']}`",
         f"- Ready for calibration bundle: `{'yes' if summary['ready_for_bundle'] else 'no'}`",
         f"- Has failures: `{'yes' if summary['has_failures'] else 'no'}`",
         f"- Has unexecuted actions: `{'yes' if summary['has_unexecuted_actions'] else 'no'}`",

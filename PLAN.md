@@ -167,6 +167,7 @@
 - Surfaced blueprint requirement-id counts through export readiness JSON, Markdown readiness reports, export warnings, and the Generations remediation panel so shallow-section diagnostics show large same-category checklist load.
 - Tightened requirement coverage for similar operational checklist items by requiring distinctive requirement details, and surfaced those diagnostics into export remediation guidance and drafting repair prompts.
 - Validated the real Pernik calibration remediation dry-run in actions-only mode and improved legacy manifest action reports so planned targets remain visible even when older manifests only carry section summaries.
+- Added explicit remediation action evidence levels (`planned`, `proof`, `failed`, etc.) to action reports, calibration manifests, and before/after comparisons so dry-run calibration evidence cannot be mistaken for completed remediation.
 
 ## Active Goals
 

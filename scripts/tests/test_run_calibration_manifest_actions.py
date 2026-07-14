@@ -502,6 +502,7 @@ class CalibrationManifestActionTests(unittest.TestCase):
         self.assertEqual(payload["executed_actions"], 1)
         self.assertEqual(payload["status_counts"], {"planned": 1, "done": 1})
         self.assertFalse(payload["ready_for_bundle"])
+        self.assertEqual(payload["evidence_level"], "planned")
         self.assertTrue(payload["has_unexecuted_actions"])
         self.assertEqual(payload["actions"][1]["final_status"], "done")
         self.assertEqual(
@@ -509,6 +510,7 @@ class CalibrationManifestActionTests(unittest.TestCase):
             "uids=sec-a; titles=Section A",
         )
         self.assertIn("Ready for calibration bundle: `no`", markdown)
+        self.assertIn("Evidence level: `planned`", markdown)
         self.assertIn("Has unexecuted actions: `yes`", markdown)
         self.assertIn(
             "| regenerate_stale | readiness_actions | no | planned | 2 | "
@@ -538,6 +540,7 @@ class CalibrationManifestActionTests(unittest.TestCase):
         self.assertFalse(summary["has_failures"])
         self.assertFalse(summary["has_unexecuted_actions"])
         self.assertTrue(summary["ready_for_bundle"])
+        self.assertEqual(summary["evidence_level"], "proof")
 
     def test_action_execution_summary_blocks_failed_actions(self):
         action = ManifestAction(
@@ -558,6 +561,7 @@ class CalibrationManifestActionTests(unittest.TestCase):
         self.assertEqual(summary["failure_statuses"], ["error"])
         self.assertTrue(summary["has_failures"])
         self.assertFalse(summary["ready_for_bundle"])
+        self.assertEqual(summary["evidence_level"], "failed")
 
     def test_main_refuses_execute_without_explicit_selection(self):
         with tempfile.TemporaryDirectory() as tmp:

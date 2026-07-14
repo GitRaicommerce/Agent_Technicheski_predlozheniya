@@ -115,6 +115,24 @@ def action_execution_summary(reports: list[dict[str, Any]]) -> dict[str, Any]:
             except (TypeError, ValueError):
                 status_count = 0
             status_counts[status_key] = status_counts.get(status_key, 0) + status_count
+    has_failures = failure_report_count > 0
+    has_unexecuted_actions = unexecuted_report_count > 0
+    ready_for_bundle = (
+        bool(reports)
+        and ready_report_count == len(reports)
+        and failure_report_count == 0
+        and unexecuted_report_count == 0
+    )
+    if not reports:
+        evidence_level = "none"
+    elif has_failures:
+        evidence_level = "failed"
+    elif has_unexecuted_actions:
+        evidence_level = "planned"
+    elif ready_for_bundle:
+        evidence_level = "proof"
+    else:
+        evidence_level = "insufficient"
     return {
         "report_count": len(reports),
         "total_actions": total_actions,
@@ -123,12 +141,10 @@ def action_execution_summary(reports: list[dict[str, Any]]) -> dict[str, Any]:
         "ready_report_count": ready_report_count,
         "failure_report_count": failure_report_count,
         "unexecuted_report_count": unexecuted_report_count,
-        "has_failures": failure_report_count > 0,
-        "has_unexecuted_actions": unexecuted_report_count > 0,
-        "ready_for_bundle": bool(reports)
-        and ready_report_count == len(reports)
-        and failure_report_count == 0
-        and unexecuted_report_count == 0,
+        "has_failures": has_failures,
+        "has_unexecuted_actions": has_unexecuted_actions,
+        "ready_for_bundle": ready_for_bundle,
+        "evidence_level": evidence_level,
     }
 
 
@@ -769,6 +785,10 @@ def render_manifest(
                 f"`{action_summary['report_count']}` files, "
                 f"`{action_summary['total_actions']}` actions"
             )
+        )
+        lines.append(
+            "- Action evidence level: "
+            f"`{action_summary['evidence_level']}`"
         )
         lines.append(
             "- Action evidence ready for next bundle: "
