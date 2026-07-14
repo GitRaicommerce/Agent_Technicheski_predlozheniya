@@ -51,6 +51,8 @@ def _set_job_result(
         "sections": results,
         "failed_sections": failed_sections,
     }
+    if previous_result.get("target_guidance") is not None:
+        job.result_json["target_guidance"] = previous_result.get("target_guidance")
 
 
 def _generation_statuses_by_section(
@@ -87,6 +89,67 @@ def _target_section_uids(job: GenerationJob) -> set[str] | None:
         return None
 
     return {str(uid) for uid in target_uids if uid}
+
+
+def _target_guidance_by_section(job: GenerationJob) -> dict[str, dict[str, Any]]:
+    result_json = job.result_json if isinstance(job.result_json, dict) else {}
+    raw_guidance = result_json.get("target_guidance")
+    if not isinstance(raw_guidance, dict):
+        return {}
+
+    guidance_by_section: dict[str, dict[str, Any]] = {}
+    for section_uid, guidance in raw_guidance.items():
+        if not section_uid or not isinstance(guidance, dict):
+            continue
+        guidance_by_section[str(section_uid)] = guidance
+    return guidance_by_section
+
+
+def _merge_section_drafting_guidance(
+    base_guidance: Any,
+    targeted_guidance: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    if isinstance(base_guidance, dict):
+        merged: dict[str, Any] = {
+            key: value
+            for key, value in base_guidance.items()
+        }
+    else:
+        merged = {}
+
+    if not targeted_guidance:
+        return merged or None
+
+    existing_instructions = [
+        str(item).strip()
+        for item in merged.get("instructions") or []
+        if str(item).strip()
+    ]
+    targeted_instructions = [
+        str(item).strip()
+        for item in targeted_guidance.get("instructions") or []
+        if str(item).strip()
+    ]
+    if targeted_instructions:
+        merged["instructions"] = existing_instructions + targeted_instructions
+
+    missing_items = [
+        item
+        for item in targeted_guidance.get("missing_requirement_items") or []
+        if isinstance(item, dict)
+    ]
+    if missing_items:
+        merged["missing_requirement_items"] = missing_items
+
+    missing_ids = [
+        str(item).strip()
+        for item in targeted_guidance.get("missing_requirement_ids") or []
+        if str(item).strip()
+    ]
+    if missing_ids:
+        merged["missing_requirement_ids"] = missing_ids
+
+    return merged or None
 
 
 def _targeted_sections(
@@ -175,13 +238,71 @@ async def create_drafting_requirements_job(project: Project, db) -> GenerationJo
     if not section_uids:
         raise ValueError("No selected sections with missing requirements to regenerate.")
 
+    target_guidance = _missing_requirement_target_guidance(missing_sections)
+
     return await create_drafting_job(
         project=project,
         db=db,
         target_section_uids=section_uids,
         target_reason="missing_requirements",
+        target_guidance=target_guidance,
         job_type="drafting_requirements",
     )
+
+
+def _missing_requirement_target_guidance(
+    missing_sections: list[dict[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    guidance_by_section: dict[str, dict[str, Any]] = {}
+    for section in missing_sections:
+        section_uid = str(section.get("section_uid") or "")
+        if not section_uid:
+            continue
+        section_guidance = guidance_by_section.setdefault(
+            section_uid,
+            {
+                "instructions": [],
+                "missing_requirement_ids": [],
+                "missing_requirement_items": [],
+            },
+        )
+        missing_ids = [
+            str(item)
+            for item in section.get("missing_requirement_ids") or []
+            if item is not None
+        ]
+        for requirement_id in missing_ids:
+            if requirement_id not in section_guidance["missing_requirement_ids"]:
+                section_guidance["missing_requirement_ids"].append(requirement_id)
+
+        for item in section.get("missing_items") or []:
+            if not isinstance(item, dict):
+                continue
+            requirement_id = str(item.get("id") or "")
+            if requirement_id and requirement_id not in section_guidance[
+                "missing_requirement_ids"
+            ]:
+                section_guidance["missing_requirement_ids"].append(requirement_id)
+            guidance_text = str(item.get("remediation_guidance") or "").strip()
+            if guidance_text and guidance_text not in section_guidance["instructions"]:
+                section_guidance["instructions"].append(guidance_text)
+            section_guidance["missing_requirement_items"].append(
+                {
+                    "id": requirement_id,
+                    "text": item.get("text"),
+                    "reason": item.get("reason"),
+                    "remediation_guidance": guidance_text or None,
+                    "missing_terms": item.get("missing_terms") or [],
+                    "required_match_count": item.get("required_match_count"),
+                    "required_coherent_match_count": item.get(
+                        "required_coherent_match_count"
+                    ),
+                    "required_operational_signal_count": item.get(
+                        "required_operational_signal_count"
+                    ),
+                }
+            )
+    return guidance_by_section
 
 
 async def create_drafting_job(
@@ -190,19 +311,26 @@ async def create_drafting_job(
     *,
     target_section_uids: list[str] | None = None,
     target_reason: str | None = None,
+    target_guidance: dict[str, dict[str, Any]] | None = None,
     job_type: str = "drafting_all",
 ) -> GenerationJob:
     trace_id = str(uuid.uuid4())
+    result_json = None
+    if target_section_uids is not None:
+        result_json = {
+            "target_section_uids": target_section_uids,
+            "target_reason": target_reason,
+        }
+        if target_guidance is not None:
+            result_json["target_guidance"] = target_guidance
+
     job = GenerationJob(
         id=str(uuid.uuid4()),
         project_id=project.id,
         job_type=job_type,
         status="queued",
         trace_id=trace_id,
-        result_json={
-            "target_section_uids": target_section_uids,
-            "target_reason": target_reason,
-        } if target_section_uids is not None else None,
+        result_json=result_json,
     )
     db.add(job)
     await db.flush()
@@ -290,6 +418,7 @@ async def _run_drafting_all_job(job: GenerationJob, db) -> None:
     all_sections: list[dict[str, Any]] = []
     _collect_sections(outline.outline_json.get("sections", []), all_sections)
     target_uids = _target_section_uids(job)
+    target_guidance = _target_guidance_by_section(job)
     if target_uids is not None:
         pending_sections = _targeted_sections(all_sections, target_uids)
         section_scope_count = len(pending_sections)
@@ -336,7 +465,10 @@ async def _run_drafting_all_job(job: GenerationJob, db) -> None:
         title = section.get("title", "")
         requirements = section.get("requirements", [])
         requirement_items = section.get("requirement_checklist_items", [])
-        drafting_guidance = section.get("drafting_guidance")
+        drafting_guidance = _merge_section_drafting_guidance(
+            section.get("drafting_guidance"),
+            target_guidance.get(str(uid)),
+        )
 
         job.current_section_uid = uid
         job.current_section_title = title

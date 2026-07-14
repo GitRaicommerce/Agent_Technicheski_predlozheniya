@@ -240,6 +240,16 @@ async def test_drafting_prompt_and_saved_generation_include_requirement_coverage
                 "instructions": [
                     "Use the required subtopics as explicit subheadings or developed paragraphs."
                 ],
+                "missing_requirement_items": [
+                    {
+                        "id": "req-schedule",
+                        "text": "Describe the detailed schedule controls.",
+                        "reason": "needs operational evidence",
+                        "remediation_guidance": (
+                            "Add roles, control records, and acceptance evidence."
+                        ),
+                    }
+                ],
             },
         )
 
@@ -249,6 +259,9 @@ async def test_drafting_prompt_and_saved_generation_include_requirement_coverage
     assert "SECTION REQUIREMENT CHECKLIST" in prompt
     assert "SECTION STRUCTURE PLAN" in prompt
     assert "Detailed linear schedule" in prompt
+    assert "Missing requirements to repair" in prompt
+    assert "id=req-schedule [needs operational evidence]" in prompt
+    assert "repair: Add roles, control records, and acceptance evidence." in prompt
     assert "DRAFTING BLUEPRINT" in prompt
     assert "SECTION DEPTH TARGET" in prompt
     assert "response plan:" in prompt

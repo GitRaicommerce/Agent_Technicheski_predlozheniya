@@ -353,6 +353,23 @@ def _format_section_drafting_guidance(guidance: dict[str, Any] | None) -> str:
         lines.append("- Writing plan:")
         lines.extend(f"  - {instruction}" for instruction in instructions[:12])
 
+    missing_items = [
+        item
+        for item in guidance.get("missing_requirement_items") or []
+        if isinstance(item, dict)
+    ]
+    if missing_items:
+        lines.append("- Missing requirements to repair:")
+        for item in missing_items[:20]:
+            reason = str(item.get("reason") or "").strip()
+            suffix = f" [{reason}]" if reason else ""
+            lines.append(
+                f"  - id={item.get('id')}{suffix}: {item.get('text')}"
+            )
+            remediation = str(item.get("remediation_guidance") or "").strip()
+            if remediation:
+                lines.append(f"    repair: {remediation}")
+
     source_refs = [
         str(item).strip()
         for item in guidance.get("source_refs") or []

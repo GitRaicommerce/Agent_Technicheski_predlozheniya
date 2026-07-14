@@ -148,6 +148,7 @@
 - Added per-requirement remediation guidance to export readiness JSON and markdown reports, so pre-export blockers now explain how to repair missing concepts, weak coherent passages, and missing operational evidence.
 - Surfaced per-requirement remediation guidance in the Generations panel, so users can see the exact repair instruction beside each missing checklist item before choosing regeneration or manual edits.
 - Added a short remediation hint to the DOCX export warning for missing requirements, pulling the first actionable guidance items directly from the readiness payload.
+- Connected missing-requirements remediation guidance into regeneration jobs and drafting prompts, so targeted reruns carry the exact missing checklist ids, reasons, and repair instructions from export readiness.
 
 ## Active Goals
 

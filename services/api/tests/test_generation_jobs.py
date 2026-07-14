@@ -309,6 +309,24 @@ async def test_generation_job_targets_requested_sections(mock_db):
         result_json={
             "target_section_uids": [target_uid],
             "target_reason": "stale_selected",
+            "target_guidance": {
+                target_uid: {
+                    "instructions": [
+                        "Regenerate this section with the missing control record."
+                    ],
+                    "missing_requirement_ids": ["req-control"],
+                    "missing_requirement_items": [
+                        {
+                            "id": "req-control",
+                            "text": "Describe the control record.",
+                            "reason": "needs operational evidence",
+                            "remediation_guidance": (
+                                "Add operational evidence for the control record."
+                            ),
+                        }
+                    ],
+                }
+            },
         },
         error=None,
         completed_at=None,
@@ -355,9 +373,26 @@ async def test_generation_job_targets_requested_sections(mock_db):
     assert run_drafting.await_args.kwargs["section_drafting_guidance"] == {
         "requirement_count": 2,
         "required_subtopics": ["organization", "controls"],
+        "instructions": [
+            "Regenerate this section with the missing control record."
+        ],
+        "missing_requirement_ids": ["req-control"],
+        "missing_requirement_items": [
+            {
+                "id": "req-control",
+                "text": "Describe the control record.",
+                "reason": "needs operational evidence",
+                "remediation_guidance": (
+                    "Add operational evidence for the control record."
+                ),
+            }
+        ],
     }
     assert job.result_json["target_section_uids"] == [target_uid]
     assert job.result_json["target_reason"] == "stale_selected"
+    assert job.result_json["target_guidance"][target_uid]["missing_requirement_ids"] == [
+        "req-control"
+    ]
 
 
 @pytest.mark.asyncio
@@ -446,10 +481,34 @@ async def test_create_drafting_requirements_job_targets_missing_requirement_sect
                         {
                             "section_uid": "sec-missing",
                             "missing_requirement_ids": ["req-1"],
+                            "missing_items": [
+                                {
+                                    "id": "req-1",
+                                    "text": "Describe missing control.",
+                                    "reason": "needs operational evidence",
+                                    "remediation_guidance": (
+                                        "Regenerate with a control record and owner."
+                                    ),
+                                    "missing_terms": ["control", "owner"],
+                                    "required_match_count": 2,
+                                    "required_coherent_match_count": 2,
+                                    "required_operational_signal_count": 2,
+                                }
+                            ],
                         },
                         {
                             "section_uid": "sec-missing",
                             "missing_requirement_ids": ["req-2"],
+                            "missing_items": [
+                                {
+                                    "id": "req-2",
+                                    "text": "Describe missing acceptance.",
+                                    "reason": "missing key terms",
+                                    "remediation_guidance": (
+                                        "Regenerate with acceptance evidence."
+                                    ),
+                                }
+                            ],
                         },
                     ]
                 }
@@ -462,6 +521,41 @@ async def test_create_drafting_requirements_job_targets_missing_requirement_sect
     assert job.result_json == {
         "target_section_uids": ["sec-missing"],
         "target_reason": "missing_requirements",
+        "target_guidance": {
+            "sec-missing": {
+                "instructions": [
+                    "Regenerate with a control record and owner.",
+                    "Regenerate with acceptance evidence.",
+                ],
+                "missing_requirement_ids": ["req-1", "req-2"],
+                "missing_requirement_items": [
+                    {
+                        "id": "req-1",
+                        "text": "Describe missing control.",
+                        "reason": "needs operational evidence",
+                        "remediation_guidance": (
+                            "Regenerate with a control record and owner."
+                        ),
+                        "missing_terms": ["control", "owner"],
+                        "required_match_count": 2,
+                        "required_coherent_match_count": 2,
+                        "required_operational_signal_count": 2,
+                    },
+                    {
+                        "id": "req-2",
+                        "text": "Describe missing acceptance.",
+                        "reason": "missing key terms",
+                        "remediation_guidance": (
+                            "Regenerate with acceptance evidence."
+                        ),
+                        "missing_terms": [],
+                        "required_match_count": None,
+                        "required_coherent_match_count": None,
+                        "required_operational_signal_count": None,
+                    },
+                ],
+            }
+        },
     }
     load_selected.assert_awaited_once_with(project.id, mock_db)
     build_readiness.assert_awaited_once_with(
