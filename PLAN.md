@@ -180,6 +180,7 @@
 - Surfaced compact missing-requirement reason summaries directly in the DOCX export warning, so users can see the blocker types before opening the full readiness report or Generations panel.
 - Added structured missing-requirement reason counts to calibration manifest JSON actions and before/after comparison reports, so remediation cycles can track whether distinctive-detail, coherent-passage, operational-evidence, or key-term blockers actually decrease.
 - Preserved missing-requirement reason counts in calibration action execution JSON and Markdown reports, so remediation evidence records why a missing-requirements action was planned or executed.
+- Aggregated missing-requirement reason evidence from attached calibration action reports back into calibration bundle Markdown and JSON summaries, so follow-up bundles show which blocker types were actually targeted by remediation evidence.
 
 ## Active Goals
 

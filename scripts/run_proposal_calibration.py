@@ -73,6 +73,7 @@ def load_action_execution_reports(paths: list[Path]) -> list[dict[str, Any]]:
 
 def action_execution_summary(reports: list[dict[str, Any]]) -> dict[str, Any]:
     status_counts: dict[str, int] = {}
+    missing_reason_counts: dict[str, int] = {}
     total_actions = 0
     executed_actions = 0
     ready_report_count = 0
@@ -106,6 +107,23 @@ def action_execution_summary(reports: list[dict[str, Any]]) -> dict[str, Any]:
             failure_report_count += 1
         if report_has_unexecuted:
             unexecuted_report_count += 1
+        for action in report.get("actions") or []:
+            if not isinstance(action, dict):
+                continue
+            raw_reason_counts = action.get("missing_reason_counts") or {}
+            if not isinstance(raw_reason_counts, dict):
+                continue
+            for reason, count in raw_reason_counts.items():
+                reason_label = str(reason).strip()
+                if not reason_label:
+                    continue
+                try:
+                    reason_count = int(count)
+                except (TypeError, ValueError):
+                    reason_count = 0
+                missing_reason_counts[reason_label] = (
+                    missing_reason_counts.get(reason_label, 0) + reason_count
+                )
         if not raw_counts:
             continue
         for status, count in raw_counts.items():
@@ -138,6 +156,9 @@ def action_execution_summary(reports: list[dict[str, Any]]) -> dict[str, Any]:
         "total_actions": total_actions,
         "executed_actions": executed_actions,
         "status_counts": status_counts,
+        "missing_reason_counts": dict(
+            sorted(missing_reason_counts.items(), key=lambda item: (-item[1], item[0]))
+        ),
         "ready_report_count": ready_report_count,
         "failure_report_count": failure_report_count,
         "unexecuted_report_count": unexecuted_report_count,
@@ -848,6 +869,11 @@ def render_manifest(
             lines.append("- Final action/job statuses:")
             for status, count in sorted(status_counts.items()):
                 lines.append(f"  - `{status}`: `{count}`")
+        missing_reason_counts = action_summary.get("missing_reason_counts") or {}
+        if missing_reason_counts:
+            lines.append("- Missing requirement reasons addressed:")
+            for reason, count in missing_reason_counts.items():
+                lines.append(f"  - `{reason}`: `{count}`")
     else:
         lines.append(
             "- `none`: No remediation action execution report was attached to this bundle."

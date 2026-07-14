@@ -133,6 +133,23 @@ class RunProposalCalibrationTests(unittest.TestCase):
                     "focus": "outline mapping",
                 }
             ],
+            action_report_paths=[Path("out/actions.json")],
+            action_execution_reports=[
+                {
+                    "total_actions": 1,
+                    "executed_actions": 1,
+                    "status_counts": {"done": 1},
+                    "ready_for_bundle": True,
+                    "actions": [
+                        {
+                            "missing_reason_counts": {
+                                "missing distinctive requirement detail": 2,
+                                "needs coherent passage": 1,
+                            }
+                        }
+                    ],
+                }
+            ],
         )
 
         self.assertIn("Mode: `non-mutating`", manifest)
@@ -152,6 +169,10 @@ class RunProposalCalibrationTests(unittest.TestCase):
         self.assertIn("`10` generated / `12` reference", manifest)
         self.assertIn("`2400` generated / `8000` reference", manifest)
         self.assertIn("Generated/reference volume ratio: `0.30`", manifest)
+        self.assertIn("Action execution reports: `1` files, `1` actions", manifest)
+        self.assertIn("Missing requirement reasons addressed", manifest)
+        self.assertIn("`missing distinctive requirement detail`: `2`", manifest)
+        self.assertIn("`needs coherent passage`: `1`", manifest)
         self.assertIn("resolve export blockers", manifest)
         self.assertIn("Universal Topic Coverage", manifest)
         self.assertIn("Gap calibration focus summary", manifest)
@@ -220,12 +241,28 @@ class RunProposalCalibrationTests(unittest.TestCase):
                     "status_counts": {"done": 1, "error": 1},
                     "ready_for_bundle": False,
                     "has_failures": True,
+                    "actions": [
+                        {
+                            "missing_reason_counts": {
+                                "missing distinctive requirement detail": 2,
+                                "needs operational evidence": 1,
+                            }
+                        }
+                    ],
                 },
                 {
                     "total_actions": 1,
                     "executed_actions": 1,
                     "status_counts": {"done": 1},
                     "ready_for_bundle": True,
+                    "actions": [
+                        {
+                            "missing_reason_counts": {
+                                "needs operational evidence": 1,
+                                "needs coherent passage": 1,
+                            }
+                        }
+                    ],
                 },
             ]
         )
@@ -240,6 +277,14 @@ class RunProposalCalibrationTests(unittest.TestCase):
         self.assertTrue(summary["has_failures"])
         self.assertFalse(summary["ready_for_bundle"])
         self.assertEqual(summary["evidence_level"], "failed")
+        self.assertEqual(
+            summary["missing_reason_counts"],
+            {
+                "needs operational evidence": 2,
+                "missing distinctive requirement detail": 2,
+                "needs coherent passage": 1,
+            },
+        )
 
     def test_action_execution_summary_derives_legacy_report_verdicts(self):
         summary = action_execution_summary(
@@ -569,6 +614,14 @@ class RunProposalCalibrationTests(unittest.TestCase):
                         "schema_version": "calibration_action_execution.v1",
                         "total_actions": 2,
                         "status_counts": {"done": 1, "error": 1},
+                        "actions": [
+                            {
+                                "missing_reason_counts": {
+                                    "missing distinctive requirement detail": 2,
+                                    "needs operational evidence": 1,
+                                }
+                            }
+                        ],
                     }
                 ],
             )
@@ -669,6 +722,13 @@ class RunProposalCalibrationTests(unittest.TestCase):
         self.assertFalse(manifest["action_execution_summary"]["ready_for_bundle"])
         self.assertTrue(manifest["action_execution_summary"]["has_failures"])
         self.assertEqual(manifest["action_execution_summary"]["evidence_level"], "failed")
+        self.assertEqual(
+            manifest["action_execution_summary"]["missing_reason_counts"],
+            {
+                "missing distinctive requirement detail": 2,
+                "needs operational evidence": 1,
+            },
+        )
         self.assertEqual(
             manifest["action_execution_reports"][0]["schema_version"],
             "calibration_action_execution.v1",
