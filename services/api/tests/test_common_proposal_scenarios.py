@@ -898,6 +898,88 @@ def test_common_missing_requirement_remediation_flows_into_targeted_drafting_gui
     assert repaired_coverage["covered_ids"] == ["req-quality-acceptance"]
 
 
+def test_common_similar_operational_requirements_need_distinctive_remediation():
+    requirement_items = [
+        {
+            "id": "req-input-control",
+            "text": (
+                "Describe input quality control for delivered materials, "
+                "inspection protocol, responsible role, and rejection record."
+            ),
+            "importance": "mandatory",
+            "category": "quality",
+            "category_label": "Quality control",
+            "topic": "input material control",
+        },
+        {
+            "id": "req-final-acceptance",
+            "text": (
+                "Describe final acceptance control for completed works, "
+                "handover protocol, responsible role, and corrective record."
+            ),
+            "importance": "mandatory",
+            "category": "quality",
+            "category_label": "Quality control",
+            "topic": "final acceptance handover",
+        },
+    ]
+    input_only_text = (
+        "For delivered materials, the contractor performs input quality control "
+        "through an inspection protocol, assigns a responsible role, keeps a "
+        "rejection record, and applies corrective actions."
+    )
+    coverage = assess_requirement_coverage(input_only_text, requirement_items)
+
+    readiness_section = _missing_requirement_coverage(
+        SimpleNamespace(
+            id="gen-quality",
+            section_uid="sec-quality",
+            flags_json={"requirement_coverage": coverage},
+        )
+    )
+
+    assert coverage["covered_ids"] == ["req-input-control"]
+    assert coverage["missing_ids"] == ["req-final-acceptance"]
+    assert readiness_section is not None
+    missing_item = readiness_section["missing_items"][0]
+    assert missing_item["id"] == "req-final-acceptance"
+    assert missing_item["reason"] == "missing distinctive requirement detail"
+    assert "include distinctive requirement details" in missing_item[
+        "remediation_guidance"
+    ]
+
+    target_guidance = _missing_requirement_target_guidance([readiness_section])
+    section_guidance = _merge_section_drafting_guidance(
+        {
+            "requirement_count": 2,
+            "required_subtopics": ["input material control", "final acceptance"],
+            "instructions": ["Keep each quality-control stage separate."],
+        },
+        target_guidance["sec-quality"],
+    )
+    guidance_prompt = _format_section_drafting_guidance(section_guidance)
+
+    assert "id=req-final-acceptance [missing distinctive requirement detail]" in (
+        guidance_prompt
+    )
+    assert "distinctive" in guidance_prompt
+    assert "include distinctive requirement details" in guidance_prompt
+    assert "final" in guidance_prompt
+    assert "handover" in guidance_prompt
+
+    repaired_text = (
+        input_only_text
+        + " For completed works, the contractor performs final acceptance "
+        "control through a handover protocol, assigns a responsible role, "
+        "keeps a corrective record, and documents acceptance evidence."
+    )
+    repaired_coverage = assess_requirement_coverage(repaired_text, requirement_items)
+    assert repaired_coverage["covered_ids"] == [
+        "req-input-control",
+        "req-final-acceptance",
+    ]
+
+
 def test_common_requirement_coverage_rejects_scattered_keyword_coverage():
     requirement_items = [
         {

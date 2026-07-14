@@ -169,6 +169,7 @@
 - Validated the real Pernik calibration remediation dry-run in actions-only mode and improved legacy manifest action reports so planned targets remain visible even when older manifests only carry section summaries.
 - Added explicit remediation action evidence levels (`planned`, `proof`, `failed`, etc.) to action reports, calibration manifests, and before/after comparisons so dry-run calibration evidence cannot be mistaken for completed remediation.
 - Tightened the strict calibration remediation cycle gate so `--require-action-ready` now requires proof-level action evidence when available, while remaining compatible with older ready reports that predate evidence levels.
+- Added common-scenario regression coverage for similar operational requirements, proving distinctive missing-requirement diagnostics flow from coverage assessment through export readiness and targeted drafting guidance into a repaired passing section.
 
 ## Active Goals
 
