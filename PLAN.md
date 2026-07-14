@@ -174,6 +174,7 @@
 - Preserved distinctive missing-requirement diagnostics in targeted regeneration job guidance, so reruns for similar operational requirements keep the exact distinguishing terms and required distinctive match counts.
 - Surfaced structured missing-requirement diagnostics inside targeted drafting guidance prompts, including distinctive detail counts and distinguishing terms for similar operational requirements.
 - Surfaced distinctive missing-requirement diagnostics in the Generations panel UI and frontend API types so users can see missing distinguishing details directly before triggering coverage regeneration.
+- Added distinctive missing-requirement diagnostics to Markdown DOCX readiness reports, so calibration bundles show missing distinguishing terms and counts before regeneration.
 
 ## Active Goals
 

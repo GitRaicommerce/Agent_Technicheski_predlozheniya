@@ -204,6 +204,17 @@ def render_export_readiness_report(readiness: dict[str, Any]) -> str:
                     required_operational = item.get(
                         "required_operational_signal_count"
                     )
+                    distinctive_terms = [
+                        str(term)
+                        for term in item.get("distinctive_terms") or []
+                        if term
+                    ]
+                    distinctive_matches = [
+                        str(term)
+                        for term in item.get("distinctive_matches") or []
+                        if term
+                    ]
+                    required_distinctive = item.get("required_distinctive_count")
                     if isinstance(matched_ratio, (int, float)):
                         diagnostics.append(f"matched_ratio={matched_ratio}")
                     if isinstance(coherent_ratio, (int, float)):
@@ -213,6 +224,16 @@ def render_export_readiness_report(readiness: dict[str, Any]) -> str:
                             "operational_signals="
                             f"{len(operational_signals)}/{required_operational}"
                         )
+                    if isinstance(required_distinctive, int) and required_distinctive:
+                        diagnostics.append(
+                            "distinctive="
+                            f"{len(distinctive_matches)}/{required_distinctive}"
+                        )
+                        if distinctive_terms:
+                            diagnostics.append(
+                                "distinctive_terms="
+                                + ", ".join(distinctive_terms[:8])
+                            )
                     if diagnostics:
                         lines.append(f"    - diagnostics: {', '.join(diagnostics)}")
                     guidance = _truncate(item.get("remediation_guidance") or "")
