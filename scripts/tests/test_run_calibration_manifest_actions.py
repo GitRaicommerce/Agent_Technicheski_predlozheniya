@@ -147,6 +147,50 @@ class CalibrationManifestActionTests(unittest.TestCase):
             "gap=grounding and checklist coverage, reference=Environment",
         )
 
+    def test_manifest_actions_dedupe_identical_readiness_targets(self):
+        manifest = {
+            "readiness_actions": [
+                {
+                    "action_key": "regenerate_quality_depth",
+                    "api_method": "POST",
+                    "api_path": "/api/v1/agents/project-1/remediation-actions/regenerate_quality_depth",
+                    "request_json": {
+                        "section_uids": ["sec-quality"],
+                        "section_title_hints": ["Quality"],
+                    },
+                },
+                {
+                    "action_key": "regenerate_quality_depth",
+                    "api_method": "POST",
+                    "api_path": "/api/v1/agents/project-1/remediation-actions/regenerate_quality_depth",
+                    "request_json": {
+                        "section_title_hints": ["Quality"],
+                        "section_uids": ["sec-quality"],
+                    },
+                },
+                {
+                    "action_key": "regenerate_quality_depth",
+                    "api_method": "POST",
+                    "api_path": "/api/v1/agents/project-1/remediation-actions/regenerate_quality_depth",
+                    "request_json": {"section_uids": ["sec-risk"]},
+                },
+            ]
+        }
+
+        actions = manifest_actions(manifest)
+
+        self.assertEqual(len(actions), 2)
+        self.assertEqual(
+            [action.request_json for action in actions],
+            [
+                {
+                    "section_uids": ["sec-quality"],
+                    "section_title_hints": ["Quality"],
+                },
+                {"section_uids": ["sec-risk"]},
+            ],
+        )
+
     def test_manifest_actions_keep_same_endpoint_when_targets_differ(self):
         manifest = {
             "gap_priority_rows": [

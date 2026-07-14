@@ -161,6 +161,7 @@
 - Added calibration manifest regression coverage for multi-section readiness targets, proving JSON action payloads and Markdown target summaries preserve all missing-requirement and quality/depth section targets.
 - Made calibration action execution target summaries explicit when long target lists are truncated, so dry-run and execute reports show that additional section ids or title hints exist.
 - Made Markdown calibration manifest target summaries explicit when long readiness-action target lists are truncated, matching the action execution and comparison reports.
+- Hardened calibration action selection deduplication for readiness actions too, so identical target payloads are executed once while distinct same-endpoint targets are preserved.
 
 ## Active Goals
 

@@ -74,7 +74,10 @@ def manifest_actions(manifest: dict[str, Any]) -> list[ManifestAction]:
                 "Manifest readiness action "
                 f"#{index} request_json must be an object"
             )
-        seen.add(_action_dedupe_key(action_key, api_path, request_json))
+        dedupe_key = _action_dedupe_key(action_key, api_path, request_json)
+        if dedupe_key in seen:
+            continue
+        seen.add(dedupe_key)
         actions.append(
             ManifestAction(
                 action_key=action_key,
