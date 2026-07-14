@@ -143,6 +143,7 @@
 - Exposed blueprint anchor match diagnostics in DOCX readiness reports, showing matched/required terms for missing groups or topics so underdistributed sections are easier to repair.
 - Surfaced the same blueprint anchor match diagnostics in the Generations remediation panel so users can see partial topic matches directly before running detailed regeneration.
 - Fed blueprint anchor match diagnostics into drafting quality-repair prompts, so targeted rewrites know which missing groups/topics have zero or partial term coverage.
+- Enriched drafting quality-repair feedback for missing checklist coverage with required/matched term counts, coherent-passage counts, and operational-evidence signal counts so rewrites know exactly why a requirement failed deterministic coverage.
 
 ## Active Goals
 

@@ -346,11 +346,13 @@ async def test_drafting_repairs_short_or_missing_requirement_coverage_before_sav
         )
 
     saved_generation = mock_db.add.call_args.args[0]
+    repair_prompt = llm_call.await_args_list[1].kwargs["user_message"]
 
     assert llm_call.await_count == 2
-    assert "QUALITY REPAIR REQUIRED" in llm_call.await_args_list[1].kwargs[
-        "user_message"
-    ]
+    assert "QUALITY REPAIR REQUIRED" in repair_prompt
+    assert "matched terms:" in repair_prompt
+    assert "coherent terms:" in repair_prompt
+    assert "operational evidence:" in repair_prompt
     assert saved_generation.text == repaired_sentence * 16
     assert saved_generation.flags_json["quality_repair_attempted"] is True
     assert saved_generation.flags_json["quality_repair_attempt_count"] == 1

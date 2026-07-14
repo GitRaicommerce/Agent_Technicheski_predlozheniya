@@ -146,9 +146,34 @@ def _quality_repair_feedback(
         lines.append("Missing or underdeveloped checklist items:")
         for item in missing_items[:20]:
             reason_bits = []
+            matched_terms = [
+                str(term)
+                for term in item.get("matched_terms") or []
+                if term
+            ]
+            required_match_count = item.get("required_match_count")
+            if isinstance(required_match_count, int) and required_match_count > 0:
+                reason_bits.append(
+                    "matched terms: "
+                    f"{len(matched_terms)}/{required_match_count} required"
+                )
             if item.get("missing_terms"):
                 reason_bits.append(
                     "missing terms: " + ", ".join(map(str, item["missing_terms"][:8]))
+                )
+            coherent_terms = [
+                str(term)
+                for term in item.get("coherent_matched_terms") or []
+                if term
+            ]
+            required_coherent_count = item.get("required_coherent_match_count")
+            if (
+                isinstance(required_coherent_count, int)
+                and required_coherent_count > 0
+            ):
+                reason_bits.append(
+                    "coherent terms: "
+                    f"{len(coherent_terms)}/{required_coherent_count} required"
                 )
             if item.get("coherent_matched_ratio") is not None:
                 reason_bits.append(
@@ -157,7 +182,16 @@ def _quality_repair_feedback(
             if item.get("requires_operational_detail") and item.get(
                 "required_operational_signal_count"
             ):
-                reason_bits.append("needs operational evidence")
+                operational_signals = [
+                    str(signal)
+                    for signal in item.get("operational_signals") or []
+                    if signal
+                ]
+                reason_bits.append(
+                    "operational evidence: "
+                    f"{len(operational_signals)}/"
+                    f"{item.get('required_operational_signal_count')} signals"
+                )
             reason = "; ".join(reason_bits) or "not covered"
             lines.append(f"- id={item.get('id')}: {item.get('text')} ({reason})")
     if depth_issues:
