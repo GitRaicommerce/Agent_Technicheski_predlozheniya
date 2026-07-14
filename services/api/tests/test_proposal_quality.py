@@ -280,6 +280,86 @@ def test_generation_depth_rejects_long_text_with_uneven_blueprint_distribution()
     assert balanced["structure_coverage"]["covered_count"] == 4
 
 
+def test_generation_depth_requires_enough_terms_for_multi_word_blueprint_anchors():
+    coverage = {
+        "total": 4,
+        "covered": 4,
+        "missing": 0,
+        "missing_ids": [],
+    }
+    blueprint = {
+        "groups": [
+            {
+                "category": "environment",
+                "label": "Environmental protection",
+                "requirements": [
+                    {"id": "req-dust"},
+                    {"id": "req-waste"},
+                    {"id": "req-soil"},
+                    {"id": "req-water"},
+                ],
+                "topics": [
+                    "dust suppression",
+                    "waste segregation",
+                    "soil protection",
+                    "water pollution prevention",
+                ],
+                "topic_details": [
+                    {"topic": "dust suppression", "requirement_ids": ["req-dust"]},
+                    {"topic": "waste segregation", "requirement_ids": ["req-waste"]},
+                    {"topic": "soil protection", "requirement_ids": ["req-soil"]},
+                    {
+                        "topic": "water pollution prevention",
+                        "requirement_ids": ["req-water"],
+                    },
+                ],
+            }
+        ]
+    }
+    partial_anchor_text = (
+        "The environmental section repeats monitoring control and protection "
+        "with responsible roles, records, corrective actions, acceptance "
+        "evidence, reporting sequence, and site coordination. "
+    )
+    developed_topic_text = _varied_operational_text(
+        [
+            "dust suppression",
+            "waste segregation",
+            "soil protection",
+            "water pollution prevention",
+        ],
+        repeats=25,
+    )
+
+    partial = assess_generation_depth(
+        partial_anchor_text * 90,
+        coverage,
+        drafting_blueprint=blueprint,
+    )
+    developed = assess_generation_depth(
+        developed_topic_text,
+        coverage,
+        drafting_blueprint=blueprint,
+    )
+
+    assert partial["word_count"] >= partial["min_words"]
+    assert partial["structure_coverage"]["covered_count"] < partial[
+        "structure_coverage"
+    ]["required_count"]
+    assert {
+        item["label"] for item in partial["structure_coverage"]["missing"]
+    } == {
+        "dust suppression",
+        "waste segregation",
+        "soil protection",
+        "water pollution prevention",
+    }
+    assert "uneven_blueprint_distribution" in {
+        issue["code"] for issue in partial["issues"]
+    }
+    assert developed["status"] == "ok"
+
+
 def test_generation_depth_target_prompt_matches_export_gate_thresholds():
     coverage = {
         "total": 2,

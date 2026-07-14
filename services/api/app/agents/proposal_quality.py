@@ -181,13 +181,20 @@ def _blueprint_structure_coverage(
     missing: list[dict[str, Any]] = []
     for anchor in anchors:
         matched_terms = sorted(set(anchor["terms"]) & generated_tokens)
+        required_terms = min(
+            len(anchor["terms"]),
+            max(1, ceil(len(anchor["terms"]) * 0.6)),
+        )
+        if len(anchor["terms"]) >= 2:
+            required_terms = max(2, required_terms)
         target = {
             "label": anchor["label"],
             "kind": anchor["kind"],
             "matched_terms": matched_terms,
             "terms": anchor["terms"],
+            "required_terms": required_terms,
         }
-        if matched_terms:
+        if len(matched_terms) >= required_terms:
             covered.append(target)
         else:
             missing.append(target)
