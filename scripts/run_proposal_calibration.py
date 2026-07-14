@@ -74,10 +74,39 @@ def load_action_execution_reports(paths: list[Path]) -> list[dict[str, Any]]:
 def action_execution_summary(reports: list[dict[str, Any]]) -> dict[str, Any]:
     status_counts: dict[str, int] = {}
     total_actions = 0
+    executed_actions = 0
+    ready_report_count = 0
+    failure_report_count = 0
+    unexecuted_report_count = 0
     for report in reports:
         total_actions += int(report.get("total_actions") or 0)
+        executed_actions += int(report.get("executed_actions") or 0)
         raw_counts = report.get("status_counts") or {}
         if not isinstance(raw_counts, dict):
+            raw_counts = {}
+        if "executed_actions" not in report:
+            executed_actions += sum(
+                int(count or 0)
+                for status, count in raw_counts.items()
+                if str(status) != "planned"
+            )
+        report_has_failures = bool(report.get("has_failures"))
+        if "has_failures" not in report:
+            report_has_failures = any(
+                str(status) not in {"done", "executed", "planned"}
+                and int(count or 0) > 0
+                for status, count in raw_counts.items()
+            )
+        report_has_unexecuted = bool(report.get("has_unexecuted_actions"))
+        if "has_unexecuted_actions" not in report:
+            report_has_unexecuted = int(raw_counts.get("planned") or 0) > 0
+        if bool(report.get("ready_for_bundle")):
+            ready_report_count += 1
+        if report_has_failures:
+            failure_report_count += 1
+        if report_has_unexecuted:
+            unexecuted_report_count += 1
+        if not raw_counts:
             continue
         for status, count in raw_counts.items():
             status_key = str(status or "unknown")
@@ -89,7 +118,17 @@ def action_execution_summary(reports: list[dict[str, Any]]) -> dict[str, Any]:
     return {
         "report_count": len(reports),
         "total_actions": total_actions,
+        "executed_actions": executed_actions,
         "status_counts": status_counts,
+        "ready_report_count": ready_report_count,
+        "failure_report_count": failure_report_count,
+        "unexecuted_report_count": unexecuted_report_count,
+        "has_failures": failure_report_count > 0,
+        "has_unexecuted_actions": unexecuted_report_count > 0,
+        "ready_for_bundle": bool(reports)
+        and ready_report_count == len(reports)
+        and failure_report_count == 0
+        and unexecuted_report_count == 0,
     }
 
 
@@ -673,6 +712,18 @@ def render_manifest(
                 f"`{action_summary['total_actions']}` actions"
             )
         )
+        lines.append(
+            "- Action evidence ready for next bundle: "
+            f"`{'yes' if action_summary['ready_for_bundle'] else 'no'}`"
+        )
+        if action_summary["has_failures"]:
+            lines.append(
+                "- Action evidence warning: failed remediation actions are present."
+            )
+        if action_summary["has_unexecuted_actions"]:
+            lines.append(
+                "- Action evidence warning: some remediation actions were only planned."
+            )
         for path in action_report_paths:
             lines.append(f"  - `{_display_path(path)}`")
         status_counts = action_summary.get("status_counts") or {}

@@ -71,7 +71,10 @@ class CompareCalibrationManifestsTests(unittest.TestCase):
                 action_execution_summary={
                     "report_count": 1,
                     "total_actions": 2,
+                    "executed_actions": 2,
                     "status_counts": {"done": 1, "error": 1},
+                    "ready_for_bundle": False,
+                    "failure_report_count": 1,
                 },
             )
         )
@@ -90,6 +93,8 @@ class CompareCalibrationManifestsTests(unittest.TestCase):
         )
         self.assertEqual(summary["execution_report_count"], 1)
         self.assertEqual(summary["executed_action_count"], 2)
+        self.assertFalse(summary["action_evidence_ready"])
+        self.assertEqual(summary["action_evidence_failures"], 1)
         self.assertEqual(
             summary["execution_status_counts"],
             {"done": 1, "error": 1},
@@ -113,7 +118,9 @@ class CompareCalibrationManifestsTests(unittest.TestCase):
             action_execution_summary={
                 "report_count": 1,
                 "total_actions": 2,
+                "executed_actions": 2,
                 "status_counts": {"done": 2},
+                "ready_for_bundle": True,
             },
         )
 
@@ -130,6 +137,7 @@ class CompareCalibrationManifestsTests(unittest.TestCase):
             text,
         )
         self.assertIn("## Action execution evidence", text)
+        self.assertIn("| action evidence ready | 0 | 1 | +1 |", text)
         self.assertIn("| executed actions | 0 | 2 | +2 |", text)
         self.assertIn("| `done` | 0 | 2 | +2 |", text)
         self.assertIn("Run detailed regeneration", text)
@@ -156,13 +164,37 @@ class CompareCalibrationManifestsTests(unittest.TestCase):
                 action_execution_summary={
                     "report_count": 1,
                     "total_actions": 2,
+                    "executed_actions": 2,
                     "status_counts": {"done": 1, "error": 1},
+                    "ready_for_bundle": False,
+                    "failure_report_count": 1,
                 },
             ),
         )
 
+        self.assertIn("| reports with failures | 0 | 1 | +1 |", text)
         self.assertIn("| `error` | 0 | 1 | +1 |", text)
         self.assertIn("Inspect failed remediation jobs", text)
+
+    def test_render_comparison_prioritizes_unexecuted_action_evidence(self):
+        text = render_comparison(
+            manifest(blockers=2, volume_ratio=0.20),
+            manifest(
+                blockers=0,
+                volume_ratio=0.50,
+                action_execution_summary={
+                    "report_count": 1,
+                    "total_actions": 2,
+                    "executed_actions": 0,
+                    "status_counts": {"planned": 2},
+                    "ready_for_bundle": False,
+                    "unexecuted_report_count": 1,
+                },
+            ),
+        )
+
+        self.assertIn("| reports with unexecuted actions | 0 | 1 | +1 |", text)
+        self.assertIn("run remediation with --execute --wait", text)
 
     def test_render_comparison_prioritizes_outline_mapping_after_readiness(self):
         text = render_comparison(

@@ -179,23 +179,44 @@ class RunProposalCalibrationTests(unittest.TestCase):
             [
                 {
                     "total_actions": 2,
+                    "executed_actions": 2,
                     "status_counts": {"done": 1, "error": 1},
+                    "ready_for_bundle": False,
+                    "has_failures": True,
                 },
                 {
                     "total_actions": 1,
+                    "executed_actions": 1,
                     "status_counts": {"done": 1},
+                    "ready_for_bundle": True,
                 },
             ]
         )
 
-        self.assertEqual(
-            summary,
-            {
-                "report_count": 2,
-                "total_actions": 3,
-                "status_counts": {"done": 2, "error": 1},
-            },
+        self.assertEqual(summary["report_count"], 2)
+        self.assertEqual(summary["total_actions"], 3)
+        self.assertEqual(summary["executed_actions"], 3)
+        self.assertEqual(summary["status_counts"], {"done": 2, "error": 1})
+        self.assertEqual(summary["ready_report_count"], 1)
+        self.assertEqual(summary["failure_report_count"], 1)
+        self.assertEqual(summary["unexecuted_report_count"], 0)
+        self.assertTrue(summary["has_failures"])
+        self.assertFalse(summary["ready_for_bundle"])
+
+    def test_action_execution_summary_derives_legacy_report_verdicts(self):
+        summary = action_execution_summary(
+            [
+                {
+                    "total_actions": 2,
+                    "status_counts": {"planned": 2},
+                }
+            ]
         )
+
+        self.assertEqual(summary["executed_actions"], 0)
+        self.assertEqual(summary["unexecuted_report_count"], 1)
+        self.assertTrue(summary["has_unexecuted_actions"])
+        self.assertFalse(summary["ready_for_bundle"])
 
     def test_load_action_execution_reports_rejects_non_object_payload(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -497,6 +518,8 @@ class RunProposalCalibrationTests(unittest.TestCase):
             manifest["action_execution_summary"]["status_counts"],
             {"done": 1, "error": 1},
         )
+        self.assertFalse(manifest["action_execution_summary"]["ready_for_bundle"])
+        self.assertTrue(manifest["action_execution_summary"]["has_failures"])
         self.assertEqual(
             manifest["action_execution_reports"][0]["schema_version"],
             "calibration_action_execution.v1",
@@ -604,7 +627,9 @@ class RunProposalCalibrationTests(unittest.TestCase):
                         {
                             "schema_version": "calibration_action_execution.v1",
                             "total_actions": 1,
+                            "executed_actions": 1,
                             "status_counts": {"done": 1},
+                            "ready_for_bundle": True,
                             "actions": [
                                 {
                                     "action_key": "regenerate_stale",
@@ -680,6 +705,10 @@ class RunProposalCalibrationTests(unittest.TestCase):
                 )
                 self.assertIn(
                     "Action execution reports: `1` files, `1` actions",
+                    paths["manifest"].read_text(encoding="utf-8"),
+                )
+                self.assertIn(
+                    "Action evidence ready for next bundle: `yes`",
                     paths["manifest"].read_text(encoding="utf-8"),
                 )
                 self.assertIn(

@@ -137,6 +137,7 @@
 - Added an `--actions-only` mode to the calibration remediation cycle script so manifest remediation actions can be safely dry-run or reported without rebuilding a calibration bundle, avoiding DB/reference proposal dependencies during action validation.
 - Made the calibration manifest action runner compatible with older manifests by synthesizing the standard remediation dispatcher API path from `action_key` when `api_path` is missing.
 - Added explicit action-execution verdicts to calibration action reports (`ready_for_bundle`, failures, unexecuted actions, and recommendation) so a follow-up calibration bundle is only treated as evidenced after remediation actions are actually executed and completed.
+- Propagated action-execution verdicts into calibration manifests and before/after comparisons, so attached dry-run or failed remediation reports block misleading calibration conclusions until actions are executed with `--execute --wait`.
 
 ## Active Goals
 

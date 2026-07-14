@@ -62,6 +62,19 @@ def _status_counts(value: Any) -> dict[str, int]:
     }
 
 
+def _executed_action_count(summary: dict[str, Any]) -> int:
+    if "executed_actions" in summary:
+        return _int_value(summary.get("executed_actions"))
+    status_counts = _status_counts(summary)
+    if status_counts:
+        return sum(
+            count
+            for status, count in status_counts.items()
+            if status != "planned"
+        )
+    return _int_value(summary.get("total_actions"))
+
+
 def summarize_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
     gates = manifest.get("calibration_gates") or {}
     scorecard = manifest.get("gap_quality_scorecard") or {}
@@ -100,7 +113,22 @@ def summarize_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
         "readiness_action_counts": _action_counts(readiness_actions),
         "gap_action_counts": _action_counts(gap_rows),
         "executed_action_count": _int_value(
-            action_execution_summary.get("total_actions")
+            _executed_action_count(action_execution_summary)
+            if isinstance(action_execution_summary, dict)
+            else 0,
+        ),
+        "action_evidence_ready": bool(
+            action_execution_summary.get("ready_for_bundle")
+            if isinstance(action_execution_summary, dict)
+            else False
+        ),
+        "action_evidence_failures": _int_value(
+            action_execution_summary.get("failure_report_count")
+            if isinstance(action_execution_summary, dict)
+            else 0
+        ),
+        "action_evidence_unexecuted": _int_value(
+            action_execution_summary.get("unexecuted_report_count")
             if isinstance(action_execution_summary, dict)
             else 0
         ),
@@ -157,10 +185,15 @@ def _direction_for_metric(metric: str, before: Any, after: Any) -> str:
 
 def recommendation(before: dict[str, Any], after: dict[str, Any]) -> str:
     failed_actions = after["execution_status_counts"].get("error", 0)
-    if failed_actions > 0:
+    if failed_actions > 0 or after["action_evidence_failures"] > 0:
         return (
             "Inspect failed remediation jobs before interpreting calibration "
             "movement; rerun or fix the failed action execution report entries first."
+        )
+    if after["action_evidence_unexecuted"] > 0:
+        return (
+            "Attached action evidence still contains planned/unexecuted actions; "
+            "run remediation with --execute --wait before interpreting calibration movement."
         )
     if after["readiness_blockers"] > 0:
         return (
@@ -291,6 +324,12 @@ def render_comparison(before_manifest: dict[str, Any], after_manifest: dict[str,
             "| Metric | Before | After | Delta |",
             "| --- | ---: | ---: | ---: |",
             (
+                "| action evidence ready | "
+                f"{int(before['action_evidence_ready'])} | "
+                f"{int(after['action_evidence_ready'])} | "
+                f"{_format_delta(int(before['action_evidence_ready']), int(after['action_evidence_ready']))} |"
+            ),
+            (
                 "| execution reports | "
                 f"{before['execution_report_count']} | "
                 f"{after['execution_report_count']} | "
@@ -301,6 +340,18 @@ def render_comparison(before_manifest: dict[str, Any], after_manifest: dict[str,
                 f"{before['executed_action_count']} | "
                 f"{after['executed_action_count']} | "
                 f"{_format_delta(before['executed_action_count'], after['executed_action_count'])} |"
+            ),
+            (
+                "| reports with failures | "
+                f"{before['action_evidence_failures']} | "
+                f"{after['action_evidence_failures']} | "
+                f"{_format_delta(before['action_evidence_failures'], after['action_evidence_failures'])} |"
+            ),
+            (
+                "| reports with unexecuted actions | "
+                f"{before['action_evidence_unexecuted']} | "
+                f"{after['action_evidence_unexecuted']} | "
+                f"{_format_delta(before['action_evidence_unexecuted'], after['action_evidence_unexecuted'])} |"
             ),
             "",
             "| Final status | Before | After | Delta |",
