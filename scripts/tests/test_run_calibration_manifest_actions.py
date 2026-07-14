@@ -20,6 +20,7 @@ spec.loader.exec_module(manifest_actions_module)
 ManifestAction = manifest_actions_module.ManifestAction
 action_execution_record = manifest_actions_module.action_execution_record
 action_execution_summary = manifest_actions_module.action_execution_summary
+action_target_summary = manifest_actions_module.action_target_summary
 action_url = manifest_actions_module.action_url
 execute_action = manifest_actions_module.execute_action
 job_result_from_action_response = manifest_actions_module.job_result_from_action_response
@@ -379,6 +380,30 @@ class CalibrationManifestActionTests(unittest.TestCase):
                 "titles=Title 1, Title 2, Title 3, Title 4, Title 5, Title 6; "
                 "+2 more titles"
             ),
+        )
+
+    def test_action_target_summary_falls_back_to_legacy_section_summary(self):
+        action = ManifestAction(
+            action_key="regenerate_stale",
+            api_method="POST",
+            api_path="/api/v1/example",
+            section_count=14,
+            summary="Section A; Section B (+12 more)",
+        )
+
+        record = action_execution_record(
+            action,
+            url="http://localhost/api/v1/example",
+            executed=False,
+        )
+
+        self.assertEqual(
+            action_target_summary(action),
+            "sections=Section A; Section B (+12 more)",
+        )
+        self.assertEqual(
+            record["target_summary"],
+            "sections=Section A; Section B (+12 more)",
         )
 
     def test_wait_for_job_result_polls_until_terminal_status(self):

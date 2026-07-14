@@ -166,6 +166,7 @@
 - Added blueprint requirement-id counts to generation depth targets and prompts, making large same-category sections visibly demanding even when they have few groups or topics.
 - Surfaced blueprint requirement-id counts through export readiness JSON, Markdown readiness reports, export warnings, and the Generations remediation panel so shallow-section diagnostics show large same-category checklist load.
 - Tightened requirement coverage for similar operational checklist items by requiring distinctive requirement details, and surfaced those diagnostics into export remediation guidance and drafting repair prompts.
+- Validated the real Pernik calibration remediation dry-run in actions-only mode and improved legacy manifest action reports so planned targets remain visible even when older manifests only carry section summaries.
 
 ## Active Goals
 

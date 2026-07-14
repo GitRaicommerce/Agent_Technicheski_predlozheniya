@@ -307,6 +307,15 @@ def request_target_summary(request_json: dict[str, Any] | None) -> str:
     return "; ".join(parts)
 
 
+def action_target_summary(action: ManifestAction) -> str:
+    target_summary = request_target_summary(action.request_json)
+    if target_summary:
+        return target_summary
+    if action.summary and action.section_count:
+        return "sections=" + action.summary
+    return ""
+
+
 def action_execution_record(
     action: ManifestAction,
     *,
@@ -332,7 +341,7 @@ def action_execution_record(
         "section_count": action.section_count,
         "summary": action.summary,
         "request_json": action.request_json or {},
-        "target_summary": request_target_summary(action.request_json),
+        "target_summary": action_target_summary(action),
         "executed": executed,
         "final_status": final_status,
         "action_result": action_result,
