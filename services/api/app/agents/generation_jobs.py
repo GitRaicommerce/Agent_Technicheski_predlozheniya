@@ -309,7 +309,12 @@ def _missing_requirement_target_guidance(
                     "reason": item.get("reason"),
                     "remediation_guidance": guidance_text or None,
                     "missing_terms": item.get("missing_terms") or [],
+                    "distinctive_terms": item.get("distinctive_terms") or [],
+                    "distinctive_matches": item.get("distinctive_matches") or [],
                     "required_match_count": item.get("required_match_count"),
+                    "required_distinctive_count": item.get(
+                        "required_distinctive_count"
+                    ),
                     "required_coherent_match_count": item.get(
                         "required_coherent_match_count"
                     ),

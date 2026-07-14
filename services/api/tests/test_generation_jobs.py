@@ -647,7 +647,10 @@ async def test_create_drafting_requirements_job_filters_requested_missing_sectio
                     "reason": "needs operational evidence",
                     "remediation_guidance": "Regenerate quality with records.",
                     "missing_terms": [],
+                    "distinctive_terms": [],
+                    "distinctive_matches": [],
                     "required_match_count": None,
+                    "required_distinctive_count": None,
                     "required_coherent_match_count": None,
                     "required_operational_signal_count": None,
                 }
@@ -690,7 +693,14 @@ async def test_create_drafting_requirements_job_targets_missing_requirement_sect
                                         "Regenerate with a control record and owner."
                                     ),
                                     "missing_terms": ["control", "owner"],
+                                    "distinctive_terms": [
+                                        "final",
+                                        "acceptance",
+                                        "handover",
+                                    ],
+                                    "distinctive_matches": [],
                                     "required_match_count": 2,
+                                    "required_distinctive_count": 1,
                                     "required_coherent_match_count": 2,
                                     "required_operational_signal_count": 2,
                                 }
@@ -737,7 +747,14 @@ async def test_create_drafting_requirements_job_targets_missing_requirement_sect
                             "Regenerate with a control record and owner."
                         ),
                         "missing_terms": ["control", "owner"],
+                        "distinctive_terms": [
+                            "final",
+                            "acceptance",
+                            "handover",
+                        ],
+                        "distinctive_matches": [],
                         "required_match_count": 2,
+                        "required_distinctive_count": 1,
                         "required_coherent_match_count": 2,
                         "required_operational_signal_count": 2,
                     },
@@ -749,7 +766,10 @@ async def test_create_drafting_requirements_job_targets_missing_requirement_sect
                             "Regenerate with acceptance evidence."
                         ),
                         "missing_terms": [],
+                        "distinctive_terms": [],
+                        "distinctive_matches": [],
                         "required_match_count": None,
+                        "required_distinctive_count": None,
                         "required_coherent_match_count": None,
                         "required_operational_signal_count": None,
                     },

@@ -949,6 +949,12 @@ def test_common_similar_operational_requirements_need_distinctive_remediation():
     ]
 
     target_guidance = _missing_requirement_target_guidance([readiness_section])
+    target_missing_item = target_guidance["sec-quality"][
+        "missing_requirement_items"
+    ][0]
+    assert target_missing_item["distinctive_terms"]
+    assert target_missing_item["distinctive_matches"] == []
+    assert target_missing_item["required_distinctive_count"] == 1
     section_guidance = _merge_section_drafting_guidance(
         {
             "requirement_count": 2,
