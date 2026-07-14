@@ -133,6 +133,7 @@
 - Added a repeatable calibration remediation cycle script that runs selected manifest actions, writes action execution reports, and immediately builds the next calibration bundle with the previous manifest and action evidence attached.
 - Made before/after calibration recommendations prioritize failed remediation job executions before interpreting readiness or gap-score movement, preventing misleading "improved" conclusions after partial action failure.
 - Hardened the calibration remediation cycle script so real `--execute` runs require `--wait`, preventing a rerun bundle from being built before queued generation remediation jobs finish.
+- Hardened the calibration remediation cycle script against project mix-ups by validating that the source manifest `project_id` matches the requested rerun `--project-id` before any actions or bundle generation start.
 
 ## Active Goals
 

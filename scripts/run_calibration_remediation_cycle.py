@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -96,6 +97,19 @@ def validate_args(args: argparse.Namespace) -> None:
             "Use --wait with --execute so the calibration bundle is built after "
             "generation remediation jobs finish."
         )
+    manifest_project_id = calibration_manifest_project_id(args.manifest)
+    if manifest_project_id and manifest_project_id != args.project_id:
+        raise ValueError(
+            "Manifest project_id does not match --project-id: "
+            f"{manifest_project_id} != {args.project_id}"
+        )
+
+
+def calibration_manifest_project_id(path: Path) -> str:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError(f"{path} must contain a JSON object")
+    return str(payload.get("project_id") or "").strip()
 
 
 def main(argv: list[str]) -> int:

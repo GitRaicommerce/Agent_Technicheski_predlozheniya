@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import sys
 import tempfile
 import unittest
@@ -25,8 +26,14 @@ spec.loader.exec_module(cycle)
 action_report_paths = cycle.action_report_paths
 build_action_args = cycle.build_action_args
 build_calibration_args = cycle.build_calibration_args
+calibration_manifest_project_id = cycle.calibration_manifest_project_id
 main = cycle.main
 parse_args = cycle.parse_args
+
+
+def write_manifest(path: Path, project_id: str = "project-1") -> Path:
+    path.write_text(json.dumps({"project_id": project_id}), encoding="utf-8")
+    return path
 
 
 class CalibrationRemediationCycleTests(unittest.TestCase):
@@ -96,10 +103,11 @@ class CalibrationRemediationCycleTests(unittest.TestCase):
         try:
             with tempfile.TemporaryDirectory() as tmp:
                 out_dir = Path(tmp) / "after"
+                manifest_path = write_manifest(Path(tmp) / "before.json")
                 status = main(
                     [
                         "--manifest",
-                        str(Path(tmp) / "before.json"),
+                        str(manifest_path),
                         "--project-id",
                         "project-1",
                         "--reference",
@@ -128,10 +136,11 @@ class CalibrationRemediationCycleTests(unittest.TestCase):
         cycle.run_proposal_calibration = Mock(return_value=0)
         try:
             with tempfile.TemporaryDirectory() as tmp:
+                manifest_path = write_manifest(Path(tmp) / "before.json")
                 status = main(
                     [
                         "--manifest",
-                        str(Path(tmp) / "before.json"),
+                        str(manifest_path),
                         "--project-id",
                         "project-1",
                         "--reference",
@@ -159,10 +168,11 @@ class CalibrationRemediationCycleTests(unittest.TestCase):
         cycle.run_proposal_calibration = Mock(return_value=0)
         try:
             with tempfile.TemporaryDirectory() as tmp:
+                manifest_path = write_manifest(Path(tmp) / "before.json")
                 status = main(
                     [
                         "--manifest",
-                        str(Path(tmp) / "before.json"),
+                        str(manifest_path),
                         "--project-id",
                         "project-1",
                         "--reference",
@@ -181,6 +191,46 @@ class CalibrationRemediationCycleTests(unittest.TestCase):
         finally:
             cycle.run_manifest_actions = original_actions
             cycle.run_proposal_calibration = original_calibration
+
+    def test_main_rejects_manifest_project_mismatch(self):
+        original_actions = cycle.run_manifest_actions
+        original_calibration = cycle.run_proposal_calibration
+        cycle.run_manifest_actions = Mock(return_value=0)
+        cycle.run_proposal_calibration = Mock(return_value=0)
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                manifest_path = write_manifest(
+                    Path(tmp) / "before.json",
+                    project_id="project-a",
+                )
+                status = main(
+                    [
+                        "--manifest",
+                        str(manifest_path),
+                        "--project-id",
+                        "project-b",
+                        "--reference",
+                        "reference.docx",
+                        "--out-dir",
+                        str(Path(tmp) / "after"),
+                        "--all",
+                    ]
+                )
+
+                self.assertEqual(status, 1)
+                cycle.run_manifest_actions.assert_not_called()
+                cycle.run_proposal_calibration.assert_not_called()
+        finally:
+            cycle.run_manifest_actions = original_actions
+            cycle.run_proposal_calibration = original_calibration
+
+    def test_calibration_manifest_project_id_rejects_non_object_payload(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            manifest_path = Path(tmp) / "before.json"
+            manifest_path.write_text("[]", encoding="utf-8")
+
+            with self.assertRaisesRegex(ValueError, "JSON object"):
+                calibration_manifest_project_id(manifest_path)
 
 
 if __name__ == "__main__":
