@@ -121,6 +121,43 @@ def test_requirement_coverage_requires_operational_evidence_for_operational_cate
     assert len(operational["items"][0]["operational_signals"]) >= 2
 
 
+def test_requirement_coverage_requires_operational_evidence_from_requirement_text():
+    items = normalize_requirement_items(
+        [
+            {
+                "id": "req-legacy-risk",
+                "text": (
+                    "Describe risk trigger, mitigation approach, likelihood "
+                    "threshold, and impact response."
+                ),
+                "importance": "mandatory",
+            }
+        ]
+    )
+
+    keyword_only = assess_requirement_coverage(
+        (
+            "The proposal describes risk trigger, mitigation approach, "
+            "likelihood threshold, and impact response."
+        ),
+        items,
+    )
+    operational = assess_requirement_coverage(
+        (
+            "For each risk trigger, the responsible role applies the mitigation "
+            "approach at the likelihood threshold, records the impact response, "
+            "and monitors corrective action evidence."
+        ),
+        items,
+    )
+
+    assert keyword_only["missing_ids"] == ["req-legacy-risk"]
+    assert keyword_only["items"][0]["requires_operational_detail"] is True
+    assert keyword_only["items"][0]["operational_signals"] == []
+    assert operational["covered_ids"] == ["req-legacy-risk"]
+    assert len(operational["items"][0]["operational_signals"]) >= 2
+
+
 def test_requirement_coverage_keeps_similar_operational_requirements_separate():
     items = normalize_requirement_items(
         [

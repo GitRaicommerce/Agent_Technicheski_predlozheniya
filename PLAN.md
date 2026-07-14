@@ -181,6 +181,7 @@
 - Added structured missing-requirement reason counts to calibration manifest JSON actions and before/after comparison reports, so remediation cycles can track whether distinctive-detail, coherent-passage, operational-evidence, or key-term blockers actually decrease.
 - Preserved missing-requirement reason counts in calibration action execution JSON and Markdown reports, so remediation evidence records why a missing-requirements action was planned or executed.
 - Aggregated missing-requirement reason evidence from attached calibration action reports back into calibration bundle Markdown and JSON summaries, so follow-up bundles show which blocker types were actually targeted by remediation evidence.
+- Made generated-text requirement coverage infer operational-detail expectations from uncategorized requirement text and topics, so legacy or fallback checklist items about risk, quality, communication, safety, environment, or documentation cannot pass with keyword-only wording.
 
 ## Active Goals
 

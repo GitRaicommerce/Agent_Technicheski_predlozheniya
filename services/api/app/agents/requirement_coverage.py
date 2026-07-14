@@ -54,6 +54,43 @@ OPERATIONAL_COVERAGE_CATEGORIES = {
     "safety",
 }
 
+OPERATIONAL_DETAIL_CUES = (
+    "acceptance",
+    "communication",
+    "control",
+    "coordination",
+    "corrective",
+    "documentation",
+    "environment",
+    "escalation",
+    "inspection",
+    "monitoring",
+    "protocol",
+    "quality",
+    "record",
+    "reporting",
+    "risk",
+    "safety",
+    "\u043a\u0430\u0447\u0435\u0441\u0442\u0432",
+    "\u043a\u043e\u043d\u0442\u0440\u043e\u043b",
+    "\u0440\u0438\u0441\u043a",
+    "\u0431\u0435\u0437\u043e\u043f\u0430\u0441",
+    "\u043a\u043e\u043c\u0443\u043d\u0438\u043a\u0430\u0446",
+    "\u043a\u043e\u043e\u0440\u0434\u0438\u043d\u0430\u0446",
+    "\u043e\u043a\u043e\u043b\u043d\u0430",
+    "\u0441\u0440\u0435\u0434\u0430",
+    "\u043e\u0442\u043f\u0430\u0434",
+    "\u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442",
+    "\u043f\u0440\u043e\u0442\u043e\u043a\u043e\u043b",
+    "\u0437\u0430\u043f\u0438\u0441",
+    "\u043e\u0442\u0447\u0435\u0442",
+    "\u043f\u0440\u0438\u0435\u043c",
+    "\u043f\u0440\u043e\u0432\u0435\u0440",
+    "\u043c\u043e\u043d\u0438\u0442\u043e\u0440",
+    "\u0435\u0441\u043a\u0430\u043b\u0430\u0446",
+    "\u043a\u043e\u0440\u0435\u043a\u0442",
+)
+
 OPERATIONAL_SIGNAL_TERMS = (
     "action",
     "approval",
@@ -164,10 +201,15 @@ def _distinctive_terms(tokens: list[str]) -> list[str]:
 def _requires_operational_detail(item: dict[str, Any]) -> bool:
     category = _normalize(item.get("category"))
     category_label = _normalize(item.get("category_label"))
-    haystack = f"{category} {category_label}"
+    text = _normalize(item.get("text"))
+    topic = _normalize(item.get("topic"))
+    haystack = f"{category} {category_label} {topic} {text}"
     return any(
         category_name in haystack
         for category_name in OPERATIONAL_COVERAGE_CATEGORIES
+    ) or any(
+        cue in haystack
+        for cue in OPERATIONAL_DETAIL_CUES
     )
 
 

@@ -1029,3 +1029,38 @@ def test_common_requirement_coverage_rejects_scattered_keyword_coverage():
     assert scattered["items"][0]["matched_ratio"] >= 0.6
     assert scattered["items"][0]["coherent_matched_ratio"] < 0.6
     assert coherent["covered_ids"] == ["req-communication-workflow"]
+
+
+def test_common_uncategorized_operational_requirement_still_needs_evidence():
+    requirement_items = [
+        {
+            "id": "req-legacy-quality-record",
+            "text": (
+                "Describe quality assurance approach, acceptance criteria, "
+                "defect classification, and warranty traceability."
+            ),
+            "importance": "mandatory",
+        }
+    ]
+
+    keyword_only = assess_requirement_coverage(
+        (
+            "The proposal describes quality assurance approach, acceptance "
+            "criteria, defect classification, and warranty traceability."
+        ),
+        requirement_items,
+    )
+    developed = assess_requirement_coverage(
+        (
+            "For quality assurance approach, acceptance criteria, defect "
+            "classification, and warranty traceability, the responsible role "
+            "keeps inspection records, monitors the result, and documents "
+            "corrective action."
+        ),
+        requirement_items,
+    )
+
+    assert keyword_only["missing_ids"] == ["req-legacy-quality-record"]
+    assert keyword_only["items"][0]["requires_operational_detail"] is True
+    assert len(keyword_only["items"][0]["operational_signals"]) < 2
+    assert developed["covered_ids"] == ["req-legacy-quality-record"]
