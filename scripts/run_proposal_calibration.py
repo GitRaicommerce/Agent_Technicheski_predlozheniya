@@ -353,6 +353,31 @@ def _section_label(section: dict[str, Any]) -> str:
     return "unknown section"
 
 
+def _section_target_request(sections: list[dict[str, Any]]) -> dict[str, list[str]]:
+    section_uids: list[str] = []
+    title_hints: list[str] = []
+    for section in sections:
+        section_uid = str(
+            section.get("section_uid")
+            or section.get("uid")
+            or ""
+        ).strip()
+        if section_uid:
+            section_uids.append(section_uid)
+        title = str(section.get("section_title") or section.get("title") or "").strip()
+        if title:
+            title_hints.append(title)
+
+    request_json: dict[str, list[str]] = {}
+    unique_uids = list(dict.fromkeys(section_uids))
+    unique_titles = list(dict.fromkeys(title_hints))
+    if unique_uids:
+        request_json["section_uids"] = unique_uids
+    if unique_titles:
+        request_json["section_title_hints"] = unique_titles
+    return request_json
+
+
 def _summarize_labels(labels: list[str], limit: int = 6) -> str:
     visible = labels[:limit]
     suffix = f" (+{len(labels) - limit} more)" if len(labels) > limit else ""
@@ -542,21 +567,23 @@ def structured_readiness_priority_actions(
             f"{_section_label(item)} ({int(item.get('missing_count') or 0)} missing)"
             for item in missing_sections
         ] or [f"{missing_count} sections with missing requirements"]
-        actions.append(
-            {
-                "blocker_code": "missing_requirements",
-                "action_key": READINESS_ACTION_KEYS["missing_requirements"],
-                "api_method": "POST",
-                "api_path": _remediation_api_path(
-                    project_id,
-                    READINESS_ACTION_KEYS["missing_requirements"],
-                ),
-                "ui_action": "Regenerate coverage",
-                "section_count": missing_count,
-                "section_labels": labels,
-                "summary": _summarize_labels(labels),
-            }
-        )
+        action = {
+            "blocker_code": "missing_requirements",
+            "action_key": READINESS_ACTION_KEYS["missing_requirements"],
+            "api_method": "POST",
+            "api_path": _remediation_api_path(
+                project_id,
+                READINESS_ACTION_KEYS["missing_requirements"],
+            ),
+            "ui_action": "Regenerate coverage",
+            "section_count": missing_count,
+            "section_labels": labels,
+            "summary": _summarize_labels(labels),
+        }
+        request_json = _section_target_request(missing_sections)
+        if request_json:
+            action["request_json"] = request_json
+        actions.append(action)
 
     quality_sections = [
         item
@@ -583,21 +610,23 @@ def structured_readiness_priority_actions(
             )
             for item in quality_sections
         ] or [f"{quality_count} shallow/depth-blocked sections"]
-        actions.append(
-            {
-                "blocker_code": "shallow_sections",
-                "action_key": READINESS_ACTION_KEYS["shallow_sections"],
-                "api_method": "POST",
-                "api_path": _remediation_api_path(
-                    project_id,
-                    READINESS_ACTION_KEYS["shallow_sections"],
-                ),
-                "ui_action": "Regenerate detailed",
-                "section_count": quality_count,
-                "section_labels": labels,
-                "summary": _summarize_labels(labels),
-            }
-        )
+        action = {
+            "blocker_code": "shallow_sections",
+            "action_key": READINESS_ACTION_KEYS["shallow_sections"],
+            "api_method": "POST",
+            "api_path": _remediation_api_path(
+                project_id,
+                READINESS_ACTION_KEYS["shallow_sections"],
+            ),
+            "ui_action": "Regenerate detailed",
+            "section_count": quality_count,
+            "section_labels": labels,
+            "summary": _summarize_labels(labels),
+        }
+        request_json = _section_target_request(quality_sections)
+        if request_json:
+            action["request_json"] = request_json
+        actions.append(action)
 
     return actions
 

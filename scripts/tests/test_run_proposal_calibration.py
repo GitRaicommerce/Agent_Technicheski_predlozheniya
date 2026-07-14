@@ -409,10 +409,15 @@ class RunProposalCalibrationTests(unittest.TestCase):
             ],
             "stale_section_details": [{"section_title": "Schedule"}],
             "missing_requirement_sections": [
-                {"section_title": "Quality", "missing_count": 3}
+                {
+                    "section_uid": "sec-quality",
+                    "section_title": "Quality",
+                    "missing_count": 3,
+                }
             ],
             "quality_sections": [
                 {
+                    "section_uid": "sec-environment",
                     "section_title": "Environment",
                     "word_count": 120,
                     "min_words": 420,
@@ -492,6 +497,20 @@ class RunProposalCalibrationTests(unittest.TestCase):
         self.assertEqual(
             manifest["readiness_actions"][2]["api_path"],
             "/api/v1/agents/project-1/remediation-actions/regenerate_missing_requirements",
+        )
+        self.assertEqual(
+            manifest["readiness_actions"][2]["request_json"],
+            {
+                "section_uids": ["sec-quality"],
+                "section_title_hints": ["Quality"],
+            },
+        )
+        self.assertEqual(
+            manifest["readiness_actions"][3]["request_json"],
+            {
+                "section_uids": ["sec-environment"],
+                "section_title_hints": ["Environment"],
+            },
         )
         self.assertEqual(manifest["gap_priority_rows"][0]["focus"], "drafting depth")
         self.assertEqual(
