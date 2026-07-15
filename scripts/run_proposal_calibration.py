@@ -82,6 +82,7 @@ def action_execution_summary(reports: list[dict[str, Any]]) -> dict[str, Any]:
     ready_report_count = 0
     failure_report_count = 0
     unexecuted_report_count = 0
+    unverified_report_count = 0
     for report in reports:
         total_actions += int(report.get("total_actions") or 0)
         executed_actions += int(report.get("executed_actions") or 0)
@@ -97,19 +98,25 @@ def action_execution_summary(reports: list[dict[str, Any]]) -> dict[str, Any]:
         report_has_failures = bool(report.get("has_failures"))
         if "has_failures" not in report:
             report_has_failures = any(
-                str(status) not in {"done", "executed", "planned"}
+                str(status)
+                not in {"done", "executed", "planned", "executed_unverified"}
                 and int(count or 0) > 0
                 for status, count in raw_counts.items()
             )
         report_has_unexecuted = bool(report.get("has_unexecuted_actions"))
         if "has_unexecuted_actions" not in report:
             report_has_unexecuted = int(raw_counts.get("planned") or 0) > 0
+        report_has_unverified = bool(report.get("has_unverified_actions"))
+        if "has_unverified_actions" not in report:
+            report_has_unverified = int(raw_counts.get("executed_unverified") or 0) > 0
         if bool(report.get("ready_for_bundle")):
             ready_report_count += 1
         if report_has_failures:
             failure_report_count += 1
         if report_has_unexecuted:
             unexecuted_report_count += 1
+        if report_has_unverified:
+            unverified_report_count += 1
         for action in report.get("actions") or []:
             if not isinstance(action, dict):
                 continue
@@ -149,16 +156,20 @@ def action_execution_summary(reports: list[dict[str, Any]]) -> dict[str, Any]:
             status_counts[status_key] = status_counts.get(status_key, 0) + status_count
     has_failures = failure_report_count > 0
     has_unexecuted_actions = unexecuted_report_count > 0
+    has_unverified_actions = unverified_report_count > 0
     ready_for_bundle = (
         bool(reports)
         and ready_report_count == len(reports)
         and failure_report_count == 0
         and unexecuted_report_count == 0
+        and unverified_report_count == 0
     )
     if not reports:
         evidence_level = "none"
     elif has_failures:
         evidence_level = "failed"
+    elif has_unverified_actions:
+        evidence_level = "unverified"
     elif has_unexecuted_actions:
         evidence_level = "planned"
     elif ready_for_bundle:
@@ -185,8 +196,10 @@ def action_execution_summary(reports: list[dict[str, Any]]) -> dict[str, Any]:
         "ready_report_count": ready_report_count,
         "failure_report_count": failure_report_count,
         "unexecuted_report_count": unexecuted_report_count,
+        "unverified_report_count": unverified_report_count,
         "has_failures": has_failures,
         "has_unexecuted_actions": has_unexecuted_actions,
+        "has_unverified_actions": has_unverified_actions,
         "ready_for_bundle": ready_for_bundle,
         "evidence_level": evidence_level,
     }
@@ -1015,6 +1028,10 @@ def render_manifest(
         if action_summary["has_unexecuted_actions"]:
             lines.append(
                 "- Action evidence warning: some remediation actions were only planned."
+            )
+        if action_summary["has_unverified_actions"]:
+            lines.append(
+                "- Action evidence warning: some executed generation actions were not waited to completion."
             )
         for path in action_report_paths:
             lines.append(f"  - `{_display_path(path)}`")

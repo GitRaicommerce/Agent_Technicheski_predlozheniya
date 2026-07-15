@@ -514,6 +514,26 @@ class RunProposalCalibrationTests(unittest.TestCase):
         self.assertFalse(summary["ready_for_bundle"])
         self.assertEqual(summary["evidence_level"], "planned")
 
+    def test_action_execution_summary_tracks_unverified_execution_reports(self):
+        summary = action_execution_summary(
+            [
+                {
+                    "total_actions": 1,
+                    "executed_actions": 1,
+                    "status_counts": {"executed_unverified": 1},
+                    "ready_for_bundle": False,
+                    "has_unverified_actions": True,
+                }
+            ]
+        )
+
+        self.assertEqual(summary["executed_actions"], 1)
+        self.assertEqual(summary["unverified_report_count"], 1)
+        self.assertTrue(summary["has_unverified_actions"])
+        self.assertFalse(summary["has_failures"])
+        self.assertFalse(summary["ready_for_bundle"])
+        self.assertEqual(summary["evidence_level"], "unverified")
+
     def test_load_action_execution_reports_rejects_non_object_payload(self):
         with tempfile.TemporaryDirectory() as tmp:
             report_path = Path(tmp) / "execution.json"

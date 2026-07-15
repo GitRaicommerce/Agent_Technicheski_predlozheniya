@@ -284,6 +284,11 @@ def summarize_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
             if isinstance(action_execution_summary, dict)
             else 0
         ),
+        "action_evidence_unverified": _int_value(
+            action_execution_summary.get("unverified_report_count")
+            if isinstance(action_execution_summary, dict)
+            else 0
+        ),
         "execution_report_count": _int_value(
             action_execution_summary.get("report_count")
             if isinstance(action_execution_summary, dict)
@@ -357,6 +362,12 @@ def recommendation(before: dict[str, Any], after: dict[str, Any]) -> str:
         return (
             "Attached action evidence still contains planned/unexecuted actions; "
             "run remediation with --execute --wait before interpreting calibration movement."
+        )
+    if after["action_evidence_unverified"] > 0:
+        return (
+            "Attached action evidence contains executed generation actions without "
+            "wait proof; rerun remediation with --execute --wait before interpreting "
+            "calibration movement."
         )
     if after["readiness_blockers"] > 0:
         return (
@@ -701,6 +712,12 @@ def render_comparison(before_manifest: dict[str, Any], after_manifest: dict[str,
                 f"{before['action_evidence_unexecuted']} | "
                 f"{after['action_evidence_unexecuted']} | "
                 f"{_format_delta(before['action_evidence_unexecuted'], after['action_evidence_unexecuted'])} |"
+            ),
+            (
+                "| reports with unverified executed actions | "
+                f"{before['action_evidence_unverified']} | "
+                f"{after['action_evidence_unverified']} | "
+                f"{_format_delta(before['action_evidence_unverified'], after['action_evidence_unverified'])} |"
             ),
             "",
             "| Final status | Before | After | Delta |",

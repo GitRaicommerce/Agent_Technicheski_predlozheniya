@@ -815,6 +815,33 @@ class CalibrationManifestActionTests(unittest.TestCase):
         self.assertTrue(summary["ready_for_bundle"])
         self.assertEqual(summary["evidence_level"], "proof")
 
+    def test_action_execution_summary_requires_wait_for_background_jobs(self):
+        action = ManifestAction(
+            action_key="regenerate_stale",
+            api_method="POST",
+            api_path="/api/v1/example",
+        )
+        record = action_execution_record(
+            action,
+            url="http://localhost/api/v1/example",
+            executed=True,
+            action_result={
+                "status_code": 200,
+                "body": {"result": {"id": "job-1", "project_id": "project-1"}},
+            },
+        )
+
+        summary = action_execution_summary([record])
+
+        self.assertEqual(record["final_status"], "executed_unverified")
+        self.assertEqual(summary["executed_actions"], 1)
+        self.assertEqual(summary["failure_statuses"], [])
+        self.assertFalse(summary["has_failures"])
+        self.assertTrue(summary["has_unverified_actions"])
+        self.assertFalse(summary["ready_for_bundle"])
+        self.assertEqual(summary["evidence_level"], "unverified")
+        self.assertIn("--wait", summary["recommendation"])
+
     def test_action_execution_summary_blocks_failed_actions(self):
         action = ManifestAction(
             action_key="regenerate_stale",

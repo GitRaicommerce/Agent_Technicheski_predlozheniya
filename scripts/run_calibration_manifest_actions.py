@@ -15,6 +15,7 @@ from typing import Any, Callable
 
 TERMINAL_JOB_STATUSES = {"done", "error"}
 SUCCESS_ACTION_STATUSES = {"done", "executed"}
+INCOMPLETE_ACTION_STATUSES = {"planned", "executed_unverified"}
 
 
 @dataclass(frozen=True)
@@ -475,6 +476,8 @@ def action_execution_record(
     final_status = "planned"
     if executed:
         final_status = "executed"
+        if job_result_from_action_response(action_result or {}) and wait_result is None:
+            final_status = "executed_unverified"
     wait_body = wait_result.get("body") if isinstance(wait_result, dict) else None
     if isinstance(wait_body, dict) and wait_body.get("status"):
         final_status = str(wait_body["status"])
@@ -520,16 +523,22 @@ def action_execution_summary(records: list[dict[str, Any]]) -> dict[str, Any]:
     failure_statuses = sorted(
         status
         for status in status_counts
-        if status not in SUCCESS_ACTION_STATUSES and status != "planned"
+        if status not in SUCCESS_ACTION_STATUSES
+        and status not in INCOMPLETE_ACTION_STATUSES
     )
     planned_count = status_counts.get("planned", 0)
+    unverified_count = status_counts.get("executed_unverified", 0)
     has_failures = bool(failure_statuses)
     has_unexecuted_actions = planned_count > 0
+    has_unverified_actions = unverified_count > 0
     ready_for_bundle = bool(records) and not has_failures and not has_unexecuted_actions
+    ready_for_bundle = ready_for_bundle and not has_unverified_actions
     if not records:
         evidence_level = "none"
     elif has_failures:
         evidence_level = "failed"
+    elif has_unverified_actions:
+        evidence_level = "unverified"
     elif has_unexecuted_actions:
         evidence_level = "planned"
     else:
@@ -539,6 +548,11 @@ def action_execution_summary(records: list[dict[str, Any]]) -> dict[str, Any]:
     elif has_failures:
         recommendation = (
             "Resolve failed remediation actions before building the next calibration bundle."
+        )
+    elif has_unverified_actions:
+        recommendation = (
+            "Re-run executed generation actions with --wait before using this report "
+            "as proof for a follow-up calibration bundle."
         )
     elif has_unexecuted_actions:
         recommendation = (
@@ -557,6 +571,7 @@ def action_execution_summary(records: list[dict[str, Any]]) -> dict[str, Any]:
         "failure_statuses": failure_statuses,
         "has_failures": has_failures,
         "has_unexecuted_actions": has_unexecuted_actions,
+        "has_unverified_actions": has_unverified_actions,
         "ready_for_bundle": ready_for_bundle,
         "evidence_level": evidence_level,
         "recommendation": recommendation,
@@ -628,6 +643,7 @@ def render_execution_report_markdown(
             f"- Ready for calibration bundle: `{'yes' if summary['ready_for_bundle'] else 'no'}`",
             f"- Has failures: `{'yes' if summary['has_failures'] else 'no'}`",
             f"- Has unexecuted actions: `{'yes' if summary['has_unexecuted_actions'] else 'no'}`",
+            f"- Has unverified executed actions: `{'yes' if summary['has_unverified_actions'] else 'no'}`",
             f"- Recommendation: {summary['recommendation']}",
             "",
             "| Action key | Source | Executed | Final status | Sections | Targets | Guidance | Section labels | Missing reasons | Operational signals | Summary |",

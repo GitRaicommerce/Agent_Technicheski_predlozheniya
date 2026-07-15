@@ -525,6 +525,32 @@ class CompareCalibrationManifestsTests(unittest.TestCase):
         self.assertIn("| reports with unexecuted actions | 0 | 1 | +1 |", text)
         self.assertIn("run remediation with --execute --wait", text)
 
+    def test_render_comparison_prioritizes_unverified_action_evidence(self):
+        text = render_comparison(
+            manifest(blockers=2, volume_ratio=0.20),
+            manifest(
+                blockers=0,
+                volume_ratio=0.50,
+                action_execution_summary={
+                    "report_count": 1,
+                    "total_actions": 1,
+                    "executed_actions": 1,
+                    "status_counts": {"executed_unverified": 1},
+                    "ready_for_bundle": False,
+                    "unverified_report_count": 1,
+                    "has_unverified_actions": True,
+                    "evidence_level": "unverified",
+                },
+            ),
+        )
+
+        self.assertIn(
+            "| reports with unverified executed actions | 0 | 1 | +1 |",
+            text,
+        )
+        self.assertIn("without wait proof", text)
+        self.assertIn("--execute --wait", text)
+
     def test_render_comparison_prioritizes_outline_mapping_after_readiness(self):
         text = render_comparison(
             manifest(blockers=0, focus_counts={"outline mapping": 3}),
