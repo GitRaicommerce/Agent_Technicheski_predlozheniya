@@ -32,6 +32,7 @@ missing_reason_summary = manifest_actions_module.missing_reason_summary
 render_execution_report_json = manifest_actions_module.render_execution_report_json
 render_execution_report_markdown = manifest_actions_module.render_execution_report_markdown
 request_target_summary = manifest_actions_module.request_target_summary
+section_label_summary = manifest_actions_module.section_label_summary
 select_actions = manifest_actions_module.select_actions
 wait_for_job_result = manifest_actions_module.wait_for_job_result
 
@@ -82,6 +83,10 @@ class CalibrationManifestActionTests(unittest.TestCase):
                     "api_method": "POST",
                     "api_path": "/api/v1/agents/project-1/remediation-actions/regenerate_missing_requirements",
                     "section_count": 2,
+                    "section_labels": [
+                        "Environment (120/420 words, 3 groups)",
+                        "Quality (180/360 words, 2 groups)",
+                    ],
                     "missing_reason_counts": {
                         "missing distinctive requirement detail": 2,
                         "needs execution action": 1,
@@ -100,6 +105,20 @@ class CalibrationManifestActionTests(unittest.TestCase):
                 "needs execution action": 1,
                 "needs operational evidence": 1,
             },
+        )
+        self.assertEqual(
+            actions[0].section_labels,
+            [
+                "Environment (120/420 words, 3 groups)",
+                "Quality (180/360 words, 2 groups)",
+            ],
+        )
+        self.assertEqual(
+            section_label_summary(actions[0]),
+            (
+                "Environment (120/420 words, 3 groups); "
+                "Quality (180/360 words, 2 groups)"
+            ),
         )
         self.assertEqual(
             missing_reason_summary(actions[0]),
@@ -510,6 +529,10 @@ class CalibrationManifestActionTests(unittest.TestCase):
             source="readiness_actions",
             section_count=2,
             summary="Section A | Section B",
+            section_labels=[
+                "Section A (120/420 words, 3 groups, 7 topics)",
+                "Section B (95/360 words, 2 groups, 4 topics)",
+            ],
             missing_reason_counts={
                 "missing distinctive requirement detail": 2,
                 "needs execution action": 1,
@@ -552,6 +575,20 @@ class CalibrationManifestActionTests(unittest.TestCase):
             "uids=sec-a; titles=Section A",
         )
         self.assertEqual(
+            payload["actions"][0]["section_labels"],
+            [
+                "Section A (120/420 words, 3 groups, 7 topics)",
+                "Section B (95/360 words, 2 groups, 4 topics)",
+            ],
+        )
+        self.assertEqual(
+            payload["actions"][0]["section_label_summary"],
+            (
+                "Section A (120/420 words, 3 groups, 7 topics); "
+                "Section B (95/360 words, 2 groups, 4 topics)"
+            ),
+        )
+        self.assertEqual(
             payload["actions"][0]["missing_reason_counts"],
             {
                 "missing distinctive requirement detail": 2,
@@ -573,6 +610,8 @@ class CalibrationManifestActionTests(unittest.TestCase):
         self.assertIn(
             "| regenerate_stale | readiness_actions | no | planned | 2 | "
             "uids=sec-a; titles=Section A | "
+            "Section A (120/420 words, 3 groups, 7 topics); "
+            "Section B (95/360 words, 2 groups, 4 topics) | "
             "missing distinctive requirement detail=2; needs execution action=1; "
             "needs operational evidence=1 |",
             markdown,
