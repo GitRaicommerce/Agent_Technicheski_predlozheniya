@@ -1,7 +1,25 @@
 from app.agents.requirement_coverage import (
+    _tokens,
     assess_requirement_coverage,
     normalize_requirement_items,
 )
+
+
+def test_requirement_tokens_use_full_unicode_cyrillic_range():
+    text = (
+        "\u0418\u0437\u043f\u044a\u043b\u043d\u0438\u0442\u0435\u043b\u044f\u0442 "
+        "\u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442\u0438\u0440\u0430 "
+        "\u043e\u0442\u0433\u043e\u0432\u043e\u0440\u043d\u043e\u0441\u0442\u0442\u0430 "
+        "\u045d \u0438 \u043f\u0430\u0437\u0438 "
+        "\u043a\u043e\u043d\u0442\u0440\u043e\u043b\u043d\u0438 "
+        "\u0437\u0430\u043f\u0438\u0441\u0438."
+    )
+
+    tokens = _tokens(text)
+
+    assert "\u043e\u0442\u0433\u043e\u0432\u043e\u0440\u043d\u043e\u0441\u0442\u0442\u0430" in tokens
+    assert "\u043a\u043e\u043d\u0442\u0440\u043e\u043b\u043d\u0438" in tokens
+    assert "\u0437\u0430\u043f\u0438\u0441\u0438" in tokens
 
 
 def test_requirement_coverage_rejects_superficial_keyword_mentions():

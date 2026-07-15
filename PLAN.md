@@ -223,6 +223,7 @@
 - Added conservative legacy mojibake repair for human-facing calibration action report labels, so older manifests with mis-decoded Bulgarian section names remain reviewable without changing executable action payloads.
 - Added ordered remediation execution-plan metadata to calibration action reports, making dry-run and proof reports show the exact action order, source, section counts, and target summaries before real execution.
 - Corrected proposal-depth word counting to use the full Unicode Cyrillic range, with regression coverage for real Bulgarian text so quality gates do not undercount tender-specific Bulgarian narrative.
+- Corrected requirement-coverage tokenization to use the full Unicode Cyrillic range, with regression coverage for Bulgarian checklist text so coverage diagnostics do not lose tender-specific Cyrillic terms.
 
 ## Active Goals
 

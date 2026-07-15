@@ -193,7 +193,7 @@ def _tokens(value: str) -> list[str]:
     return [
         token
         for token in re.findall(
-            r"[0-9a-zа-я]+",
+            r"[0-9a-z\u0400-\u04FF]+",
             _normalize(value),
             flags=re.IGNORECASE,
         )
