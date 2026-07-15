@@ -688,7 +688,12 @@ describe("GenerationsPanel", () => {
                 },
               ],
             },
-            issues: [{ code: "repetitive_content" }],
+            issues: [
+              { code: "too_short_for_requirements" },
+              { code: "too_few_developed_sentences" },
+              { code: "uneven_blueprint_distribution" },
+              { code: "repetitive_content" },
+            ],
           },
         ]}
       />,
@@ -739,7 +744,13 @@ describe("GenerationsPanel", () => {
         "waste segregation (1/2: waste), soil protection (1/2: protection)",
       );
     expect(screen.getByTestId("generation-quality-depth-sec-quality"))
-      .toHaveTextContent("РїРѕРІС‚Р°СЂСЏС‰ СЃРµ С‚РµРєСЃС‚");
+      .toHaveTextContent("твърде кратко за изискванията");
+    expect(screen.getByTestId("generation-quality-depth-sec-quality"))
+      .toHaveTextContent("малко развити изречения");
+    expect(screen.getByTestId("generation-quality-depth-sec-quality"))
+      .toHaveTextContent("неравномерно покритие на темите");
+    expect(screen.getByTestId("generation-quality-depth-sec-quality"))
+      .toHaveTextContent("повтарящ се текст");
   });
 
   it("focuses the attention filter when requested by export remediation", async () => {

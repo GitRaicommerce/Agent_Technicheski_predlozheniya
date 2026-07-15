@@ -1109,10 +1109,10 @@ function structureMissingLabel(
 
 function qualityIssueLabels(detail: ExportQualitySection): string[] {
   const labels: Record<string, string> = {
-    too_short_for_requirements: "С‚РІСЉСЂРґРµ РєСЂР°С‚РєРѕ Р·Р° РёР·РёСЃРєРІР°РЅРёСЏС‚Р°",
-    too_few_developed_sentences: "РјР°Р»РєРѕ СЂР°Р·РІРёС‚Рё РёР·СЂРµС‡РµРЅРёСЏ",
-    uneven_blueprint_distribution: "РЅРµСЂР°РІРЅРѕРјРµСЂРЅРѕ РїРѕРєСЂРёС‚РёРµ РЅР° С‚РµРјРёС‚Рµ",
-    repetitive_content: "РїРѕРІС‚Р°СЂСЏС‰ СЃРµ С‚РµРєСЃС‚",
+    too_short_for_requirements: "твърде кратко за изискванията",
+    too_few_developed_sentences: "малко развити изречения",
+    uneven_blueprint_distribution: "неравномерно покритие на темите",
+    repetitive_content: "повтарящ се текст",
   };
   const issues = Array.isArray(detail.issues) ? detail.issues : [];
   return [
