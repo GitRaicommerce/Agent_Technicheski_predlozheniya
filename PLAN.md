@@ -224,6 +224,7 @@
 - Added ordered remediation execution-plan metadata to calibration action reports, making dry-run and proof reports show the exact action order, source, section counts, and target summaries before real execution.
 - Corrected proposal-depth word counting to use the full Unicode Cyrillic range, with regression coverage for real Bulgarian text so quality gates do not undercount tender-specific Bulgarian narrative.
 - Corrected requirement-coverage tokenization to use the full Unicode Cyrillic range, with regression coverage for Bulgarian checklist text so coverage diagnostics do not lose tender-specific Cyrillic terms.
+- Corrected proposal gap analysis tokenization and heading heuristics to use the full Unicode Cyrillic range, so real Bulgarian reference/generated comparisons do not lose tender-specific terms or section cues.
 
 ## Active Goals
 

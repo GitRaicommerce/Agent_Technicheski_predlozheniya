@@ -299,7 +299,7 @@ def normalize_text(value: str) -> str:
 
 
 def tokenize(text: str) -> list[str]:
-    tokens = re.findall(r"[0-9a-zа-я]+", text.lower())
+    tokens = re.findall(r"[0-9a-z\u0400-\u04FF]+", text.lower())
     return [token for token in tokens if len(token) >= 4 and token not in STOPWORDS]
 
 
@@ -362,10 +362,10 @@ def looks_like_heading(line: str) -> bool:
         return False
     if clean.endswith(".") and len(clean.split()) > 10:
         return False
-    if re.match(r"^(\d+[\.\)]|[IVX]+[\.\)]|[А-Я]\))\s+", clean):
+    if re.match(r"^(\d+[\.\)]|[IVX]+[\.\)]|[\u0400-\u04FF]\))\s+", clean):
         return True
-    letters = re.findall(r"[A-Za-zА-Яа-я]", clean)
-    uppercase = re.findall(r"[A-ZА-Я]", clean)
+    letters = re.findall(r"[A-Za-z\u0400-\u04FF]", clean)
+    uppercase = re.findall(r"[A-Z\u0400-\u042F]", clean)
     return bool(letters) and len(uppercase) / len(letters) > 0.72 and len(clean.split()) <= 12
 
 
