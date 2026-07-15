@@ -174,6 +174,39 @@ TOPIC_RULES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ),
 )
 
+OPERATIONAL_DETAIL_SIGNALS: tuple[str, ...] = (
+    "acceptance",
+    "action",
+    "approval",
+    "control",
+    "corrective",
+    "document",
+    "evidence",
+    "escalation",
+    "inspection",
+    "monitoring",
+    "protocol",
+    "record",
+    "reporting",
+    "responsible",
+    "role",
+    "sequence",
+    "\u0434\u0435\u0439\u0441\u0442\u0432",
+    "\u0434\u043e\u043a\u0430\u0437\u0430\u0442",
+    "\u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442",
+    "\u0435\u0441\u043a\u0430\u043b\u0430\u0446",
+    "\u0437\u0430\u043f\u0438\u0441",
+    "\u043a\u043e\u043d\u0442\u0440\u043e\u043b",
+    "\u043a\u043e\u0440\u0435\u043a\u0442",
+    "\u043c\u043e\u043d\u0438\u0442\u043e\u0440",
+    "\u043e\u0442\u0433\u043e\u0432\u043e\u0440",
+    "\u043e\u0442\u0447\u0435\u0442",
+    "\u043f\u0440\u0438\u0435\u043c",
+    "\u043f\u0440\u043e\u0432\u0435\u0440",
+    "\u043f\u0440\u043e\u0442\u043e\u043a\u043e\u043b",
+    "\u0440\u043e\u043b",
+)
+
 CONTENT_SECTION_HINTS = (
     "approach",
     "method",
@@ -425,6 +458,7 @@ def section_gap_reasons(
     coverage: float,
     length_ratio: float,
     missing_keywords: list[str],
+    operational_detail_ratio: float = 1.0,
 ) -> list[str]:
     reasons: list[str] = []
     if title_score < 0.12:
@@ -437,13 +471,22 @@ def section_gap_reasons(
         reasons.append("missing key terms")
     elif coverage < 0.55:
         reasons.append("weak lexical coverage")
+    if operational_detail_ratio < 0.4:
+        reasons.append("weak operational detail")
+    elif operational_detail_ratio < 0.7:
+        reasons.append("partial operational detail")
     return reasons or ["acceptable alignment"]
 
 
 def calibration_focus_for_reasons(reasons: list[str]) -> str:
     if "structure mismatch" in reasons:
         return "outline mapping"
-    if "too short" in reasons or "thin detail" in reasons:
+    if (
+        "too short" in reasons
+        or "thin detail" in reasons
+        or "weak operational detail" in reasons
+        or "partial operational detail" in reasons
+    ):
         return "drafting depth"
     if "missing key terms" in reasons or "weak lexical coverage" in reasons:
         return "grounding and checklist coverage"
@@ -471,11 +514,13 @@ def render_section_gap_diagnostics_lines(
         if title_score < 0.12:
             coverage *= 0.75
         length_ratio = len(generated.words) / max(1, len(reference.words))
+        op_ratio = operational_detail_ratio(reference.text, generated.text)
         reasons = section_gap_reasons(
             title_score=title_score,
             coverage=coverage,
             length_ratio=length_ratio,
             missing_keywords=missing,
+            operational_detail_ratio=op_ratio,
         )
         focus = calibration_focus_for_reasons(reasons)
         lines.append(
@@ -503,6 +548,19 @@ def score_overlap(reference_words: list[str], generated_words: list[str]) -> flo
     generated = Counter(generated_words)
     matched = sum(min(count, generated[word]) for word, count in reference.items())
     return matched / sum(reference.values())
+
+
+def operational_signal_hits(text: str) -> list[str]:
+    normalized = normalize_text(text).lower()
+    return [signal for signal in OPERATIONAL_DETAIL_SIGNALS if signal in normalized]
+
+
+def operational_detail_ratio(reference_text: str, generated_text: str) -> float:
+    reference_hits = operational_signal_hits(reference_text)
+    if len(reference_hits) < 3:
+        return 1.0
+    generated_hits = set(operational_signal_hits(generated_text))
+    return len(set(reference_hits) & generated_hits) / len(set(reference_hits))
 
 
 def best_generated_match(reference: Section, generated_sections: list[Section]) -> tuple[Section, float]:
@@ -581,6 +639,69 @@ def analyze_topic_coverage(
     return result
 
 
+def analyze_operational_detail_coverage(
+    reference_text: str,
+    generated_text: str,
+) -> dict[str, object]:
+    reference_hits = list(dict.fromkeys(operational_signal_hits(reference_text)))
+    generated_hits = list(dict.fromkeys(operational_signal_hits(generated_text)))
+    if len(reference_hits) < 3:
+        return {
+            "status": "n/a",
+            "ratio": 1.0,
+            "reference_hits": reference_hits,
+            "generated_hits": generated_hits,
+            "missing_hits": [],
+        }
+
+    generated_set = set(generated_hits)
+    missing_hits = [signal for signal in reference_hits if signal not in generated_set]
+    ratio = (len(reference_hits) - len(missing_hits)) / len(reference_hits)
+    if ratio >= 0.7:
+        status = "covered"
+    elif ratio >= 0.4:
+        status = "partial"
+    else:
+        status = "weak"
+    return {
+        "status": status,
+        "ratio": ratio,
+        "reference_hits": reference_hits,
+        "generated_hits": generated_hits,
+        "missing_hits": missing_hits,
+    }
+
+
+def render_operational_detail_lines(
+    reference_sections: list[Section],
+    generated_sections: list[Section],
+) -> list[str]:
+    row = analyze_operational_detail_coverage(
+        "\n\n".join(section.text for section in reference_sections),
+        "\n\n".join(section.text for section in generated_sections),
+    )
+    return [
+        "",
+        "## Operational Detail Coverage",
+        "",
+        "| Status | Ratio | Reference signals | Generated signals | Missing signals |",
+        "| --- | ---: | --- | --- | --- |",
+        (
+            "| "
+            + " | ".join(
+                [
+                    str(row["status"]),
+                    f"{float(row['ratio']):.2f}",
+                    ", ".join(row["reference_hits"]).replace("|", "\\|") or "n/a",
+                    ", ".join(row["generated_hits"]).replace("|", "\\|") or "n/a",
+                    ", ".join(row["missing_hits"]).replace("|", "\\|") or "n/a",
+                ]
+            )
+            + " |"
+        ),
+    ]
+
+
 def render_topic_coverage_lines(
     reference_sections: list[Section],
     generated_sections: list[Section],
@@ -626,12 +747,17 @@ def render_calibration_recommendation_lines(
         "\n\n".join(section.text for section in reference_sections),
         "\n\n".join(section.text for section in generated_sections),
     )
+    operational = analyze_operational_detail_coverage(
+        "\n\n".join(section.text for section in reference_sections),
+        "\n\n".join(section.text for section in generated_sections),
+    )
     risky_rows = [
         row for row in rows if row.get("status") in {"missing", "partial"}
     ]
     lines = ["", "## Calibration Recommendations", ""]
 
-    if not risky_rows:
+    has_operational_gap = operational.get("status") in {"weak", "partial"}
+    if not risky_rows and not has_operational_gap:
         lines.append(
             "1. Universal topic coverage looks aligned. Focus calibration on "
             "section-level depth, source grounding, and final DOCX readiness."
@@ -669,6 +795,18 @@ def render_calibration_recommendation_lines(
         lines.append(
             f"{next_index}. Increase drafting depth and prompt specificity for "
             f"partially covered topics: {labels}."
+        )
+        next_index += 1
+
+    if operational.get("status") in {"weak", "partial"}:
+        missing_signals = ", ".join(
+            str(signal) for signal in operational.get("missing_hits", [])[:12]
+        )
+        suffix = f" Missing signals: {missing_signals}." if missing_signals else ""
+        lines.append(
+            f"{next_index}. Strengthen operational drafting detail with roles, "
+            "controls, records, monitoring, acceptance evidence, sequence, "
+            f"escalation and corrective actions.{suffix}"
         )
         next_index += 1
 
@@ -748,6 +886,7 @@ def render_report(
     )
     lines[section_coverage_start:section_coverage_start] = (
         render_topic_coverage_lines(reference_sections, generated_sections)
+        + render_operational_detail_lines(reference_sections, generated_sections)
         + render_calibration_recommendation_lines(
             reference_sections,
             generated_sections,

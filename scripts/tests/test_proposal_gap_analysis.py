@@ -14,6 +14,9 @@ SPEC.loader.exec_module(proposal_gap_analysis)
 
 Section = proposal_gap_analysis.Section
 analyze_topic_coverage = proposal_gap_analysis.analyze_topic_coverage
+analyze_operational_detail_coverage = (
+    proposal_gap_analysis.analyze_operational_detail_coverage
+)
 content_sections = proposal_gap_analysis.content_sections
 calibration_focus_for_reasons = proposal_gap_analysis.calibration_focus_for_reasons
 is_content_section = proposal_gap_analysis.is_content_section
@@ -100,6 +103,25 @@ class ProposalGapAnalysisTests(unittest.TestCase):
         self.assertEqual(by_key["communication"]["status"], "missing")
         self.assertIn("dust", by_key["environment"]["missing_hits"])
 
+    def test_analyze_operational_detail_coverage_flags_weak_generated_detail(self):
+        row = analyze_operational_detail_coverage(
+            (
+                "The reference defines responsible roles, control records, "
+                "monitoring evidence, acceptance criteria, reporting sequence, "
+                "escalation path and corrective actions."
+            ),
+            (
+                "The generated proposal mentions the general approach and "
+                "expected positive effect."
+            ),
+        )
+
+        self.assertEqual(row["status"], "weak")
+        self.assertLess(row["ratio"], 0.4)
+        self.assertIn("responsible", row["missing_hits"])
+        self.assertIn("record", row["missing_hits"])
+        self.assertIn("corrective", row["missing_hits"])
+
     def test_section_gap_reasons_map_metrics_to_calibration_focus(self):
         reasons = section_gap_reasons(
             title_score=0.8,
@@ -118,6 +140,16 @@ class ProposalGapAnalysisTests(unittest.TestCase):
         )
         self.assertIn("structure mismatch", reasons)
         self.assertEqual(calibration_focus_for_reasons(reasons), "outline mapping")
+
+        reasons = section_gap_reasons(
+            title_score=0.8,
+            coverage=0.8,
+            length_ratio=0.9,
+            missing_keywords=[],
+            operational_detail_ratio=0.25,
+        )
+        self.assertIn("weak operational detail", reasons)
+        self.assertEqual(calibration_focus_for_reasons(reasons), "drafting depth")
 
     def test_section_gap_diagnostics_render_actionable_focus_rows(self):
         lines = render_section_gap_diagnostics_lines(
@@ -161,6 +193,7 @@ class ProposalGapAnalysisTests(unittest.TestCase):
         )
 
         self.assertIn("## Universal Topic Coverage", report)
+        self.assertIn("## Operational Detail Coverage", report)
         self.assertIn("Environmental protection", report)
         self.assertIn("dust, waste, soil", report)
         self.assertTrue("missing" in report or "partial" in report)
@@ -205,7 +238,9 @@ class ProposalGapAnalysisTests(unittest.TestCase):
                     (
                         "Risk mitigation and escalation are described. "
                         "Environmental protection includes dust, waste and "
-                        "soil controls."
+                        "soil controls. The plan defines responsible roles, "
+                        "control records, monitoring evidence, acceptance "
+                        "criteria, reporting sequence and corrective actions."
                     ),
                 )
             ],
@@ -220,6 +255,8 @@ class ProposalGapAnalysisTests(unittest.TestCase):
 
         self.assertIn("Environmental protection", text)
         self.assertIn("partially covered topics", text)
+        self.assertIn("Strengthen operational drafting detail", text)
+        self.assertIn("corrective", text)
         self.assertIn("rerun DOCX readiness", text)
 
 

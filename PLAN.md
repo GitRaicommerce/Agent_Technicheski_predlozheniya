@@ -209,6 +209,7 @@
 - Passed quality/depth blocker diagnostics into targeted quality regeneration jobs, so reruns know the exact issue codes, word targets, missing blueprint topics, and weak-operational-detail examples before drafting starts.
 - Added a common-scenario regression proving quality/depth remediation diagnostics flow from export readiness into targeted drafting guidance prompts, alongside the existing missing-requirement remediation scenario.
 - Surfaced quality/depth issue codes such as `weak_operational_detail` inside calibration readiness action labels, so manifest shortlists and action reports show not only section depth numbers but also the blocker causes.
+- Added operational-detail coverage diagnostics to proposal gap analysis, comparing reference and generated signals for roles, controls, records, monitoring, acceptance, sequence, escalation, and corrective actions.
 
 ## Active Goals
 
