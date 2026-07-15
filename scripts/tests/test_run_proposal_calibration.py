@@ -98,6 +98,7 @@ class RunProposalCalibrationTests(unittest.TestCase):
                             {
                                 "reasons": [
                                     "missing distinctive requirement detail",
+                                    "needs execution action",
                                     "needs coherent passage",
                                 ]
                             },
@@ -144,6 +145,7 @@ class RunProposalCalibrationTests(unittest.TestCase):
                         {
                             "missing_reason_counts": {
                                 "missing distinctive requirement detail": 2,
+                                "needs execution action": 1,
                                 "needs coherent passage": 1,
                             }
                         }
@@ -172,6 +174,7 @@ class RunProposalCalibrationTests(unittest.TestCase):
         self.assertIn("Action execution reports: `1` files, `1` actions", manifest)
         self.assertIn("Missing requirement reasons addressed", manifest)
         self.assertIn("`missing distinctive requirement detail`: `2`", manifest)
+        self.assertIn("`needs execution action`: `1`", manifest)
         self.assertIn("`needs coherent passage`: `1`", manifest)
         self.assertIn("resolve export blockers", manifest)
         self.assertIn("Universal Topic Coverage", manifest)
@@ -192,7 +195,7 @@ class RunProposalCalibrationTests(unittest.TestCase):
         self.assertIn(
             (
                 "Quality (2 missing; missing distinctive requirement detail, "
-                "needs coherent passage, needs operational evidence)"
+                "needs execution action, needs coherent passage, +1 more)"
             ),
             manifest,
         )
@@ -549,6 +552,7 @@ class RunProposalCalibrationTests(unittest.TestCase):
                         {
                             "reasons": [
                                 "missing distinctive requirement detail",
+                                "needs execution action",
                                 "needs coherent passage",
                             ]
                         },
@@ -618,6 +622,7 @@ class RunProposalCalibrationTests(unittest.TestCase):
                             {
                                 "missing_reason_counts": {
                                     "missing distinctive requirement detail": 2,
+                                    "needs execution action": 1,
                                     "needs operational evidence": 1,
                                 }
                             }
@@ -671,7 +676,7 @@ class RunProposalCalibrationTests(unittest.TestCase):
         self.assertIn(
             (
                 "Quality (3 missing; missing distinctive requirement detail, "
-                "needs coherent passage, needs operational evidence)"
+                "needs execution action, needs coherent passage, +1 more)"
             ),
             manifest["readiness_actions"][2]["section_labels"],
         )
@@ -684,6 +689,7 @@ class RunProposalCalibrationTests(unittest.TestCase):
             {
                 "missing distinctive requirement detail": 2,
                 "needs coherent passage": 1,
+                "needs execution action": 1,
                 "needs operational evidence": 1,
             },
         )
@@ -726,6 +732,7 @@ class RunProposalCalibrationTests(unittest.TestCase):
             manifest["action_execution_summary"]["missing_reason_counts"],
             {
                 "missing distinctive requirement detail": 2,
+                "needs execution action": 1,
                 "needs operational evidence": 1,
             },
         )

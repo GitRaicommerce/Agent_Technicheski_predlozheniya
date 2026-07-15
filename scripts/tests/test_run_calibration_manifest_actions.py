@@ -84,6 +84,7 @@ class CalibrationManifestActionTests(unittest.TestCase):
                     "section_count": 2,
                     "missing_reason_counts": {
                         "missing distinctive requirement detail": 2,
+                        "needs execution action": 1,
                         "needs operational evidence": 1,
                     },
                 }
@@ -96,6 +97,7 @@ class CalibrationManifestActionTests(unittest.TestCase):
             actions[0].missing_reason_counts,
             {
                 "missing distinctive requirement detail": 2,
+                "needs execution action": 1,
                 "needs operational evidence": 1,
             },
         )
@@ -103,6 +105,7 @@ class CalibrationManifestActionTests(unittest.TestCase):
             missing_reason_summary(actions[0]),
             (
                 "missing distinctive requirement detail=2; "
+                "needs execution action=1; "
                 "needs operational evidence=1"
             ),
         )
@@ -509,6 +512,7 @@ class CalibrationManifestActionTests(unittest.TestCase):
             summary="Section A | Section B",
             missing_reason_counts={
                 "missing distinctive requirement detail": 2,
+                "needs execution action": 1,
                 "needs operational evidence": 1,
             },
             request_json={
@@ -551,6 +555,7 @@ class CalibrationManifestActionTests(unittest.TestCase):
             payload["actions"][0]["missing_reason_counts"],
             {
                 "missing distinctive requirement detail": 2,
+                "needs execution action": 1,
                 "needs operational evidence": 1,
             },
         )
@@ -558,6 +563,7 @@ class CalibrationManifestActionTests(unittest.TestCase):
             payload["actions"][0]["missing_reason_summary"],
             (
                 "missing distinctive requirement detail=2; "
+                "needs execution action=1; "
                 "needs operational evidence=1"
             ),
         )
@@ -567,7 +573,8 @@ class CalibrationManifestActionTests(unittest.TestCase):
         self.assertIn(
             "| regenerate_stale | readiness_actions | no | planned | 2 | "
             "uids=sec-a; titles=Section A | "
-            "missing distinctive requirement detail=2; needs operational evidence=1 |",
+            "missing distinctive requirement detail=2; needs execution action=1; "
+            "needs operational evidence=1 |",
             markdown,
         )
         self.assertIn("Section A \\| Section B", markdown)
