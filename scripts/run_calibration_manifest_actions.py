@@ -58,6 +58,20 @@ def _string_list(value: Any) -> list[str]:
     return []
 
 
+def _repair_legacy_mojibake(value: str) -> str:
+    try:
+        repaired = value.encode("cp1251").decode("utf-8")
+    except UnicodeError:
+        return value
+    if repaired and repaired != value:
+        return repaired
+    return value
+
+
+def _display_text(value: Any) -> str:
+    return _repair_legacy_mojibake(str(value or "").strip())
+
+
 def manifest_actions(manifest: dict[str, Any]) -> list[ManifestAction]:
     raw_readiness_actions = manifest.get("readiness_actions") or []
     if not isinstance(raw_readiness_actions, list):
@@ -121,11 +135,11 @@ def manifest_actions(manifest: dict[str, Any]) -> list[ManifestAction]:
                 source="readiness_actions",
                 blocker_code=str(item.get("blocker_code") or ""),
                 section_count=int(item.get("section_count") or 0),
-                summary=str(item.get("summary") or ""),
+                summary=_display_text(item.get("summary")),
                 section_labels=[
-                    str(label).strip()
+                    _display_text(label)
                     for label in (section_labels or [])
-                    if str(label).strip()
+                    if _display_text(label)
                 ]
                 or None,
                 missing_reason_counts={
@@ -159,7 +173,7 @@ def manifest_actions(manifest: dict[str, Any]) -> list[ManifestAction]:
             continue
         seen.add(dedupe_key)
         api_method = str(item.get("api_method") or "POST").strip().upper()
-        reference_section = str(item.get("reference_section") or "").strip()
+        reference_section = _display_text(item.get("reference_section"))
         focus = str(item.get("focus") or "").strip()
         summary_parts = []
         if focus:
@@ -346,9 +360,9 @@ def request_target_summary(request_json: dict[str, Any] | None) -> str:
         if str(item).strip()
     ]
     title_hints = [
-        str(item).strip()
+        _display_text(item)
         for item in request_json.get("section_title_hints") or []
-        if str(item).strip()
+        if _display_text(item)
     ]
 
     parts: list[str] = []
@@ -386,10 +400,10 @@ def guidance_summary(request_json: dict[str, Any] | None) -> str:
         parts.append("reasons=" + ", ".join(gap_reasons[:6]))
         if len(gap_reasons) > 6:
             parts.append(f"+{len(gap_reasons) - 6} more reasons")
-    reference_section = str(request_json.get("reference_section") or "").strip()
+    reference_section = _display_text(request_json.get("reference_section"))
     if reference_section:
         parts.append(f"reference={reference_section}")
-    generated_section = str(request_json.get("generated_section") or "").strip()
+    generated_section = _display_text(request_json.get("generated_section"))
     if generated_section:
         parts.append(f"generated={generated_section}")
     operational_signals = [

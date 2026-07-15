@@ -220,6 +220,7 @@
 - Structured calibration gap context now flows through targeted quality regeneration into the drafting prompt, including gap reasons, reference/generated section context, missing operational-detail signals, and expected regeneration outcomes for any calibrated project.
 - Re-ran the Pernik calibration remediation cycle in non-mutating `--actions-only --all` dry-run mode against the stored manifest; it planned `resolve_duplicate_selected` and `regenerate_stale` for 14 sections each, produced planned-level action reports under `local_analysis/`, and correctly kept `ready_for_bundle=false` until real `--execute --wait` proof exists.
 - Made calibration action execution reports self-contained by adding manifest path, project id, API base, execution mode, wait flag, and selected action keys to the JSON report and readable Markdown header.
+- Added conservative legacy mojibake repair for human-facing calibration action report labels, so older manifests with mis-decoded Bulgarian section names remain reviewable without changing executable action payloads.
 
 ## Active Goals
 

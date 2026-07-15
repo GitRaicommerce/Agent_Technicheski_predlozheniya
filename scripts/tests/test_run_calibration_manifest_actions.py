@@ -146,6 +146,43 @@ class CalibrationManifestActionTests(unittest.TestCase):
             "record, monitoring, corrective",
         )
 
+    def test_manifest_actions_repair_legacy_mojibake_display_labels(self):
+        readable = "\u041c\u0435\u0440\u043a\u0438 \u0437\u0430 \u043a\u0430\u0447\u0435\u0441\u0442\u0432\u043e"
+        legacy = readable.encode("utf-8").decode("cp1251")
+        reference = "\u0420\u0435\u0444\u0435\u0440\u0435\u043d\u0442\u043d\u0430 \u0441\u0435\u043a\u0446\u0438\u044f"
+        generated = "\u0422\u0435\u043a\u0443\u0449\u0430 \u0441\u0435\u043a\u0446\u0438\u044f"
+        legacy_reference = reference.encode("utf-8").decode("cp1251")
+        legacy_generated = generated.encode("utf-8").decode("cp1251")
+        manifest = {
+            "readiness_actions": [
+                {
+                    "action_key": "regenerate_quality_depth",
+                    "api_path": "/api/v1/example",
+                    "section_count": 1,
+                    "summary": legacy,
+                    "section_labels": [legacy],
+                    "request_json": {
+                        "section_title_hints": [legacy],
+                        "reference_section": legacy_reference,
+                        "generated_section": legacy_generated,
+                    },
+                }
+            ]
+        }
+
+        actions = manifest_actions(manifest)
+
+        self.assertEqual(actions[0].summary, readable)
+        self.assertEqual(actions[0].section_labels, [readable])
+        self.assertEqual(
+            action_target_summary(actions[0]),
+            f"titles={readable}",
+        )
+        self.assertEqual(
+            guidance_summary(actions[0].request_json),
+            f"reference={reference}; generated={generated}",
+        )
+
     def test_manifest_actions_synthesize_dispatcher_path_for_legacy_readiness_rows(self):
         manifest = {
             "readiness_actions": [
