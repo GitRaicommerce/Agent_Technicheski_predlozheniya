@@ -460,6 +460,91 @@ async def test_export_docx_uses_drafting_blueprint_for_quality_gate(client, mock
 
 
 @pytest.mark.asyncio
+async def test_export_readiness_counts_compact_additional_blueprint_groups(
+    client,
+    mock_db,
+):
+    project = _make_project()
+    mock_db.get = AsyncMock(return_value=project)
+
+    generation = MagicMock()
+    generation.id = "gen-additional-blueprint"
+    generation.section_uid = "sec-complex"
+    generation.evidence_status = "ok"
+    generation.text = "Short methodology text with only organization and schedule."
+    generation.flags_json = {
+        "requirement_coverage": {
+            "total": 4,
+            "covered": 4,
+            "missing": 0,
+            "missing_ids": [],
+            "items": [
+                {"id": "req-organization", "status": "covered"},
+                {"id": "req-schedule", "status": "covered"},
+                {"id": "req-quality", "status": "covered"},
+                {"id": "req-risk", "status": "covered"},
+            ],
+        }
+    }
+    generation.used_sources_json = {
+        "drafting_blueprint": {
+            "groups": [
+                {
+                    "category": "organization",
+                    "label": "Organization",
+                    "requirement_ids": ["req-organization"],
+                    "requirements": [{"id": "req-organization"}],
+                    "topics": ["roles"],
+                },
+                {
+                    "category": "schedule",
+                    "label": "Schedule",
+                    "requirement_ids": ["req-schedule"],
+                    "requirements": [{"id": "req-schedule"}],
+                    "topics": ["sequence"],
+                },
+            ],
+            "additional_groups": [
+                {
+                    "category": "quality",
+                    "label": "Quality",
+                    "requirement_ids": ["req-quality"],
+                    "requirements": [{"id": "req-quality"}],
+                    "topics": ["inspection"],
+                },
+                {
+                    "category": "risk",
+                    "label": "Risk",
+                    "requirement_ids": ["req-risk"],
+                    "requirements": [{"id": "req-risk"}],
+                    "topics": ["escalation"],
+                },
+            ],
+        }
+    }
+
+    selected_result = MagicMock()
+    selected_result.scalars.return_value.all.return_value = [generation]
+    outline_result = MagicMock()
+    outline_result.scalar_one_or_none.return_value = None
+    mock_db.execute = AsyncMock(side_effect=[selected_result, outline_result])
+
+    resp = await client.get(f"/api/v1/export/{project.id}/readiness")
+
+    assert resp.status_code == 200
+    detail = resp.json()
+    quality_section = detail["quality_sections"][0]
+    assert detail["quality_section_count"] == 1
+    assert quality_section["section_uid"] == "sec-complex"
+    assert quality_section["blueprint_group_count"] == 4
+    assert quality_section["blueprint_requirement_id_count"] == 4
+    assert quality_section["min_words"] >= 1000
+    assert "too_short_for_requirements" in {
+        issue["code"] for issue in quality_section["issues"]
+    }
+
+
+@pytest.mark.asyncio
 async def test_export_docx_reports_uneven_blueprint_distribution(client, mock_db):
     project = _make_project()
     mock_db.get = AsyncMock(return_value=project)
