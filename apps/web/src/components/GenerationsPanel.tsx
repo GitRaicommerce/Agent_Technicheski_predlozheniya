@@ -544,8 +544,10 @@ function StaleRegenerationAction({
     >
       <div className="flex items-center justify-between gap-2">
         <span>
-          {staleSectionCount} selected stale{" "}
-          {staleSectionCount === 1 ? "section" : "sections"}
+          {staleSectionCount}{" "}
+          {staleSectionCount === 1
+            ? "остаряла избрана секция"
+            : "остарели избрани секции"}
         </span>
         <button
           type="button"
@@ -554,7 +556,7 @@ function StaleRegenerationAction({
           data-testid="generation-stale-regenerate-button"
           className="shrink-0 rounded border border-amber-300 bg-white px-2 py-1 font-medium text-amber-800 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {regenerating ? "..." : "Regenerate"}
+          {regenerating ? "..." : "Регенерирай"}
         </button>
       </div>
     </div>
@@ -626,8 +628,10 @@ function QualityRegenerationAction({
     >
       <div className="flex items-center justify-between gap-2">
         <span>
-          {qualitySectionCount} short/depth-blocked{" "}
-          {qualitySectionCount === 1 ? "section" : "sections"}
+          {qualitySectionCount}{" "}
+          {qualitySectionCount === 1
+            ? "секция с недостатъчна детайлност"
+            : "секции с недостатъчна детайлност"}
         </span>
         <button
           type="button"
@@ -636,7 +640,7 @@ function QualityRegenerationAction({
           data-testid="generation-quality-regenerate-button"
           className="shrink-0 rounded border border-blue-300 bg-white px-2 py-1 font-medium text-blue-800 transition hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {regenerating ? "..." : "Regenerate detailed"}
+          {regenerating ? "..." : "Регенерирай подробно"}
         </button>
       </div>
     </div>

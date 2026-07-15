@@ -841,7 +841,9 @@ describe("GenerationsPanel", () => {
     render(<GenerationsPanel projectId="project-1" />);
 
     expect(await screen.findByTestId("generation-stale-selected-action"))
-      .toHaveTextContent("1 selected stale section");
+      .toHaveTextContent("1 остаряла избрана секция");
+    expect(screen.getByTestId("generation-stale-regenerate-button"))
+      .toHaveTextContent("Регенерирай");
 
     await userEvent.click(screen.getByTestId("generation-stale-regenerate-button"));
 
@@ -900,7 +902,9 @@ describe("GenerationsPanel", () => {
     );
 
     expect(await screen.findByTestId("generation-quality-selected-action"))
-      .toHaveTextContent("1 short/depth-blocked section");
+      .toHaveTextContent("1 секция с недостатъчна детайлност");
+    expect(screen.getByTestId("generation-quality-regenerate-button"))
+      .toHaveTextContent("Регенерирай подробно");
 
     await userEvent.click(
       screen.getByTestId("generation-quality-regenerate-button"),

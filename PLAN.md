@@ -191,6 +191,7 @@
 - Added Bulgarian active-execution verb examples to export remediation guidance and drafting repair prompts, so regeneration instructions point the model toward natural Bulgarian operational phrasing instead of only English verbs.
 - Localized missing-requirement reason labels in the DOCX export warning, so Bulgarian users see blocker causes such as operational evidence, execution action, coherent passage, and distinctive detail in Bulgarian.
 - Localized the Generations panel missing-requirements remediation UI, including the coverage-regeneration action and per-requirement repair label, so export blocker resolution stays Bulgarian-first.
+- Localized the remaining Generations panel remediation actions for stale selected sections and shallow/depth-blocked sections, keeping the export-blocker repair flow consistently Bulgarian-first.
 
 ## Active Goals
 
