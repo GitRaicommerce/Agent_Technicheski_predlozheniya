@@ -4,11 +4,12 @@ Agents router — оркестратор endpoint.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Any
 from types import SimpleNamespace
 import uuid
+import re
 import structlog
 from slowapi import Limiter
 from slowapi.util import get_remote_address
@@ -26,10 +27,31 @@ class ChatMessage(BaseModel):
     content: str
 
 
+class DuplicateSelectionResolutionItem(BaseModel):
+    section_uid: str
+    generation_id: str
+    previous_selected_count: int
+
+
+class DuplicateSelectionResolutionResponse(BaseModel):
+    status: str
+    resolved_count: int
+    sections: list[DuplicateSelectionResolutionItem]
+
+
 class OrchestratorRequest(BaseModel):
     project_id: str
     message: str
     history: list[ChatMessage] = []
+
+
+class RemediationActionRequest(BaseModel):
+    section_uids: list[str] = Field(default_factory=list)
+    section_title_hints: list[str] = Field(default_factory=list)
+    gap_reasons: list[str] = Field(default_factory=list)
+    reference_section: str | None = None
+    generated_section: str | None = None
+    operational_detail_missing_signals: list[str] = Field(default_factory=list)
 
 
 @router.post("/chat")
@@ -224,6 +246,70 @@ async def select_generation(
     )
     gen.selected = True
     return {"status": "selected", "generation_id": generation_id}
+
+
+@router.post(
+    "/{project_id}/generations/resolve-duplicates",
+    response_model=DuplicateSelectionResolutionResponse,
+)
+async def resolve_duplicate_selected_generations(
+    project_id: str,
+    db: AsyncSession = Depends(get_db),
+) -> DuplicateSelectionResolutionResponse:
+    from app.core.models import Generation
+    from sqlalchemy import select, update
+
+    project = await db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    result = await db.execute(
+        select(Generation)
+        .where(
+            Generation.project_id == project_id,
+            Generation.selected.is_(True),
+        )
+        .order_by(
+            Generation.section_uid.asc(),
+            Generation.created_at.desc(),
+            Generation.variant.desc(),
+            Generation.id.desc(),
+        )
+    )
+    selected_generations = list(result.scalars().all())
+    grouped: dict[str, list[Generation]] = {}
+    for generation in selected_generations:
+        if generation.section_uid:
+            grouped.setdefault(generation.section_uid, []).append(generation)
+
+    resolved: list[DuplicateSelectionResolutionItem] = []
+    for section_uid, generations in grouped.items():
+        if len(generations) <= 1:
+            continue
+
+        chosen = generations[0]
+        await db.execute(
+            update(Generation)
+            .where(
+                Generation.project_id == project_id,
+                Generation.section_uid == section_uid,
+            )
+            .values(selected=False)
+        )
+        chosen.selected = True
+        resolved.append(
+            DuplicateSelectionResolutionItem(
+                section_uid=section_uid,
+                generation_id=chosen.id,
+                previous_selected_count=len(generations),
+            )
+        )
+
+    return DuplicateSelectionResolutionResponse(
+        status="resolved",
+        resolved_count=len(resolved),
+        sections=resolved,
+    )
 
 
 class ScheduleNormalizedResponse(BaseModel):
@@ -493,6 +579,315 @@ async def retry_generation_job(
 
     job = await create_drafting_all_job(project=project, db=db)
     return _generation_job_response(job)
+
+
+@router.post(
+    "/{project_id}/generation-jobs/stale",
+    response_model=GenerationJobResponse,
+)
+async def regenerate_stale_generation_job(
+    project_id: str, db: AsyncSession = Depends(get_db)
+):
+    project = await db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    from app.agents.generation_jobs import create_drafting_stale_job
+
+    try:
+        job = await create_drafting_stale_job(project=project, db=db)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return _generation_job_response(job)
+
+
+@router.post(
+    "/{project_id}/generation-jobs/quality",
+    response_model=GenerationJobResponse,
+)
+async def regenerate_quality_generation_job(
+    project_id: str, db: AsyncSession = Depends(get_db)
+):
+    project = await db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    from app.agents.generation_jobs import create_drafting_quality_job
+
+    try:
+        job = await create_drafting_quality_job(project=project, db=db)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return _generation_job_response(job)
+
+
+@router.post(
+    "/{project_id}/generation-jobs/missing-requirements",
+    response_model=GenerationJobResponse,
+)
+async def regenerate_missing_requirements_generation_job(
+    project_id: str, db: AsyncSession = Depends(get_db)
+):
+    project = await db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    from app.agents.generation_jobs import create_drafting_requirements_job
+
+    try:
+        job = await create_drafting_requirements_job(project=project, db=db)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return _generation_job_response(job)
+
+
+@router.post("/{project_id}/remediation-actions/{action_key}")
+async def run_generation_remediation_action(
+    project_id: str,
+    action_key: str,
+    req: RemediationActionRequest | None = None,
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    project = await db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    if action_key == "resolve_duplicate_selected":
+        result = await resolve_duplicate_selected_generations(project_id, db)
+        return {
+            "action_key": action_key,
+            "status": result.status,
+            "result": result.model_dump(),
+        }
+
+    from app.agents.generation_jobs import (
+        create_drafting_job,
+        create_drafting_quality_job,
+        create_drafting_requirements_job,
+        create_drafting_stale_job,
+    )
+
+    generation_action_keys = {
+        "regenerate_stale",
+        "regenerate_missing_requirements",
+        "regenerate_quality_depth",
+    }
+    if action_key not in generation_action_keys:
+        raise HTTPException(status_code=404, detail="Unknown remediation action")
+
+    try:
+        requested_section_uids = await _remediation_target_section_uids(
+            project_id,
+            db,
+            req,
+        )
+        if requested_section_uids and action_key == "regenerate_missing_requirements":
+            job = await create_drafting_requirements_job(
+                project=project,
+                db=db,
+                target_section_uids=requested_section_uids,
+                target_reason=f"calibration_gap:{action_key}",
+            )
+        elif requested_section_uids and action_key == "regenerate_quality_depth":
+            quality_guidance = _calibration_quality_target_guidance(
+                requested_section_uids,
+                req,
+            )
+            job_kwargs: dict[str, Any] = {
+                "project": project,
+                "db": db,
+                "target_section_uids": requested_section_uids,
+                "target_reason": f"calibration_gap:{action_key}",
+                "job_type": "drafting_quality",
+            }
+            if quality_guidance:
+                job_kwargs["target_guidance"] = quality_guidance
+            job = await create_drafting_job(**job_kwargs)
+        elif action_key == "regenerate_stale":
+            job = await create_drafting_stale_job(project=project, db=db)
+        elif action_key == "regenerate_missing_requirements":
+            job = await create_drafting_requirements_job(project=project, db=db)
+        elif action_key == "regenerate_quality_depth":
+            job = await create_drafting_quality_job(project=project, db=db)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    return {
+        "action_key": action_key,
+        "status": "queued",
+        "result": _generation_job_response(job).model_dump(),
+    }
+
+
+def _calibration_quality_target_guidance(
+    section_uids: list[str],
+    req: RemediationActionRequest | None,
+) -> dict[str, dict[str, Any]] | None:
+    if not req:
+        return None
+
+    reasons = [
+        str(reason).strip()
+        for reason in req.gap_reasons
+        if str(reason).strip()
+    ]
+    operational_signals = [
+        str(signal).strip()
+        for signal in req.operational_detail_missing_signals
+        if str(signal).strip()
+    ]
+    reference_section = str(req.reference_section or "").strip()
+    generated_section = str(req.generated_section or "").strip()
+    instructions: list[str] = []
+
+    if reasons:
+        instructions.append(
+            "Address calibration gap reasons from the reference comparison: "
+            + ", ".join(reasons)
+            + "."
+        )
+    if reference_section:
+        instructions.append(
+            "Align the regenerated section with reference-calibration topic: "
+            f"{reference_section}."
+        )
+    if generated_section:
+        instructions.append(
+            "Use the current generated section as the base to improve: "
+            f"{generated_section}."
+        )
+    if any(reason in {"too short", "thin detail"} for reason in reasons):
+        instructions.append(
+            "Expand the section into developed tender-specific narrative depth "
+            "instead of a short generic summary."
+        )
+    if any(
+        reason in {"missing key terms", "weak lexical coverage"}
+        for reason in reasons
+    ):
+        instructions.append(
+            "Recover missing tender concepts and source-grounded terminology from "
+            "the project documents while keeping the text coherent."
+        )
+    if operational_signals or any(
+        reason in {"weak operational detail", "partial operational detail"}
+        for reason in reasons
+    ):
+        instructions.append(
+            "Add concrete operational detail: responsible roles, controls, records, "
+            "monitoring evidence, acceptance criteria, reporting sequence, "
+            "escalation, and corrective actions."
+        )
+    if operational_signals:
+        instructions.append(
+            "Calibration missing operational signals to cover where source support "
+            "exists: "
+            + ", ".join(operational_signals[:12])
+            + "."
+        )
+
+    unique_instructions = list(dict.fromkeys(instructions))
+    if not unique_instructions:
+        return None
+
+    expected_outcome: list[str] = []
+    if any(reason in {"too short", "thin detail"} for reason in reasons):
+        expected_outcome.append("developed narrative depth")
+    if any(reason in {"missing key terms", "weak lexical coverage"} for reason in reasons):
+        expected_outcome.append("source-grounded tender concepts")
+    if operational_signals or any(
+        reason in {"weak operational detail", "partial operational detail"}
+        for reason in reasons
+    ):
+        expected_outcome.append("concrete operational evidence")
+
+    calibration_context: dict[str, Any] = {
+        "gap_reasons": reasons,
+        "reference_section": reference_section or None,
+        "generated_section": generated_section or None,
+        "operational_detail_missing_signals": operational_signals,
+        "expected_outcome": expected_outcome,
+    }
+
+    return {
+        section_uid: {
+            "instructions": unique_instructions,
+            "calibration_context": calibration_context,
+        }
+        for section_uid in section_uids
+    }
+
+
+def _normalize_remediation_title(value: str) -> str:
+    return re.sub(r"\s+", " ", value).strip().casefold()
+
+
+async def _remediation_target_section_uids(
+    project_id: str,
+    db: AsyncSession,
+    req: RemediationActionRequest | None,
+) -> list[str]:
+    if not req:
+        return []
+
+    explicit_uids = [str(uid).strip() for uid in req.section_uids if str(uid).strip()]
+    title_hints = [
+        _normalize_remediation_title(str(title))
+        for title in req.section_title_hints
+        if str(title).strip()
+    ]
+    if not explicit_uids and not title_hints:
+        return []
+
+    from app.core.models import TpOutline
+    from sqlalchemy import select
+
+    outline_res = await db.execute(
+        select(TpOutline)
+        .where(TpOutline.project_id == project_id)
+        .order_by(TpOutline.version.desc())
+        .limit(1)
+    )
+    outline = outline_res.scalar_one_or_none()
+    if not outline:
+        raise ValueError("No outline available to resolve remediation section targets.")
+
+    sections: list[dict[str, Any]] = []
+    _collect_outline_sections(
+        outline.outline_json.get("sections", outline.outline_json.get("outline", [])),
+        sections,
+    )
+    outline_uids = {
+        str(section.get("uid") or section.get("section_uid") or "").strip()
+        for section in sections
+        if str(section.get("uid") or section.get("section_uid") or "").strip()
+    }
+    matched_uids = [uid for uid in explicit_uids if uid in outline_uids]
+    for section in sections:
+        uid = str(section.get("uid") or section.get("section_uid") or "").strip()
+        title = _normalize_remediation_title(str(section.get("title") or ""))
+        if not uid or not title:
+            continue
+        if any(hint == title or hint in title or title in hint for hint in title_hints):
+            matched_uids.append(uid)
+
+    resolved = list(dict.fromkeys(uid for uid in matched_uids if uid))
+    if (explicit_uids or title_hints) and not resolved:
+        raise ValueError("No outline sections matched remediation section targets.")
+    return resolved
+
+
+def _collect_outline_sections(
+    sections: list[dict[str, Any]],
+    result: list[dict[str, Any]],
+) -> None:
+    for section in sections:
+        if not isinstance(section, dict):
+            continue
+        result.append(section)
+        children = section.get("subsections") or section.get("children") or []
+        if isinstance(children, list):
+            _collect_outline_sections(children, result)
 
 
 @router.get(

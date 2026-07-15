@@ -330,6 +330,7 @@ async def _run_drafting_all(
         title = section.get("title", "")
         requirements = section.get("requirements", [])
         requirement_items = section.get("requirement_checklist_items", [])
+        drafting_guidance = section.get("drafting_guidance")
 
         log.info("drafting_all_section", project_id=project.id, section=title, trace_id=trace_id)
 
@@ -373,6 +374,7 @@ async def _run_drafting_all(
             trace_id=trace_id,
             project_grounding_context=project_grounding_context,
             section_requirement_items=requirement_items,
+            section_drafting_guidance=drafting_guidance,
         )
         results.append({"section_uid": uid, "title": title, "generation_ids": drafting_result.get("generation_ids")})
         generated_count += 1
@@ -402,6 +404,7 @@ async def _run_drafting_pipeline(
     section_uid = params.get("section_uid", str(uuid.uuid4()))
     section_requirements = params.get("section_requirements", [])
     section_requirement_items = params.get("section_requirement_items", [])
+    section_drafting_guidance = params.get("section_drafting_guidance")
 
     log.info(
         "drafting_pipeline_start",
@@ -478,6 +481,7 @@ async def _run_drafting_pipeline(
         trace_id=trace_id,
         project_grounding_context=project_grounding_context,
         section_requirement_items=section_requirement_items,
+        section_drafting_guidance=section_drafting_guidance,
     )
     pipeline_trace["drafting"] = {
         "status": "ok" if "error" not in drafting_result else "error"
@@ -562,6 +566,7 @@ async def _dispatch_agent(
             section_title = params.get("section_title", "")
             section_requirements = params.get("section_requirements", [])
             section_requirement_items = params.get("section_requirement_items", [])
+            section_drafting_guidance = params.get("section_drafting_guidance")
             project_grounding_context = await build_project_grounding_context(
                 project_id=project_id,
                 section_title=section_title,
@@ -581,6 +586,7 @@ async def _dispatch_agent(
                 trace_id=trace_id,
                 project_grounding_context=project_grounding_context,
                 section_requirement_items=section_requirement_items,
+                section_drafting_guidance=section_drafting_guidance,
             )
 
         elif agent_name == "verifier":

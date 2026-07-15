@@ -465,6 +465,7 @@ def _attach_requirement_to_section(section: dict[str, Any], item: RequirementIte
                 "importance": item.importance,
                 "category": item.category,
                 "category_label": item.category_label,
+                "topic": item.topic,
                 "coverage_question": item.coverage_question,
                 "source_chunk_id": item.source_chunk_id,
                 "source_page": item.source_page,
@@ -473,6 +474,85 @@ def _attach_requirement_to_section(section: dict[str, Any], item: RequirementIte
             }
         )
     section["requirement_checklist_items"] = checklist_items
+
+
+def _section_drafting_guidance(section: dict[str, Any]) -> dict[str, Any] | None:
+    checklist_items = [
+        item
+        for item in section.get("requirement_checklist_items") or []
+        if isinstance(item, dict)
+    ]
+    subtopics: list[str] = []
+    for child in section.get("subsections") or []:
+        title = str(child.get("title") or "").strip()
+        if title and title not in subtopics:
+            subtopics.append(title)
+    for item in checklist_items:
+        topic = str(
+            item.get("topic")
+            or item.get("category_label")
+            or item.get("category")
+            or ""
+        ).strip()
+        if topic and topic not in subtopics:
+            subtopics.append(topic)
+
+    if not checklist_items and not subtopics:
+        return None
+
+    source_refs = [
+        str(ref)
+        for ref in section.get("source_refs") or []
+        if ref
+    ]
+    source_refs.extend(
+        str(item.get("source_chunk_id"))
+        for item in checklist_items
+        if item.get("source_chunk_id")
+    )
+    source_refs = list(dict.fromkeys(source_refs))
+
+    instructions = [
+        "Open with the concrete tender scope for this section.",
+        "Use the required subtopics as explicit subheadings or developed paragraphs.",
+        (
+            "For every mapped checklist item, state action, responsible role, "
+            "control/evidence record, timing or deliverable link, and "
+            "acceptance or escalation path when supported by sources."
+        ),
+    ]
+    if len(checklist_items) > 1:
+        instructions.append(
+            "Do not merge several checklist items into one generic promise; "
+            "cover them one by one."
+        )
+    if section.get("subsections"):
+        instructions.append(
+            "Preserve the subsection order from the tender documentation."
+        )
+
+    return {
+        "section_title": section.get("title") or "",
+        "requirement_count": len(checklist_items),
+        "required_subtopics": subtopics[:30],
+        "source_refs": source_refs[:30],
+        "instructions": instructions,
+    }
+
+
+def _apply_section_drafting_guidance(
+    sections: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    for section in sections:
+        section["subsections"] = _apply_section_drafting_guidance(
+            section.get("subsections") or []
+        )
+        guidance = _section_drafting_guidance(section)
+        if guidance:
+            section["drafting_guidance"] = guidance
+        else:
+            section.pop("drafting_guidance", None)
+    return sections
 
 
 def _missing_requirement_sections(items: list[RequirementItem]) -> list[dict[str, Any]]:
@@ -527,7 +607,7 @@ def _attach_requirement_checklist_to_outline_sections(
             *_missing_requirement_sections(unmatched),
         ]
 
-    return _dedupe_outline_sections(enriched_sections)
+    return _apply_section_drafting_guidance(_dedupe_outline_sections(enriched_sections))
 
 
 def _build_outline_coverage_summary(
@@ -892,6 +972,8 @@ def _build_deterministic_outline(
             sections,
             requirement_checklist,
         )
+    else:
+        sections = _apply_section_drafting_guidance(sections)
     if not sections:
         return None
 

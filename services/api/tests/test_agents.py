@@ -457,6 +457,704 @@ async def test_regenerate_section_ok(client, mock_db):
     assert "trace_id" in data
 
 
+@pytest.mark.asyncio
+async def test_regenerate_stale_generation_job_ok(client, mock_db):
+    pid = str(uuid.uuid4())
+    project = _make_project()
+    project.id = pid
+    job = MagicMock()
+    job.id = str(uuid.uuid4())
+    job.project_id = pid
+    job.job_type = "drafting_stale"
+    job.status = "queued"
+    job.total_sections = 2
+    job.completed_sections = 0
+    job.skipped_sections = 0
+    job.current_section_uid = None
+    job.current_section_title = None
+    job.error = None
+    job.result_json = {
+        "target_section_uids": ["s1", "s2"],
+        "target_reason": "stale_selected",
+    }
+    job.trace_id = str(uuid.uuid4())
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc)
+    job.created_at = now
+    job.updated_at = now
+    job.completed_at = None
+    mock_db.get = AsyncMock(return_value=project)
+
+    with patch(
+        "app.agents.generation_jobs.create_drafting_stale_job",
+        new=AsyncMock(return_value=job),
+    ) as create_job:
+        resp = await client.post(f"/api/v1/agents/{pid}/generation-jobs/stale")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["id"] == job.id
+    assert data["job_type"] == "drafting_stale"
+    assert data["total_sections"] == 2
+    assert data["result_json"]["target_reason"] == "stale_selected"
+    create_job.assert_awaited_once_with(project=project, db=mock_db)
+
+
+@pytest.mark.asyncio
+async def test_regenerate_quality_generation_job_ok(client, mock_db):
+    pid = str(uuid.uuid4())
+    project = _make_project()
+    project.id = pid
+    job = MagicMock()
+    job.id = str(uuid.uuid4())
+    job.project_id = pid
+    job.job_type = "drafting_quality"
+    job.status = "queued"
+    job.total_sections = 1
+    job.completed_sections = 0
+    job.skipped_sections = 0
+    job.current_section_uid = None
+    job.current_section_title = None
+    job.error = None
+    job.result_json = {
+        "target_section_uids": ["s-quality"],
+        "target_reason": "quality_review",
+    }
+    job.trace_id = str(uuid.uuid4())
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc)
+    job.created_at = now
+    job.updated_at = now
+    job.completed_at = None
+    mock_db.get = AsyncMock(return_value=project)
+
+    with patch(
+        "app.agents.generation_jobs.create_drafting_quality_job",
+        new=AsyncMock(return_value=job),
+    ) as create_job:
+        resp = await client.post(f"/api/v1/agents/{pid}/generation-jobs/quality")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["id"] == job.id
+    assert data["job_type"] == "drafting_quality"
+    assert data["total_sections"] == 1
+    assert data["result_json"]["target_reason"] == "quality_review"
+    create_job.assert_awaited_once_with(project=project, db=mock_db)
+
+
+@pytest.mark.asyncio
+async def test_regenerate_missing_requirements_generation_job_ok(client, mock_db):
+    pid = str(uuid.uuid4())
+    project = _make_project()
+    project.id = pid
+    job = MagicMock()
+    job.id = str(uuid.uuid4())
+    job.project_id = pid
+    job.job_type = "drafting_requirements"
+    job.status = "queued"
+    job.total_sections = 1
+    job.completed_sections = 0
+    job.skipped_sections = 0
+    job.current_section_uid = None
+    job.current_section_title = None
+    job.error = None
+    job.result_json = {
+        "target_section_uids": ["s-missing"],
+        "target_reason": "missing_requirements",
+    }
+    job.trace_id = str(uuid.uuid4())
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc)
+    job.created_at = now
+    job.updated_at = now
+    job.completed_at = None
+    mock_db.get = AsyncMock(return_value=project)
+
+    with patch(
+        "app.agents.generation_jobs.create_drafting_requirements_job",
+        new=AsyncMock(return_value=job),
+    ) as create_job:
+        resp = await client.post(
+            f"/api/v1/agents/{pid}/generation-jobs/missing-requirements"
+        )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["id"] == job.id
+    assert data["job_type"] == "drafting_requirements"
+    assert data["total_sections"] == 1
+    assert data["result_json"]["target_reason"] == "missing_requirements"
+    create_job.assert_awaited_once_with(project=project, db=mock_db)
+
+
+@pytest.mark.asyncio
+async def test_run_remediation_action_queues_stale_generation_job(client, mock_db):
+    pid = str(uuid.uuid4())
+    project = _make_project()
+    project.id = pid
+    job = MagicMock()
+    job.id = str(uuid.uuid4())
+    job.project_id = pid
+    job.job_type = "drafting_stale"
+    job.status = "queued"
+    job.total_sections = 2
+    job.completed_sections = 0
+    job.skipped_sections = 0
+    job.current_section_uid = None
+    job.current_section_title = None
+    job.error = None
+    job.result_json = {
+        "target_section_uids": ["s1", "s2"],
+        "target_reason": "stale_selected",
+    }
+    job.trace_id = str(uuid.uuid4())
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc)
+    job.created_at = now
+    job.updated_at = now
+    job.completed_at = None
+    mock_db.get = AsyncMock(return_value=project)
+
+    with patch(
+        "app.agents.generation_jobs.create_drafting_stale_job",
+        new=AsyncMock(return_value=job),
+    ) as create_job:
+        resp = await client.post(
+            f"/api/v1/agents/{pid}/remediation-actions/regenerate_stale"
+        )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["action_key"] == "regenerate_stale"
+    assert data["status"] == "queued"
+    assert data["result"]["id"] == job.id
+    assert data["result"]["job_type"] == "drafting_stale"
+    assert data["result"]["result_json"]["target_reason"] == "stale_selected"
+    create_job.assert_awaited_once_with(project=project, db=mock_db)
+
+
+@pytest.mark.asyncio
+async def test_run_remediation_action_targets_calibration_section_hints(client, mock_db):
+    from app.core.models import TpOutline
+    from datetime import datetime, timezone
+
+    pid = str(uuid.uuid4())
+    project = _make_project()
+    project.id = pid
+    outline = TpOutline(
+        id=str(uuid.uuid4()),
+        project_id=pid,
+        outline_json={
+            "sections": [
+                {
+                    "uid": "sec-quality",
+                    "title": "Quality generated",
+                    "requirements": [],
+                    "subsections": [],
+                },
+                {
+                    "uid": "sec-other",
+                    "title": "Other section",
+                    "requirements": [],
+                    "subsections": [],
+                },
+            ]
+        },
+        status_locked=True,
+        version=3,
+    )
+    outline_result = MagicMock()
+    outline_result.scalar_one_or_none = MagicMock(return_value=outline)
+    job = MagicMock()
+    job.id = str(uuid.uuid4())
+    job.project_id = pid
+    job.job_type = "drafting_quality"
+    job.status = "queued"
+    job.total_sections = 1
+    job.completed_sections = 0
+    job.skipped_sections = 0
+    job.current_section_uid = None
+    job.current_section_title = None
+    job.error = None
+    job.result_json = {
+        "target_section_uids": ["sec-quality"],
+        "target_reason": "calibration_gap:regenerate_quality_depth",
+    }
+    job.trace_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc)
+    job.created_at = now
+    job.updated_at = now
+    job.completed_at = None
+    mock_db.get = AsyncMock(return_value=project)
+    mock_db.execute = AsyncMock(return_value=outline_result)
+
+    with patch(
+        "app.agents.generation_jobs.create_drafting_job",
+        new=AsyncMock(return_value=job),
+    ) as create_job:
+        resp = await client.post(
+            f"/api/v1/agents/{pid}/remediation-actions/regenerate_quality_depth",
+            json={"section_title_hints": ["Quality generated"]},
+        )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["action_key"] == "regenerate_quality_depth"
+    assert data["status"] == "queued"
+    assert data["result"]["result_json"]["target_section_uids"] == ["sec-quality"]
+    assert data["result"]["result_json"]["target_reason"] == (
+        "calibration_gap:regenerate_quality_depth"
+    )
+    create_job.assert_awaited_once_with(
+        project=project,
+        db=mock_db,
+        target_section_uids=["sec-quality"],
+        target_reason="calibration_gap:regenerate_quality_depth",
+        job_type="drafting_quality",
+    )
+
+
+@pytest.mark.asyncio
+async def test_run_remediation_action_passes_calibration_gap_guidance(client, mock_db):
+    from app.core.models import TpOutline
+    from datetime import datetime, timezone
+
+    pid = str(uuid.uuid4())
+    project = _make_project()
+    project.id = pid
+    outline = TpOutline(
+        id=str(uuid.uuid4()),
+        project_id=pid,
+        outline_json={
+            "sections": [
+                {
+                    "uid": "sec-quality",
+                    "title": "Quality generated",
+                    "requirements": [],
+                    "subsections": [],
+                }
+            ]
+        },
+        status_locked=True,
+        version=3,
+    )
+    outline_result = MagicMock()
+    outline_result.scalar_one_or_none = MagicMock(return_value=outline)
+    job = MagicMock()
+    job.id = str(uuid.uuid4())
+    job.project_id = pid
+    job.job_type = "drafting_quality"
+    job.status = "queued"
+    job.total_sections = 1
+    job.completed_sections = 0
+    job.skipped_sections = 0
+    job.current_section_uid = None
+    job.current_section_title = None
+    job.error = None
+    job.result_json = {
+        "target_section_uids": ["sec-quality"],
+        "target_reason": "calibration_gap:regenerate_quality_depth",
+    }
+    job.trace_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc)
+    job.created_at = now
+    job.updated_at = now
+    job.completed_at = None
+    mock_db.get = AsyncMock(return_value=project)
+    mock_db.execute = AsyncMock(return_value=outline_result)
+
+    with patch(
+        "app.agents.generation_jobs.create_drafting_job",
+        new=AsyncMock(return_value=job),
+    ) as create_job:
+        resp = await client.post(
+            f"/api/v1/agents/{pid}/remediation-actions/regenerate_quality_depth",
+            json={
+                "section_title_hints": ["Quality generated"],
+                "gap_reasons": ["too short", "weak operational detail"],
+                "reference_section": "Quality reference",
+                "generated_section": "Quality generated",
+                "operational_detail_missing_signals": ["record", "monitoring"],
+            },
+        )
+
+    assert resp.status_code == 200
+    create_job.assert_awaited_once_with(
+        project=project,
+        db=mock_db,
+        target_section_uids=["sec-quality"],
+        target_reason="calibration_gap:regenerate_quality_depth",
+        target_guidance={
+            "sec-quality": {
+                "instructions": [
+                    (
+                        "Address calibration gap reasons from the reference "
+                        "comparison: too short, weak operational detail."
+                    ),
+                    (
+                        "Align the regenerated section with reference-calibration "
+                        "topic: Quality reference."
+                    ),
+                    (
+                        "Use the current generated section as the base to improve: "
+                        "Quality generated."
+                    ),
+                    (
+                        "Expand the section into developed tender-specific narrative "
+                        "depth instead of a short generic summary."
+                    ),
+                    (
+                        "Add concrete operational detail: responsible roles, "
+                        "controls, records, monitoring evidence, acceptance "
+                        "criteria, reporting sequence, escalation, and corrective "
+                        "actions."
+                    ),
+                    (
+                        "Calibration missing operational signals to cover where "
+                        "source support exists: record, monitoring."
+                    ),
+                ],
+                "calibration_context": {
+                    "gap_reasons": ["too short", "weak operational detail"],
+                    "reference_section": "Quality reference",
+                    "generated_section": "Quality generated",
+                    "operational_detail_missing_signals": [
+                        "record",
+                        "monitoring",
+                    ],
+                    "expected_outcome": [
+                        "developed narrative depth",
+                        "concrete operational evidence",
+                    ],
+                },
+            }
+        },
+        job_type="drafting_quality",
+    )
+
+
+@pytest.mark.asyncio
+async def test_run_remediation_action_targets_explicit_calibration_section_uids(
+    client,
+    mock_db,
+):
+    from app.core.models import TpOutline
+    from datetime import datetime, timezone
+
+    pid = str(uuid.uuid4())
+    project = _make_project()
+    project.id = pid
+    outline = TpOutline(
+        id=str(uuid.uuid4()),
+        project_id=pid,
+        outline_json={
+            "sections": [
+                {
+                    "uid": "sec-quality",
+                    "title": "Quality generated",
+                    "requirements": [],
+                    "subsections": [],
+                }
+            ]
+        },
+        status_locked=True,
+        version=3,
+    )
+    outline_result = MagicMock()
+    outline_result.scalar_one_or_none = MagicMock(return_value=outline)
+    job = MagicMock()
+    job.id = str(uuid.uuid4())
+    job.project_id = pid
+    job.job_type = "drafting_quality"
+    job.status = "queued"
+    job.total_sections = 1
+    job.completed_sections = 0
+    job.skipped_sections = 0
+    job.current_section_uid = None
+    job.current_section_title = None
+    job.error = None
+    job.result_json = {
+        "target_section_uids": ["sec-quality"],
+        "target_reason": "calibration_gap:regenerate_quality_depth",
+    }
+    job.trace_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc)
+    job.created_at = now
+    job.updated_at = now
+    job.completed_at = None
+    mock_db.get = AsyncMock(return_value=project)
+    mock_db.execute = AsyncMock(return_value=outline_result)
+
+    with patch(
+        "app.agents.generation_jobs.create_drafting_job",
+        new=AsyncMock(return_value=job),
+    ) as create_job:
+        resp = await client.post(
+            f"/api/v1/agents/{pid}/remediation-actions/regenerate_quality_depth",
+            json={"section_uids": ["sec-quality"]},
+        )
+
+    assert resp.status_code == 200
+    assert resp.json()["result"]["result_json"]["target_section_uids"] == [
+        "sec-quality"
+    ]
+    create_job.assert_awaited_once_with(
+        project=project,
+        db=mock_db,
+        target_section_uids=["sec-quality"],
+        target_reason="calibration_gap:regenerate_quality_depth",
+        job_type="drafting_quality",
+    )
+
+
+@pytest.mark.asyncio
+async def test_run_remediation_action_preserves_multiple_unique_section_targets(
+    client,
+    mock_db,
+):
+    from app.core.models import TpOutline
+    from datetime import datetime, timezone
+
+    pid = str(uuid.uuid4())
+    project = _make_project()
+    project.id = pid
+    outline = TpOutline(
+        id=str(uuid.uuid4()),
+        project_id=pid,
+        outline_json={
+            "sections": [
+                {
+                    "uid": "sec-quality",
+                    "title": "Quality generated",
+                    "requirements": [],
+                    "subsections": [],
+                },
+                {
+                    "uid": "sec-risk",
+                    "title": "Risk management",
+                    "requirements": [],
+                    "subsections": [],
+                },
+                {
+                    "uid": "sec-environment",
+                    "title": "Environmental measures",
+                    "requirements": [],
+                    "subsections": [],
+                },
+            ]
+        },
+        status_locked=True,
+        version=3,
+    )
+    outline_result = MagicMock()
+    outline_result.scalar_one_or_none = MagicMock(return_value=outline)
+    job = MagicMock()
+    job.id = str(uuid.uuid4())
+    job.project_id = pid
+    job.job_type = "drafting_quality"
+    job.status = "queued"
+    job.total_sections = 3
+    job.completed_sections = 0
+    job.skipped_sections = 0
+    job.current_section_uid = None
+    job.current_section_title = None
+    job.error = None
+    job.result_json = {
+        "target_section_uids": [
+            "sec-quality",
+            "sec-risk",
+            "sec-environment",
+        ],
+        "target_reason": "calibration_gap:regenerate_quality_depth",
+    }
+    job.trace_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc)
+    job.created_at = now
+    job.updated_at = now
+    job.completed_at = None
+    mock_db.get = AsyncMock(return_value=project)
+    mock_db.execute = AsyncMock(return_value=outline_result)
+
+    with patch(
+        "app.agents.generation_jobs.create_drafting_job",
+        new=AsyncMock(return_value=job),
+    ) as create_job:
+        resp = await client.post(
+            f"/api/v1/agents/{pid}/remediation-actions/regenerate_quality_depth",
+            json={
+                "section_uids": ["sec-quality", "sec-risk", "sec-quality"],
+                "section_title_hints": ["Environmental measures"],
+            },
+        )
+
+    assert resp.status_code == 200
+    assert resp.json()["result"]["result_json"]["target_section_uids"] == [
+        "sec-quality",
+        "sec-risk",
+        "sec-environment",
+    ]
+    create_job.assert_awaited_once_with(
+        project=project,
+        db=mock_db,
+        target_section_uids=[
+            "sec-quality",
+            "sec-risk",
+            "sec-environment",
+        ],
+        target_reason="calibration_gap:regenerate_quality_depth",
+        job_type="drafting_quality",
+    )
+
+
+@pytest.mark.asyncio
+async def test_run_remediation_action_targets_missing_requirements_with_guidance(
+    client,
+    mock_db,
+):
+    from app.core.models import TpOutline
+    from datetime import datetime, timezone
+
+    pid = str(uuid.uuid4())
+    project = _make_project()
+    project.id = pid
+    outline = TpOutline(
+        id=str(uuid.uuid4()),
+        project_id=pid,
+        outline_json={
+            "sections": [
+                {
+                    "uid": "sec-quality",
+                    "title": "Quality generated",
+                    "requirements": [],
+                    "subsections": [],
+                }
+            ]
+        },
+        status_locked=True,
+        version=3,
+    )
+    outline_result = MagicMock()
+    outline_result.scalar_one_or_none = MagicMock(return_value=outline)
+    job = MagicMock()
+    job.id = str(uuid.uuid4())
+    job.project_id = pid
+    job.job_type = "drafting_requirements"
+    job.status = "queued"
+    job.total_sections = 1
+    job.completed_sections = 0
+    job.skipped_sections = 0
+    job.current_section_uid = None
+    job.current_section_title = None
+    job.error = None
+    job.result_json = {
+        "target_section_uids": ["sec-quality"],
+        "target_reason": "calibration_gap:regenerate_missing_requirements",
+        "target_guidance": {
+            "sec-quality": {
+                "instructions": ["Regenerate with quality records."],
+                "missing_requirement_ids": ["req-quality"],
+            }
+        },
+    }
+    job.trace_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc)
+    job.created_at = now
+    job.updated_at = now
+    job.completed_at = None
+    mock_db.get = AsyncMock(return_value=project)
+    mock_db.execute = AsyncMock(return_value=outline_result)
+
+    with patch(
+        "app.agents.generation_jobs.create_drafting_requirements_job",
+        new=AsyncMock(return_value=job),
+    ) as create_requirements_job:
+        resp = await client.post(
+            f"/api/v1/agents/{pid}/remediation-actions/regenerate_missing_requirements",
+            json={"section_uids": ["sec-quality"]},
+        )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["action_key"] == "regenerate_missing_requirements"
+    assert data["result"]["job_type"] == "drafting_requirements"
+    assert data["result"]["result_json"]["target_guidance"]["sec-quality"][
+        "missing_requirement_ids"
+    ] == ["req-quality"]
+    create_requirements_job.assert_awaited_once_with(
+        project=project,
+        db=mock_db,
+        target_section_uids=["sec-quality"],
+        target_reason="calibration_gap:regenerate_missing_requirements",
+    )
+
+
+@pytest.mark.asyncio
+async def test_run_remediation_action_rejects_stale_calibration_section_uids(
+    client,
+    mock_db,
+):
+    from app.core.models import TpOutline
+
+    pid = str(uuid.uuid4())
+    project = _make_project()
+    project.id = pid
+    outline = TpOutline(
+        id=str(uuid.uuid4()),
+        project_id=pid,
+        outline_json={
+            "sections": [
+                {
+                    "uid": "sec-current",
+                    "title": "Current section",
+                    "requirements": [],
+                    "subsections": [],
+                }
+            ]
+        },
+        status_locked=True,
+        version=3,
+    )
+    outline_result = MagicMock()
+    outline_result.scalar_one_or_none = MagicMock(return_value=outline)
+    mock_db.get = AsyncMock(return_value=project)
+    mock_db.execute = AsyncMock(return_value=outline_result)
+
+    with patch(
+        "app.agents.generation_jobs.create_drafting_job",
+        new=AsyncMock(),
+    ) as create_job:
+        resp = await client.post(
+            f"/api/v1/agents/{pid}/remediation-actions/regenerate_quality_depth",
+            json={"section_uids": ["sec-old"]},
+        )
+
+    assert resp.status_code == 409
+    assert resp.json()["detail"] == (
+        "No outline sections matched remediation section targets."
+    )
+    create_job.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_run_remediation_action_unknown_key(client, mock_db):
+    pid = str(uuid.uuid4())
+    project = _make_project()
+    project.id = pid
+    mock_db.get = AsyncMock(return_value=project)
+
+    resp = await client.post(
+        f"/api/v1/agents/{pid}/remediation-actions/not-a-real-action"
+    )
+
+    assert resp.status_code == 404
+    assert resp.json()["detail"] == "Unknown remediation action"
+
+
 # ---------------------------------------------------------------------------
 # POST /api/v1/agents/{project_id}/outline/unlock
 # ---------------------------------------------------------------------------
@@ -731,3 +1429,122 @@ async def test_select_generation_ok(client, mock_db):
     assert data["status"] == "selected"
     assert data["generation_id"] == gid
     assert gen.selected is True
+
+
+@pytest.mark.asyncio
+async def test_resolve_duplicate_selected_generations_keeps_newest(client, mock_db):
+    from app.core.models import Generation
+    from datetime import datetime, timezone
+
+    pid = str(uuid.uuid4())
+    project = _make_project()
+    project.id = pid
+    old = Generation(
+        id="gen-old",
+        project_id=pid,
+        section_uid="sec-duplicate",
+        variant=1,
+        text="Older selected",
+        evidence_status="ok",
+        selected=True,
+        created_at=datetime(2026, 4, 20, tzinfo=timezone.utc),
+    )
+    newest = Generation(
+        id="gen-newest",
+        project_id=pid,
+        section_uid="sec-duplicate",
+        variant=2,
+        text="Newest selected",
+        evidence_status="ok",
+        selected=True,
+        created_at=datetime(2026, 4, 21, tzinfo=timezone.utc),
+    )
+    single = Generation(
+        id="gen-single",
+        project_id=pid,
+        section_uid="sec-single",
+        variant=1,
+        text="Only selected",
+        evidence_status="ok",
+        selected=True,
+        created_at=datetime(2026, 4, 19, tzinfo=timezone.utc),
+    )
+    selected_result = MagicMock()
+    selected_result.scalars = MagicMock(
+        return_value=MagicMock(all=MagicMock(return_value=[newest, old, single]))
+    )
+    mock_db.get = AsyncMock(return_value=project)
+    mock_db.execute = AsyncMock(return_value=selected_result)
+
+    resp = await client.post(
+        f"/api/v1/agents/{pid}/generations/resolve-duplicates"
+    )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "resolved"
+    assert data["resolved_count"] == 1
+    assert data["sections"] == [
+        {
+            "section_uid": "sec-duplicate",
+            "generation_id": "gen-newest",
+            "previous_selected_count": 2,
+        }
+    ]
+    assert newest.selected is True
+    assert mock_db.execute.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_run_remediation_action_resolves_duplicate_selected(client, mock_db):
+    from app.core.models import Generation
+    from datetime import datetime, timezone
+
+    pid = str(uuid.uuid4())
+    project = _make_project()
+    project.id = pid
+    old = Generation(
+        id="gen-old",
+        project_id=pid,
+        section_uid="sec-duplicate",
+        variant=1,
+        text="Older selected",
+        evidence_status="ok",
+        selected=True,
+        created_at=datetime(2026, 4, 20, tzinfo=timezone.utc),
+    )
+    newest = Generation(
+        id="gen-newest",
+        project_id=pid,
+        section_uid="sec-duplicate",
+        variant=2,
+        text="Newest selected",
+        evidence_status="ok",
+        selected=True,
+        created_at=datetime(2026, 4, 21, tzinfo=timezone.utc),
+    )
+    selected_result = MagicMock()
+    selected_result.scalars = MagicMock(
+        return_value=MagicMock(all=MagicMock(return_value=[newest, old]))
+    )
+    mock_db.get = AsyncMock(return_value=project)
+    mock_db.execute = AsyncMock(return_value=selected_result)
+
+    resp = await client.post(
+        f"/api/v1/agents/{pid}/remediation-actions/resolve_duplicate_selected"
+    )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["action_key"] == "resolve_duplicate_selected"
+    assert data["status"] == "resolved"
+    assert data["result"]["resolved_count"] == 1
+    assert data["result"]["sections"] == [
+        {
+            "section_uid": "sec-duplicate",
+            "generation_id": "gen-newest",
+            "previous_selected_count": 2,
+        }
+    ]
+    assert newest.selected is True
+    assert mock_db.execute.await_count == 2

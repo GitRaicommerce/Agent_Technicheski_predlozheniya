@@ -5,6 +5,7 @@ from app.agents.requirements import (
     SPECIFIC_REQUIREMENTS_LABEL,
     SUGGESTED_SECTIONS,
     RequirementItem,
+    extract_requirement_checklist,
 )
 from app.agents.tender_struct import (
     _attach_requirement_checklist_to_outline_sections,
@@ -226,8 +227,13 @@ def test_requirement_checklist_is_attached_to_matching_outline_sections():
 
     assert schedule_section["requirement_ids"] == ["req-schedule"]
     assert schedule_section["requirement_checklist_items"][0]["id"] == "req-schedule"
+    assert schedule_section["drafting_guidance"]["requirement_count"] == 1
+    assert schedule_section["drafting_guidance"]["required_subtopics"] == [
+        schedule_requirement.topic
+    ]
     assert specific_section["requirement_ids"] == ["req-specific"]
     assert specific_section["requirement_checklist_items"][0]["id"] == "req-specific"
+    assert specific_section["drafting_guidance"]["requirement_count"] == 1
     assert summary["total_requirements"] == 2
     assert summary["covered_requirements"] == 2
     assert summary["missing_requirement_ids"] == []
@@ -253,7 +259,48 @@ def test_build_deterministic_outline_can_start_from_requirement_checklist():
     assert outline["sections"][0]["title"] == SUGGESTED_SECTIONS[SPECIFIC_REQUIREMENTS_CATEGORY]
     assert outline["sections"][0]["requirement_ids"] == ["req-specific-only"]
     assert outline["sections"][0]["requirement_checklist_items"][0]["id"] == "req-specific-only"
+    assert outline["sections"][0]["drafting_guidance"]["requirement_count"] == 1
     assert outline["coverage_summary"]["covered_requirements"] == 1
+
+
+def test_common_noisy_requirement_scenario_builds_outline_from_checklist():
+    chunks = [
+        make_chunk(
+            "common-scenario",
+            (
+                "Минималното съдържание на техническото предложение включва:\n"
+                "1. мерки за управление на риска, включително идентифициране\n"
+                "на конкретни рискове и действия при непредвидени обстоятелства;\n"
+                "2. мерки за опазване на околната среда, ограничаване на праха\n"
+                "и управление на строителните отпадъци;\n"
+                "3. входящ, текущ и окончателен контрол на качеството\n"
+                "с протоколи за приемане;\n"
+                "4. специален ред за достъп до помещенията и\n"
+                "предаване на ключове."
+            ),
+            page=18,
+            section_path="Изисквания към техническото предложение",
+        )
+    ]
+
+    requirements = extract_requirement_checklist(chunks)
+    outline = _build_deterministic_outline(
+        explicit_numbered_sections=[],
+        domain_outline_sections=[],
+        mandatory_sections=[],
+        requirement_checklist=requirements,
+    )
+
+    assert outline is not None
+    assert len(requirements) == 4
+    titles = [section["title"] for section in outline["sections"]]
+    assert SUGGESTED_SECTIONS["risk"] in titles
+    assert SUGGESTED_SECTIONS["environment"] in titles
+    assert SUGGESTED_SECTIONS["quality"] in titles
+    assert SUGGESTED_SECTIONS[SPECIFIC_REQUIREMENTS_CATEGORY] in titles
+    assert outline["coverage_summary"]["total_requirements"] == 4
+    assert outline["coverage_summary"]["covered_requirements"] == 4
+    assert outline["coverage_summary"]["missing_requirement_ids"] == []
 
 
 def test_extract_mandatory_sections_ignores_numbered_lines_without_tp_context():

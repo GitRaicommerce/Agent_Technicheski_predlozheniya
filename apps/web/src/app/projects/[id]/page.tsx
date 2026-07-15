@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { api, LegislationStatusResponse, Project } from "@/lib/api";
+import { api, type ExportQualitySection, type LegislationStatusResponse, type Project } from "@/lib/api";
 import { useToast } from "@/components/ToastProvider";
 import ChatPanel from "@/components/ChatPanel";
 import ExportButton from "@/components/ExportButton";
@@ -50,6 +50,13 @@ export default function ProjectPage() {
   const [outlineRefreshKey, setOutlineRefreshKey] = useState(0);
   const [scheduleRefreshKey, setScheduleRefreshKey] = useState(0);
   const [generationsRefreshKey, setGenerationsRefreshKey] = useState(0);
+  const [generationAttentionFocusKey, setGenerationAttentionFocusKey] =
+    useState(0);
+  const [qualityAttentionSectionUids, setQualityAttentionSectionUids] =
+    useState<string[]>([]);
+  const [qualityAttentionSections, setQualityAttentionSections] = useState<
+    ExportQualitySection[]
+  >([]);
   const [showEdit, setShowEdit] = useState(false);
   const [editData, setEditData] = useState({ name: "", location: "", description: "", contracting_authority: "", tender_date: "" });
   const [saving, setSaving] = useState(false);
@@ -376,7 +383,12 @@ export default function ProjectPage() {
               projectName={project.name}
               onOpenGenerations={() => {
                 setShowGenerations(true);
+                setGenerationAttentionFocusKey((value) => value + 1);
                 setGenerationsRefreshKey((value) => value + 1);
+              }}
+              onQualitySectionsBlocked={(sectionUids, sections = []) => {
+                setQualityAttentionSectionUids(sectionUids);
+                setQualityAttentionSections(sections);
               }}
             />
           </div>
@@ -499,6 +511,9 @@ export default function ProjectPage() {
                 <GenerationsPanel
                   projectId={project.id}
                   refreshKey={generationsRefreshKey}
+                  focusAttentionKey={generationAttentionFocusKey}
+                  qualityAttentionSectionUids={qualityAttentionSectionUids}
+                  qualityAttentionSections={qualityAttentionSections}
                 />
               </div>
             )}

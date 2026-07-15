@@ -50,11 +50,22 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
+function exportReadyText(opening: string) {
+  const detailSentence =
+    "The proposal explains the execution sequence, responsible roles, coordination rhythm, quality controls, reporting evidence, risk response, resource readiness, acceptance checks, and communication duties in enough operational detail for export validation.";
+
+  return [opening, ...Array.from({ length: 12 }, () => detailSentence)].join(
+    " ",
+  );
+}
+
 async function seedProjectState(
   projectId: string,
   options?: {
     staleGeneration?: boolean;
     missingRequirementCoverage?: boolean;
+    shallowRequirementCoverage?: boolean;
+    duplicateSelectedGeneration?: boolean;
     outlineLocked?: boolean;
     includeAlternativeGeneration?: boolean;
     generationJob?: {
@@ -135,7 +146,36 @@ async function seedProjectState(
           ],
         },
       }
-    : null;
+    : options?.shallowRequirementCoverage
+      ? {
+          requirement_coverage: {
+            total: 3,
+            covered: 3,
+            missing: 0,
+            missing_ids: [],
+            items: [
+              {
+                id: "req-general-1",
+                text: "Cover the general execution requirements.",
+                status: "covered",
+              },
+              {
+                id: "req-general-2",
+                text: "Describe sequence, controls, and responsibilities.",
+                status: "covered",
+              },
+              {
+                id: "req-general-3",
+                text: "Describe acceptance and reporting for the work.",
+                status: "covered",
+              },
+            ],
+          },
+        }
+      : null;
+  const generationText = options?.shallowRequirementCoverage
+    ? "Short covered text."
+    : exportReadyText("Seeded generated text for smoke export.");
 
   await client.connect();
   try {
@@ -188,26 +228,27 @@ async function seedProjectState(
         generationId,
         projectId,
         sectionUid,
-        "Seeded generated text for smoke export.",
+        generationText,
         options?.staleGeneration ? "stale" : "ok",
         randomUUID(),
         JSON.stringify(generationFlags),
       ],
     );
 
-    if (options?.includeAlternativeGeneration) {
+    if (options?.includeAlternativeGeneration || options?.duplicateSelectedGeneration) {
       await client.query(
         `
           INSERT INTO generations (
             id, project_id, section_uid, variant, text, evidence_status, selected, trace_id
           )
-          VALUES ($1, $2, $3, '2', $4, 'ok', false, $5)
+          VALUES ($1, $2, $3, '2', $4, 'ok', $5, $6)
         `,
         [
           alternativeGenerationId,
           projectId,
           sectionUid,
-          "Alternative smoke variant text.",
+          exportReadyText("Alternative smoke variant text."),
+          options?.duplicateSelectedGeneration ?? false,
           randomUUID(),
         ],
       );
@@ -254,7 +295,7 @@ async function seedProjectState(
   return {
     sectionUid,
     generationId,
-    alternativeGenerationId: options?.includeAlternativeGeneration
+    alternativeGenerationId: options?.includeAlternativeGeneration || options?.duplicateSelectedGeneration
       ? alternativeGenerationId
       : null,
     generationJobId: options?.generationJob ? generationJobId : null,
@@ -482,6 +523,106 @@ test.describe("smoke", () => {
     }
   });
 
+  test("shows duplicate selected warning for ambiguous seeded generations", async ({
+    page,
+    request,
+  }) => {
+    const projectName = `Smoke Duplicate ${Date.now()}`;
+    const createResponse = await request.post("/api/v1/projects", {
+      data: {
+        name: projectName,
+        location: "Sofia",
+      },
+    });
+
+    expect(createResponse.ok()).toBeTruthy();
+    const project = (await createResponse.json()) as { id: string };
+    const projectId = project.id;
+    const { sectionUid, alternativeGenerationId } = await seedProjectState(projectId, {
+      duplicateSelectedGeneration: true,
+      outlineLocked: true,
+    });
+    expect(alternativeGenerationId).toBeTruthy();
+
+    try {
+      await page.goto(`/projects/${projectId}`);
+      await waitForProjectPage(page, projectName);
+
+      await page.getByTestId("export-docx-button").click();
+
+      await expect(
+        page.getByTestId("export-duplicate-selected-warning"),
+      ).toContainText("1 секция");
+      await page
+        .getByTestId("export-duplicate-selected-warning")
+        .getByRole("button")
+        .click();
+      await expect(page.getByTestId("generation-attention-summary")).toContainText(
+        "1 секция изисква внимание",
+      );
+      await expect(page.getByTestId("generation-attention-summary")).toContainText(
+        "дублиран избор: 1",
+      );
+      await expect(
+        page.getByTestId("generation-attention-filter-toggle"),
+      ).toContainText("Покажи всички");
+      await expect(
+        page.getByTestId(`generation-section-${sectionUid}`),
+      ).toBeVisible();
+
+      await page
+        .getByTestId("generation-resolve-duplicates-latest-button")
+        .click();
+
+      await expect(
+        page.getByTestId("generation-resolve-duplicates-latest-button"),
+      ).toHaveCount(0);
+
+      const exportResponse = await request.get(`/api/v1/export/${projectId}/docx`);
+      expect(exportResponse.ok()).toBeTruthy();
+    } finally {
+      await request.delete(`/api/v1/projects/${projectId}`);
+    }
+  });
+
+  test("shows multiple pre-export warnings from one readiness check", async ({
+    page,
+    request,
+  }) => {
+    const projectName = `Smoke Readiness ${Date.now()}`;
+    const createResponse = await request.post("/api/v1/projects", {
+      data: {
+        name: projectName,
+        location: "Sofia",
+      },
+    });
+
+    expect(createResponse.ok()).toBeTruthy();
+    const project = (await createResponse.json()) as { id: string };
+    const projectId = project.id;
+    await seedProjectState(projectId, {
+      duplicateSelectedGeneration: true,
+      staleGeneration: true,
+      missingRequirementCoverage: true,
+      outlineLocked: true,
+    });
+
+    try {
+      await page.goto(`/projects/${projectId}`);
+      await waitForProjectPage(page, projectName);
+
+      await page.getByTestId("export-docx-button").click();
+
+      await expect(
+        page.getByTestId("export-duplicate-selected-warning"),
+      ).toBeVisible();
+      await expect(page.getByTestId("export-stale-warning")).toBeVisible();
+      await expect(page.getByTestId("export-requirement-warning")).toBeVisible();
+    } finally {
+      await request.delete(`/api/v1/projects/${projectId}`);
+    }
+  });
+
   test("shows requirement coverage warning for incomplete selected generations", async ({
     page,
     request,
@@ -516,6 +657,50 @@ test.describe("smoke", () => {
       await expect(
         page.getByTestId(`generation-requirement-coverage-${sectionUid}`),
       ).toContainText("1/2");
+    } finally {
+      await request.delete(`/api/v1/projects/${projectId}`);
+    }
+  });
+
+  test("shows quality warning for shallow selected generations", async ({
+    page,
+    request,
+  }) => {
+    const projectName = `Smoke Quality ${Date.now()}`;
+    const createResponse = await request.post("/api/v1/projects", {
+      data: {
+        name: projectName,
+        location: "Sofia",
+      },
+    });
+
+    expect(createResponse.ok()).toBeTruthy();
+    const project = (await createResponse.json()) as { id: string };
+    const projectId = project.id;
+    const { sectionUid } = await seedProjectState(projectId, {
+      shallowRequirementCoverage: true,
+      outlineLocked: true,
+    });
+
+    try {
+      await page.goto(`/projects/${projectId}`);
+      await waitForProjectPage(page, projectName);
+
+      await page.getByTestId("export-docx-button").click();
+
+      await expect(page.getByTestId("export-quality-warning")).toContainText(
+        "1 секция",
+      );
+      await page.getByTestId("export-quality-warning").getByRole("button").click();
+      await expect(page.getByTestId("generation-attention-summary")).toContainText(
+        "кратки секции: 1",
+      );
+      await expect(
+        page.getByTestId(`generation-section-${sectionUid}`),
+      ).toBeVisible();
+      await expect(
+        page.getByTestId(`generation-quality-attention-badge-${sectionUid}`),
+      ).toContainText("кратка");
     } finally {
       await request.delete(`/api/v1/projects/${projectId}`);
     }
@@ -557,6 +742,96 @@ test.describe("smoke", () => {
       await expect(progress).toBeVisible();
       await expect(progress).toContainText("2 / 3");
       await expect(progress).toContainText("Execution Plan");
+    } finally {
+      await request.delete(`/api/v1/projects/${projectId}`);
+    }
+  });
+
+  test("starts stale selected section regeneration from generations panel", async ({
+    page,
+    request,
+  }) => {
+    const projectName = `Smoke Stale Regen ${Date.now()}`;
+    const createResponse = await request.post("/api/v1/projects", {
+      data: {
+        name: projectName,
+        location: "Sofia",
+      },
+    });
+
+    expect(createResponse.ok()).toBeTruthy();
+    const project = (await createResponse.json()) as { id: string };
+    const projectId = project.id;
+    const { sectionUid } = await seedProjectState(projectId, {
+      outlineLocked: true,
+      staleGeneration: true,
+    });
+    const staleJobId = randomUUID();
+    let staleJobStarted = false;
+    const staleJob = {
+      id: staleJobId,
+      project_id: projectId,
+      job_type: "drafting_stale",
+      status: "queued",
+      total_sections: 1,
+      completed_sections: 0,
+      skipped_sections: 0,
+      current_section_uid: null,
+      current_section_title: null,
+      error: null,
+      result_json: { target_reason: "stale_selected" },
+      trace_id: randomUUID(),
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      completed_at: null,
+    };
+
+    try {
+      await page.route(
+        `**/api/v1/agents/${projectId}/generation-jobs/latest`,
+        async (route) => {
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify(staleJobStarted ? staleJob : null),
+          });
+        },
+      );
+      await page.route(
+        `**/api/v1/agents/${projectId}/generation-jobs/stale`,
+        async (route) => {
+          staleJobStarted = true;
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify(staleJob),
+          });
+        },
+      );
+
+      await page.goto(`/projects/${projectId}`);
+      await waitForProjectPage(page, projectName);
+
+      await page.getByTestId("generations-panel-toggle").click();
+      await expect(
+        page.getByTestId("generation-stale-selected-action"),
+      ).toContainText("1 selected stale section");
+      await expect(page.getByTestId("generation-attention-summary")).toContainText(
+        "1 секция изисква внимание",
+      );
+      await expect(page.getByTestId("generation-attention-summary")).toContainText(
+        "остарели избрани: 1",
+      );
+      await expect(
+        page.getByTestId(`generation-stale-selected-badge-${sectionUid}`),
+      ).toContainText("остаряла");
+
+      await page.getByTestId("generation-stale-regenerate-button").click();
+
+      await expect(page.getByTestId("generation-job-progress")).toContainText(
+        "0 / 1",
+      );
+      expect(staleJobStarted).toBeTruthy();
     } finally {
       await request.delete(`/api/v1/projects/${projectId}`);
     }

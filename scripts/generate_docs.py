@@ -105,9 +105,17 @@ def router_inventory(router_dir: Path) -> list[str]:
 def count_tests(test_dir: Path) -> tuple[int, list[tuple[str, int]]]:
     total = 0
     files: list[tuple[str, int]] = []
+    if not test_dir.exists():
+        return total, files
     for path in sorted(test_dir.glob("test_*.py")):
         content = path.read_text(encoding="utf-8")
-        count = len(re.findall(r"^def test_|^async def test_", content, flags=re.MULTILINE))
+        count = len(
+            re.findall(
+                r"^def test_|^async def test_|^\s+def test_",
+                content,
+                flags=re.MULTILINE,
+            )
+        )
         total += count
         files.append((path.name, count))
     return total, files
@@ -124,6 +132,7 @@ def build_doc() -> str:
     services = parse_services(compose_text)
     routers = router_inventory(ROOT / "services" / "api" / "app" / "routers")
     total_tests, test_files = count_tests(ROOT / "services" / "api" / "tests")
+    total_script_tests, script_test_files = count_tests(ROOT / "scripts" / "tests")
     workflows = workflow_names(ROOT / ".github" / "workflows")
 
     backend_core = requirements.get("Web framework", []) + requirements.get("Database", [])
@@ -218,6 +227,18 @@ def build_doc() -> str:
     ])
     for name, count in test_files:
         lines.append(f"- `{name}`: `{count}`")
+
+    lines.extend([
+        "",
+        "## Script Test Inventory",
+        "",
+        f"- Total script tests discovered: `{total_script_tests}`",
+    ])
+    if script_test_files:
+        for name, count in script_test_files:
+            lines.append(f"- `scripts/tests/{name}`: `{count}`")
+    else:
+        lines.append("- `scripts/tests`: `0`")
 
     lines.extend([
         "",

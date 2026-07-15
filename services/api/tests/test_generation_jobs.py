@@ -6,7 +6,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.agents.generation_jobs import _run_drafting_all_job, _sections_pending_generation
+from app.agents.generation_jobs import (
+    _run_drafting_all_job,
+    _sections_pending_generation,
+    create_drafting_quality_job,
+    create_drafting_requirements_job,
+    create_drafting_stale_job,
+)
 from app.core.models import TpOutline
 from tests.conftest import _make_project
 
@@ -256,3 +262,640 @@ async def test_generation_job_continues_when_legislation_fails(mock_db):
     assert job.completed_sections == 1
     assert job.result_json["failed_sections"] == []
     assert run_drafting.await_args.kwargs["lex_citations"] == []
+
+
+@pytest.mark.asyncio
+async def test_generation_job_targets_requested_sections(mock_db):
+    project = _make_project()
+    skipped_uid = str(uuid.uuid4())
+    target_uid = str(uuid.uuid4())
+    outline = TpOutline(
+        id=str(uuid.uuid4()),
+        project_id=project.id,
+        outline_json={
+            "sections": [
+                {
+                    "uid": skipped_uid,
+                    "title": "Already fresh",
+                    "requirements": [],
+                    "subsections": [],
+                },
+                {
+                    "uid": target_uid,
+                    "title": "Selected stale",
+                    "requirements": [],
+                    "drafting_guidance": {
+                        "requirement_count": 2,
+                        "required_subtopics": ["organization", "controls"],
+                    },
+                    "subsections": [],
+                },
+            ]
+        },
+        status_locked=True,
+        version=1,
+    )
+    job = SimpleNamespace(
+        id=str(uuid.uuid4()),
+        project_id=project.id,
+        trace_id=str(uuid.uuid4()),
+        job_type="drafting_stale",
+        status="queued",
+        total_sections=0,
+        completed_sections=0,
+        skipped_sections=0,
+        current_section_uid=None,
+        current_section_title=None,
+        result_json={
+            "target_section_uids": [target_uid],
+            "target_reason": "stale_selected",
+            "target_guidance": {
+                target_uid: {
+                    "instructions": [
+                        "Regenerate this section with the missing control record."
+                    ],
+                    "missing_requirement_ids": ["req-control"],
+                    "missing_requirement_items": [
+                        {
+                            "id": "req-control",
+                            "text": "Describe the control record.",
+                            "reason": "needs operational evidence",
+                            "remediation_guidance": (
+                                "Add operational evidence for the control record."
+                            ),
+                        }
+                    ],
+                }
+            },
+        },
+        error=None,
+        completed_at=None,
+        updated_at=None,
+    )
+
+    generation_rows = [
+        SimpleNamespace(section_uid=skipped_uid, evidence_status="ok"),
+        SimpleNamespace(section_uid=target_uid, evidence_status="ok"),
+    ]
+    mock_db.get = AsyncMock(side_effect=[project])
+    mock_db.execute = AsyncMock(side_effect=[_outline_result(outline), generation_rows])
+
+    with (
+        patch(
+            "app.agents.schedule.run_schedule",
+            new=AsyncMock(return_value={"status": "ok", "tp_section_text": "Schedule"}),
+        ),
+        patch(
+            "app.agents.examples.run_examples",
+            new=AsyncMock(return_value={"selected_snippets": []}),
+        ),
+        patch(
+            "app.agents.legislation.run_legislation",
+            new=AsyncMock(return_value={"citations": []}),
+        ),
+        patch(
+            "app.agents.context.build_project_grounding_context",
+            new=AsyncMock(return_value={"schedule": {"tasks": []}}),
+        ),
+        patch(
+            "app.agents.drafting.run_drafting",
+            new=AsyncMock(return_value={"generation_ids": {"variant_1": str(uuid.uuid4())}}),
+        ) as run_drafting,
+    ):
+        await _run_drafting_all_job(job, mock_db)
+
+    assert job.status == "done"
+    assert job.total_sections == 1
+    assert job.skipped_sections == 0
+    assert job.completed_sections == 1
+    assert run_drafting.await_count == 1
+    assert run_drafting.await_args.kwargs["section_uid"] == target_uid
+    assert run_drafting.await_args.kwargs["section_drafting_guidance"] == {
+        "requirement_count": 2,
+        "required_subtopics": ["organization", "controls"],
+        "instructions": [
+            "Regenerate this section with the missing control record."
+        ],
+        "missing_requirement_ids": ["req-control"],
+        "missing_requirement_items": [
+            {
+                "id": "req-control",
+                "text": "Describe the control record.",
+                "reason": "needs operational evidence",
+                "remediation_guidance": (
+                    "Add operational evidence for the control record."
+                ),
+            }
+        ],
+    }
+    assert job.result_json["target_section_uids"] == [target_uid]
+    assert job.result_json["target_reason"] == "stale_selected"
+    assert job.result_json["target_guidance"][target_uid]["missing_requirement_ids"] == [
+        "req-control"
+    ]
+
+
+@pytest.mark.asyncio
+async def test_generation_job_targets_multiple_requested_sections(mock_db):
+    project = _make_project()
+    skipped_uid = str(uuid.uuid4())
+    first_target_uid = str(uuid.uuid4())
+    second_target_uid = str(uuid.uuid4())
+    outline = TpOutline(
+        id=str(uuid.uuid4()),
+        project_id=project.id,
+        outline_json={
+            "sections": [
+                {
+                    "uid": skipped_uid,
+                    "title": "Already fresh",
+                    "requirements": [],
+                    "subsections": [],
+                },
+                {
+                    "uid": first_target_uid,
+                    "title": "Quality controls",
+                    "requirements": [],
+                    "subsections": [],
+                },
+                {
+                    "uid": second_target_uid,
+                    "title": "Risk controls",
+                    "requirements": [],
+                    "subsections": [],
+                },
+            ]
+        },
+        status_locked=True,
+        version=1,
+    )
+    job = SimpleNamespace(
+        id=str(uuid.uuid4()),
+        project_id=project.id,
+        trace_id=str(uuid.uuid4()),
+        job_type="drafting_quality",
+        status="queued",
+        total_sections=0,
+        completed_sections=0,
+        skipped_sections=0,
+        current_section_uid=None,
+        current_section_title=None,
+        result_json={
+            "target_section_uids": [first_target_uid, second_target_uid],
+            "target_reason": "calibration_gap:regenerate_quality_depth",
+        },
+        error=None,
+        completed_at=None,
+        updated_at=None,
+    )
+
+    generation_rows = [
+        SimpleNamespace(section_uid=skipped_uid, evidence_status="ok"),
+        SimpleNamespace(section_uid=first_target_uid, evidence_status="ok"),
+        SimpleNamespace(section_uid=second_target_uid, evidence_status="ok"),
+    ]
+    mock_db.get = AsyncMock(side_effect=[project])
+    mock_db.execute = AsyncMock(side_effect=[_outline_result(outline), generation_rows])
+
+    with (
+        patch(
+            "app.agents.schedule.run_schedule",
+            new=AsyncMock(return_value={"status": "ok", "tp_section_text": "Schedule"}),
+        ),
+        patch(
+            "app.agents.examples.run_examples",
+            new=AsyncMock(return_value={"selected_snippets": []}),
+        ),
+        patch(
+            "app.agents.legislation.run_legislation",
+            new=AsyncMock(return_value={"citations": []}),
+        ),
+        patch(
+            "app.agents.context.build_project_grounding_context",
+            new=AsyncMock(return_value={"schedule": {"tasks": []}}),
+        ),
+        patch(
+            "app.agents.drafting.run_drafting",
+            new=AsyncMock(
+                side_effect=[
+                    {"generation_ids": {"variant_1": str(uuid.uuid4())}},
+                    {"generation_ids": {"variant_1": str(uuid.uuid4())}},
+                ]
+            ),
+        ) as run_drafting,
+    ):
+        await _run_drafting_all_job(job, mock_db)
+
+    assert job.status == "done"
+    assert job.total_sections == 2
+    assert job.skipped_sections == 0
+    assert job.completed_sections == 2
+    assert run_drafting.await_count == 2
+    assert [
+        call.kwargs["section_uid"]
+        for call in run_drafting.await_args_list
+    ] == [first_target_uid, second_target_uid]
+    assert job.result_json["target_section_uids"] == [
+        first_target_uid,
+        second_target_uid,
+    ]
+    assert [section["section_uid"] for section in job.result_json["sections"]] == [
+        first_target_uid,
+        second_target_uid,
+    ]
+
+
+@pytest.mark.asyncio
+async def test_create_drafting_stale_job_targets_selected_stale_sections(mock_db):
+    project = _make_project()
+    stale_uid = str(uuid.uuid4())
+    stale_result = [(stale_uid,)]
+    mock_db.execute = AsyncMock(return_value=stale_result)
+    mock_db.flush = AsyncMock()
+    mock_db.commit = AsyncMock()
+
+    with patch("app.agents.generation_jobs._enqueue_generation_job") as enqueue:
+        job = await create_drafting_stale_job(project, mock_db)
+
+    assert job.job_type == "drafting_stale"
+    assert job.result_json == {
+        "target_section_uids": [stale_uid],
+        "target_reason": "stale_selected",
+    }
+    mock_db.add.assert_called_once_with(job)
+    enqueue.assert_called_once_with(job.id)
+
+
+@pytest.mark.asyncio
+async def test_create_drafting_quality_job_targets_quality_sections(mock_db):
+    project = _make_project()
+    selected_generations = [SimpleNamespace(section_uid="sec-quality")]
+    mock_db.flush = AsyncMock()
+    mock_db.commit = AsyncMock()
+
+    with (
+        patch("app.agents.generation_jobs._enqueue_generation_job") as enqueue,
+        patch(
+            "app.routers.export._load_selected_generations",
+            new=AsyncMock(return_value=selected_generations),
+        ) as load_selected,
+        patch(
+            "app.routers.export._build_export_readiness",
+            new=AsyncMock(
+                return_value={
+                    "quality_sections": [
+                        {
+                            "section_uid": "sec-quality",
+                            "word_count": 900,
+                            "min_words": 1400,
+                            "suggested_words_per_structure": 350,
+                            "issues": [
+                                {
+                                    "code": "weak_operational_detail",
+                                    "operational_signal_count": 2,
+                                    "min_operational_signal_count": 5,
+                                    "expected_operational_signal_examples": [
+                                        "responsible role",
+                                        "control record",
+                                    ],
+                                },
+                                {
+                                    "code": "incomplete_operational_contract",
+                                    "covered_contract_group_count": 2,
+                                    "required_contract_group_count": 4,
+                                    "covered_contract_groups": [
+                                        "control_point",
+                                        "evidence_record",
+                                    ],
+                                    "missing_contract_groups": [
+                                        "action",
+                                        "responsible_role",
+                                        "sequence_link",
+                                    ],
+                                }
+                            ],
+                            "structure_coverage": {
+                                "missing": [
+                                    {"label": "quality acceptance"},
+                                    {"label": "quality records"},
+                                ]
+                            },
+                        },
+                        {"section_uid": "sec-quality"},
+                    ]
+                }
+            ),
+        ) as build_readiness,
+    ):
+        job = await create_drafting_quality_job(project, mock_db)
+
+    assert job.job_type == "drafting_quality"
+    assert job.result_json == {
+        "target_section_uids": ["sec-quality"],
+        "target_reason": "quality_review",
+        "target_guidance": {
+            "sec-quality": {
+                "instructions": [
+                    (
+                        "Regenerate this section to resolve quality/depth issues: "
+                        "weak_operational_detail, incomplete_operational_contract."
+                    ),
+                    (
+                        "Expand the section from 900 to at least 1400 words when "
+                        "the tender sources support it."
+                    ),
+                    (
+                        "Distribute the substance across every major blueprint "
+                        "group/topic with roughly 350+ words per structure when "
+                        "supported by sources."
+                    ),
+                    (
+                        "Explicitly develop missing blueprint groups/topics: "
+                        "quality acceptance, quality records."
+                    ),
+                    (
+                        "Add concrete operational detail: responsible roles, "
+                        "controls, records, monitoring evidence, acceptance "
+                        "criteria, reporting sequence, escalation, and corrective "
+                        "actions."
+                    ),
+                    "Operational signal diagnostics: 2/5 matched.",
+                    "Use examples such as: responsible role, control record.",
+                    (
+                        "Complete the operational response contract by covering "
+                        "action, responsible role, control point, evidence record, "
+                        "and sequence link."
+                    ),
+                    (
+                        "Operational response contract diagnostics: 2/4 components "
+                        "covered."
+                    ),
+                    (
+                        "Already covered components: control_point, "
+                        "evidence_record."
+                    ),
+                    (
+                        "Add missing components: action, responsible_role, "
+                        "sequence_link."
+                    ),
+                ]
+            }
+        },
+    }
+    load_selected.assert_awaited_once_with(project.id, mock_db)
+    build_readiness.assert_awaited_once_with(
+        project.id,
+        selected_generations,
+        mock_db,
+    )
+    mock_db.add.assert_called_once_with(job)
+    enqueue.assert_called_once_with(job.id)
+
+
+@pytest.mark.asyncio
+async def test_create_drafting_requirements_job_filters_requested_missing_sections(
+    mock_db,
+):
+    project = _make_project()
+    selected_generations = [
+        SimpleNamespace(section_uid="sec-quality"),
+        SimpleNamespace(section_uid="sec-risk"),
+    ]
+    mock_db.flush = AsyncMock()
+    mock_db.commit = AsyncMock()
+
+    with (
+        patch("app.agents.generation_jobs._enqueue_generation_job") as enqueue,
+        patch(
+            "app.routers.export._load_selected_generations",
+            new=AsyncMock(return_value=selected_generations),
+        ),
+        patch(
+            "app.routers.export._build_export_readiness",
+            new=AsyncMock(
+                return_value={
+                    "missing_requirement_sections": [
+                        {
+                            "section_uid": "sec-quality",
+                            "missing_requirement_ids": ["req-quality"],
+                            "missing_items": [
+                                {
+                                    "id": "req-quality",
+                                    "text": "Describe quality evidence.",
+                                    "reason": "needs operational evidence",
+                                    "remediation_guidance": (
+                                        "Regenerate quality with records."
+                                    ),
+                                }
+                            ],
+                        },
+                        {
+                            "section_uid": "sec-risk",
+                            "missing_requirement_ids": ["req-risk"],
+                            "missing_items": [
+                                {
+                                    "id": "req-risk",
+                                    "text": "Describe risk controls.",
+                                    "reason": "missing key terms",
+                                    "remediation_guidance": (
+                                        "Regenerate risk with controls."
+                                    ),
+                                }
+                            ],
+                        },
+                    ]
+                }
+            ),
+        ),
+    ):
+        job = await create_drafting_requirements_job(
+            project,
+            mock_db,
+            target_section_uids=["sec-quality"],
+            target_reason="calibration_gap:regenerate_missing_requirements",
+        )
+
+    assert job.job_type == "drafting_requirements"
+    assert job.result_json["target_section_uids"] == ["sec-quality"]
+    assert job.result_json["target_reason"] == (
+        "calibration_gap:regenerate_missing_requirements"
+    )
+    assert job.result_json["target_guidance"] == {
+        "sec-quality": {
+            "instructions": ["Regenerate quality with records."],
+            "missing_requirement_ids": ["req-quality"],
+            "missing_requirement_items": [
+                {
+                    "id": "req-quality",
+                    "text": "Describe quality evidence.",
+                    "reason": "needs operational evidence",
+                    "reasons": [],
+                    "remediation_guidance": "Regenerate quality with records.",
+                    "missing_terms": [],
+                    "matched_terms": [],
+                    "distinctive_terms": [],
+                    "distinctive_matches": [],
+                    "coherent_matched_terms": [],
+                    "operational_signals": [],
+                    "operational_execution_signals": [],
+                    "required_match_count": None,
+                    "required_distinctive_count": None,
+                    "required_coherent_match_count": None,
+                    "required_operational_signal_count": None,
+                    "required_operational_execution_signal_count": None,
+                }
+            ],
+        }
+    }
+    mock_db.add.assert_called_once_with(job)
+    enqueue.assert_called_once_with(job.id)
+
+
+@pytest.mark.asyncio
+async def test_create_drafting_requirements_job_targets_missing_requirement_sections(
+    mock_db,
+):
+    project = _make_project()
+    selected_generations = [SimpleNamespace(section_uid="sec-missing")]
+    mock_db.flush = AsyncMock()
+    mock_db.commit = AsyncMock()
+
+    with (
+        patch("app.agents.generation_jobs._enqueue_generation_job") as enqueue,
+        patch(
+            "app.routers.export._load_selected_generations",
+            new=AsyncMock(return_value=selected_generations),
+        ) as load_selected,
+        patch(
+            "app.routers.export._build_export_readiness",
+            new=AsyncMock(
+                return_value={
+                    "missing_requirement_sections": [
+                        {
+                            "section_uid": "sec-missing",
+                            "missing_requirement_ids": ["req-1"],
+                            "missing_items": [
+                                {
+                                    "id": "req-1",
+                                    "text": "Describe missing control.",
+                                    "reason": "needs operational evidence",
+                                    "reasons": [
+                                        "needs operational evidence",
+                                        "missing distinctive requirement detail",
+                                    ],
+                                    "remediation_guidance": (
+                                        "Regenerate with a control record and owner."
+                                    ),
+                                    "missing_terms": ["control", "owner"],
+                                    "matched_terms": ["control"],
+                                    "distinctive_terms": [
+                                        "final",
+                                        "acceptance",
+                                        "handover",
+                                    ],
+                                    "distinctive_matches": [],
+                                    "coherent_matched_terms": ["control"],
+                                    "operational_signals": ["record"],
+                                    "operational_execution_signals": [],
+                                    "required_match_count": 2,
+                                    "required_distinctive_count": 1,
+                                    "required_coherent_match_count": 2,
+                                    "required_operational_signal_count": 2,
+                                    "required_operational_execution_signal_count": 1,
+                                }
+                            ],
+                        },
+                        {
+                            "section_uid": "sec-missing",
+                            "missing_requirement_ids": ["req-2"],
+                            "missing_items": [
+                                {
+                                    "id": "req-2",
+                                    "text": "Describe missing acceptance.",
+                                    "reason": "missing key terms",
+                                    "remediation_guidance": (
+                                        "Regenerate with acceptance evidence."
+                                    ),
+                                }
+                            ],
+                        },
+                    ]
+                }
+            ),
+        ) as build_readiness,
+    ):
+        job = await create_drafting_requirements_job(project, mock_db)
+
+    assert job.job_type == "drafting_requirements"
+    assert job.result_json == {
+        "target_section_uids": ["sec-missing"],
+        "target_reason": "missing_requirements",
+        "target_guidance": {
+            "sec-missing": {
+                "instructions": [
+                    "Regenerate with a control record and owner.",
+                    "Regenerate with acceptance evidence.",
+                ],
+                "missing_requirement_ids": ["req-1", "req-2"],
+                "missing_requirement_items": [
+                    {
+                        "id": "req-1",
+                        "text": "Describe missing control.",
+                        "reason": "needs operational evidence",
+                        "reasons": [
+                            "needs operational evidence",
+                            "missing distinctive requirement detail",
+                        ],
+                        "remediation_guidance": (
+                            "Regenerate with a control record and owner."
+                        ),
+                        "missing_terms": ["control", "owner"],
+                        "matched_terms": ["control"],
+                        "distinctive_terms": [
+                            "final",
+                            "acceptance",
+                            "handover",
+                        ],
+                        "distinctive_matches": [],
+                        "coherent_matched_terms": ["control"],
+                        "operational_signals": ["record"],
+                        "operational_execution_signals": [],
+                        "required_match_count": 2,
+                        "required_distinctive_count": 1,
+                        "required_coherent_match_count": 2,
+                        "required_operational_signal_count": 2,
+                        "required_operational_execution_signal_count": 1,
+                    },
+                    {
+                        "id": "req-2",
+                        "text": "Describe missing acceptance.",
+                        "reason": "missing key terms",
+                        "reasons": [],
+                        "remediation_guidance": (
+                            "Regenerate with acceptance evidence."
+                        ),
+                        "missing_terms": [],
+                        "matched_terms": [],
+                        "distinctive_terms": [],
+                        "distinctive_matches": [],
+                        "coherent_matched_terms": [],
+                        "operational_signals": [],
+                        "operational_execution_signals": [],
+                        "required_match_count": None,
+                        "required_distinctive_count": None,
+                        "required_coherent_match_count": None,
+                        "required_operational_signal_count": None,
+                        "required_operational_execution_signal_count": None,
+                    },
+                ],
+            }
+        },
+    }
+    load_selected.assert_awaited_once_with(project.id, mock_db)
+    build_readiness.assert_awaited_once_with(
+        project.id,
+        selected_generations,
+        mock_db,
+    )
+    mock_db.add.assert_called_once_with(job)
+    enqueue.assert_called_once_with(job.id)

@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import ProjectPage from "./page";
-import { api } from "@/lib/api";
+import { api, type ExportQualitySection } from "@/lib/api";
 
 const pushMock = vi.fn();
 const toastMock = vi.fn();
@@ -39,7 +39,40 @@ vi.mock("@/components/ChatPanel", () => ({
 }));
 
 vi.mock("@/components/ExportButton", () => ({
-  default: () => <div>Export Button</div>,
+  default: ({
+    onOpenGenerations,
+    onQualitySectionsBlocked,
+  }: {
+    onOpenGenerations?: () => void;
+    onQualitySectionsBlocked?: (
+      sectionUids: string[],
+      sections?: ExportQualitySection[],
+    ) => void;
+  }) => (
+    <div>
+      Export Button
+      <div
+        data-testid="mock-open-generations"
+        onClick={onOpenGenerations}
+      >
+        Open Generations
+      </div>
+      <div
+        data-testid="mock-quality-blockers"
+        onClick={() =>
+          onQualitySectionsBlocked?.(["sec-quality"], [
+            {
+              section_uid: "sec-quality",
+              min_words: 1400,
+              suggested_words_per_structure: 280,
+            },
+          ])
+        }
+      >
+        Set Quality Blockers
+      </div>
+    </div>
+  ),
 }));
 
 vi.mock("@/components/FileUploadPanel", () => ({
@@ -59,7 +92,23 @@ vi.mock("@/components/SchedulePanel", () => ({
 }));
 
 vi.mock("@/components/GenerationsPanel", () => ({
-  default: () => <div>Generations Panel</div>,
+  default: ({
+    focusAttentionKey = 0,
+    qualityAttentionSectionUids = [],
+    qualityAttentionSections = [],
+  }: {
+    focusAttentionKey?: number;
+    qualityAttentionSectionUids?: string[];
+    qualityAttentionSections?: ExportQualitySection[];
+  }) => (
+    <div data-testid="mock-generations-panel">
+      Generations Panel focus={focusAttentionKey}{" "}
+      {qualityAttentionSectionUids.join(",")} details=
+      {qualityAttentionSections
+        .map((section) => section.suggested_words_per_structure)
+        .join(",")}
+    </div>
+  ),
 }));
 
 vi.mock("@/lib/api", async () => {
@@ -198,6 +247,22 @@ describe("ProjectPage", () => {
     await userEvent.click(screen.getByTestId("requirements-panel-toggle"));
 
     expect(screen.getByText("Requirement Checklist Panel")).toBeInTheDocument();
+  });
+
+  it("passes quality export blockers into the generations panel", async () => {
+    render(<ProjectPage />);
+
+    expect(await screen.findByText("Project Alpha")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByTestId("mock-quality-blockers"));
+    await userEvent.click(screen.getByTestId("mock-open-generations"));
+
+    expect(screen.getByTestId("mock-generations-panel"))
+      .toHaveTextContent("sec-quality");
+    expect(screen.getByTestId("mock-generations-panel"))
+      .toHaveTextContent("details=280");
+    expect(screen.getByTestId("mock-generations-panel"))
+      .toHaveTextContent("focus=1");
   });
 
   it("shows automatic Lex.bg status and allows manual refresh", async () => {

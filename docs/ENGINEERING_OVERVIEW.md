@@ -118,10 +118,12 @@ TP AI is a monorepo for an AI-assisted workflow that prepares technical proposal
   - `services/api/app/agents/__init__.py`
   - `services/api/app/agents/context.py`
   - `services/api/app/agents/drafting.py`
+  - `services/api/app/agents/drafting_blueprint.py`
   - `services/api/app/agents/examples.py`
   - `services/api/app/agents/generation_jobs.py`
   - `services/api/app/agents/legislation.py`
   - `services/api/app/agents/orchestrator.py`
+  - `services/api/app/agents/proposal_quality.py`
   - `services/api/app/agents/requirement_coverage.py`
   - `services/api/app/agents/requirements.py`
   - `services/api/app/agents/schedule.py`
@@ -138,6 +140,7 @@ TP AI is a monorepo for an AI-assisted workflow that prepares technical proposal
 - `services/api/app/export/`
   - `services/api/app/export/__init__.py`
   - `services/api/app/export/docx_generator.py`
+  - `services/api/app/export/readiness_report.py`
 - `services/api/app/ingestion/`
   - `services/api/app/ingestion/__init__.py`
   - `services/api/app/ingestion/parsers.py`
@@ -164,12 +167,15 @@ TP AI is a monorepo for an AI-assisted workflow that prepares technical proposal
 
 ## Test Inventory
 
-- Total backend tests discovered: `101`
-- `test_agents.py`: `26`
-- `test_export.py`: `4`
+- Total backend tests discovered: `194`
+- `test_agents.py`: `39`
+- `test_common_proposal_scenarios.py`: `19`
+- `test_drafting_blueprint.py`: `5`
+- `test_export.py`: `12`
+- `test_export_readiness_report.py`: `2`
 - `test_files.py`: `10`
-- `test_generation_jobs.py`: `4`
-- `test_grounding_context.py`: `3`
+- `test_generation_jobs.py`: `10`
+- `test_grounding_context.py`: `11`
 - `test_health.py`: `3`
 - `test_legislation.py`: `1`
 - `test_lex_bg.py`: `4`
@@ -177,11 +183,23 @@ TP AI is a monorepo for an AI-assisted workflow that prepares technical proposal
 - `test_orchestrator.py`: `3`
 - `test_parsers.py`: `4`
 - `test_projects.py`: `15`
-- `test_requirement_checklist.py`: `5`
+- `test_proposal_quality.py`: `16`
+- `test_requirement_checklist.py`: `11`
 - `test_requirement_coverage.py`: `2`
-- `test_tender_struct.py`: `12`
+- `test_requirement_coverage_strictness.py`: `9`
+- `test_tender_struct.py`: `13`
 - `test_verifier.py`: `1`
 - `test_worker.py`: `1`
+
+## Script Test Inventory
+
+- Total script tests discovered: `95`
+- `scripts/tests/test_compare_calibration_manifests.py`: `16`
+- `scripts/tests/test_export_selected_proposal_markdown.py`: `4`
+- `scripts/tests/test_proposal_gap_analysis.py`: `11`
+- `scripts/tests/test_run_calibration_manifest_actions.py`: `27`
+- `scripts/tests/test_run_calibration_remediation_cycle.py`: `16`
+- `scripts/tests/test_run_proposal_calibration.py`: `21`
 
 ## Automation
 

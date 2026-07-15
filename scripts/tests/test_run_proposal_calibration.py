@@ -1,0 +1,1421 @@
+from pathlib import Path
+import asyncio
+import importlib.util
+import json
+import sys
+import tempfile
+import unittest
+
+
+SCRIPTS_DIR = Path(__file__).resolve().parents[1]
+if str(SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS_DIR))
+
+MODULE_PATH = SCRIPTS_DIR / "run_proposal_calibration.py"
+SPEC = importlib.util.spec_from_file_location("run_proposal_calibration", MODULE_PATH)
+assert SPEC is not None and SPEC.loader is not None
+calibration = importlib.util.module_from_spec(SPEC)
+sys.modules["run_proposal_calibration"] = calibration
+SPEC.loader.exec_module(calibration)
+
+
+calibration_output_paths = calibration.calibration_output_paths
+gap_calibration_focus_counts = calibration.gap_calibration_focus_counts
+gap_regeneration_priority_rows = calibration.gap_regeneration_priority_rows
+gap_summary_metrics = calibration.gap_summary_metrics
+generated_section_uid_map = calibration.generated_section_uid_map
+action_execution_summary = calibration.action_execution_summary
+enrich_gap_priority_rows = calibration.enrich_gap_priority_rows
+load_action_execution_reports = calibration.load_action_execution_reports
+load_offline_readiness = calibration.load_offline_readiness
+readiness_priority_actions = calibration.readiness_priority_actions
+render_manifest = calibration.render_manifest
+render_manifest_json = calibration.render_manifest_json
+run_calibration_bundle = calibration.run_calibration_bundle
+structured_readiness_priority_actions = calibration.structured_readiness_priority_actions
+snapshot_warning_count = calibration.snapshot_warning_count
+GenerationSnapshot = calibration.GenerationSnapshot
+
+
+class RunProposalCalibrationTests(unittest.TestCase):
+    def test_calibration_output_paths_are_stable(self):
+        paths = calibration_output_paths(Path("analysis/pernik"))
+
+        self.assertEqual(
+            paths["selected_snapshot"],
+            Path("analysis/pernik/selected_proposal_snapshot.md"),
+        )
+        self.assertEqual(
+            paths["gap_report"],
+            Path("analysis/pernik/proposal_gap_report.md"),
+        )
+        self.assertEqual(
+            paths["effective_snapshot"],
+            Path("analysis/pernik/effective_proposal_snapshot.md"),
+        )
+        self.assertEqual(
+            paths["readiness_report"],
+            Path("analysis/pernik/docx_readiness_report.md"),
+        )
+        self.assertEqual(
+            paths["manifest"],
+            Path("analysis/pernik/calibration_manifest.md"),
+        )
+        self.assertEqual(
+            paths["manifest_json"],
+            Path("analysis/pernik/calibration_manifest.json"),
+        )
+        self.assertEqual(
+            paths["comparison"],
+            Path("analysis/pernik/calibration_manifest_comparison.md"),
+        )
+
+    def test_load_offline_readiness_reads_manifest_gates(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            manifest_path = Path(tmp) / "calibration_manifest.json"
+            manifest_path.write_text(
+                json.dumps(
+                    {
+                        "calibration_gates": {
+                            "docx_readiness_status": "blocked",
+                            "blockers": [
+                                {
+                                    "code": "stale_evidence",
+                                    "count": 2,
+                                    "message": "stale",
+                                }
+                            ],
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            readiness = load_offline_readiness(manifest_path)
+
+        self.assertEqual(readiness["status"], "blocked")
+        self.assertEqual(readiness["blockers"][0]["code"], "stale_evidence")
+
+    def test_run_calibration_bundle_uses_offline_snapshots_without_api(self):
+        original_load_snapshot = calibration.load_snapshot
+        original_export_readiness = calibration.export_readiness_report_markdown
+
+        async def fail_load_snapshot(project_id):
+            raise AssertionError("offline mode must not load the database snapshot")
+
+        async def fail_export_readiness(project_id, out_path):
+            raise AssertionError("offline mode must not call export readiness API")
+
+        calibration.load_snapshot = fail_load_snapshot
+        calibration.export_readiness_report_markdown = fail_export_readiness
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                reference = root / "reference.md"
+                selected_snapshot = root / "selected.md"
+                effective_snapshot = root / "effective.md"
+                readiness_report = root / "readiness.md"
+                readiness_manifest = root / "readiness_manifest.json"
+                out_dir = root / "bundle"
+
+                reference.write_text(
+                    "# Quality\n\nThe reference explains quality control, "
+                    "protocol records, responsible role, acceptance, and "
+                    "sequence.",
+                    encoding="utf-8",
+                )
+                selected_snapshot.write_text(
+                    "# Selected\n\n<!-- Snapshot Warnings: duplicate selected -->",
+                    encoding="utf-8",
+                )
+                effective_snapshot.write_text(
+                    "# Quality\n\n<!-- generation_id=gen-1; section_uid=sec-quality; variant=1 -->\n\n"
+                    "The generated proposal mentions quality control.",
+                    encoding="utf-8",
+                )
+                readiness_report.write_text(
+                    "# DOCX export readiness report\n\nBlocked.",
+                    encoding="utf-8",
+                )
+                readiness_manifest.write_text(
+                    json.dumps(
+                        {
+                            "schema_version": "calibration_manifest.v1",
+                            "calibration_gates": {
+                                "docx_readiness_status": "blocked",
+                                "blockers": [
+                                    {
+                                        "code": "shallow_sections",
+                                        "count": 1,
+                                        "message": "quality depth",
+                                    }
+                                ],
+                            },
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+
+                paths = asyncio.run(
+                    run_calibration_bundle(
+                        project_id="project-1",
+                        reference=reference,
+                        out_dir=out_dir,
+                        tenders=[],
+                        selected_snapshot=selected_snapshot,
+                        effective_snapshot=effective_snapshot,
+                        readiness_report=readiness_report,
+                        offline_readiness_manifest=readiness_manifest,
+                    )
+                )
+
+                manifest = json.loads(
+                    paths["manifest_json"].read_text(encoding="utf-8")
+                )
+
+        finally:
+            calibration.load_snapshot = original_load_snapshot
+            calibration.export_readiness_report_markdown = original_export_readiness
+
+        self.assertEqual(
+            manifest["calibration_gates"]["docx_readiness_status"],
+            "blocked",
+        )
+        self.assertEqual(
+            manifest["calibration_gates"]["blockers"][0]["code"],
+            "shallow_sections",
+        )
+        self.assertEqual(
+            manifest["readiness_actions"][0]["action_key"],
+            "regenerate_quality_depth",
+        )
+
+    def test_render_manifest_lists_bundle_files_and_review_order(self):
+        manifest = render_manifest(
+            project_id="project-1",
+            reference=Path("reference.docx"),
+            selected_snapshot=Path("out/selected.md"),
+            effective_snapshot=Path("out/effective.md"),
+            readiness_report=Path("out/readiness.md"),
+            gap_report=Path("out/gap.md"),
+            tenders=[Path("tender.pdf")],
+            readiness={
+                "status": "blocked",
+                "blockers": [
+                    {"code": "duplicate_selected", "count": 2},
+                    {"code": "stale_evidence", "count": 1},
+                    {"code": "missing_requirements", "count": 1},
+                ],
+                "duplicate_selected_sections": [
+                    {"section_title": "Organization", "selected_count": 2}
+                ],
+                "stale_section_details": [{"section_title": "Schedule"}],
+                "missing_requirement_sections": [
+                    {
+                        "section_uid": "sec-quality",
+                        "section_title": "Quality",
+                        "missing_count": 2,
+                        "missing_items": [
+                            {
+                                "reasons": [
+                                    "missing distinctive requirement detail",
+                                    "needs execution action",
+                                    "needs coherent passage",
+                                ]
+                            },
+                            {"reason": "needs operational evidence"},
+                        ],
+                    },
+                    {
+                        "section_uid": "sec-risk",
+                        "section_title": "Risk",
+                        "missing_count": 1,
+                    }
+                ],
+            },
+            snapshot_warnings=3,
+            gap_focus_counts={
+                "drafting depth": 5,
+                "outline mapping": 2,
+            },
+            gap_summary={
+                "content_reference_sections": 12,
+                "content_generated_sections": 10,
+                "reference_word_tokens": 8000,
+                "generated_word_tokens": 2400,
+                "generated_reference_volume_ratio": 0.30,
+                "operational_detail_status": "weak",
+                "operational_detail_ratio": 0.33,
+                "operational_detail_missing_signals": [
+                    "responsible",
+                    "corrective",
+                ],
+            },
+            gap_priority_rows=[
+                {
+                    "reference_section": "Organization",
+                    "generated_section": "Work programme",
+                    "coverage": 0.20,
+                    "volume": 0.40,
+                    "reasons": "structure mismatch, thin detail",
+                    "focus": "outline mapping",
+                }
+            ],
+            action_report_paths=[Path("out/actions.json")],
+            action_execution_reports=[
+                {
+                    "total_actions": 1,
+                    "executed_actions": 1,
+                    "status_counts": {"done": 1},
+                    "ready_for_bundle": True,
+                    "actions": [
+                        {
+                            "missing_reason_counts": {
+                                "missing distinctive requirement detail": 2,
+                                "needs execution action": 1,
+                                "needs coherent passage": 1,
+                            },
+                            "operational_detail_missing_signals": [
+                                "record",
+                                "monitoring",
+                            ],
+                            "section_labels": [
+                                "Quality (120/420 words, 3 groups, 7 topics)",
+                            ],
+                        }
+                    ],
+                }
+            ],
+        )
+
+        self.assertIn("Mode: `non-mutating`", manifest)
+        self.assertIn("Snapshot warnings: `3`", manifest)
+        self.assertIn("DOCX readiness status: `blocked`", manifest)
+        self.assertIn("`duplicate_selected`: `2`", manifest)
+        self.assertIn("resolve readiness blockers", manifest)
+        self.assertIn("reference.docx", manifest)
+        self.assertIn("out/selected.md", manifest)
+        self.assertIn("out/effective.md", manifest)
+        self.assertIn("Gap input snapshot: `effective_proposal_snapshot.md`", manifest)
+        self.assertIn("out/readiness.md", manifest)
+        self.assertIn("out/gap.md", manifest)
+        self.assertIn("tender.pdf", manifest)
+        self.assertIn("Snapshot Warnings", manifest)
+        self.assertIn("Gap quality scorecard", manifest)
+        self.assertIn("`10` generated / `12` reference", manifest)
+        self.assertIn("`2400` generated / `8000` reference", manifest)
+        self.assertIn("Generated/reference volume ratio: `0.30`", manifest)
+        self.assertIn("Operational detail coverage: `0.33` (`weak`)", manifest)
+        self.assertIn(
+            "Missing operational signals: `responsible`, `corrective`",
+            manifest,
+        )
+        self.assertIn("Action execution reports: `1` files, `1` actions", manifest)
+        self.assertIn("Missing requirement reasons addressed", manifest)
+        self.assertIn("`missing distinctive requirement detail`: `2`", manifest)
+        self.assertIn("`needs execution action`: `1`", manifest)
+        self.assertIn("`needs coherent passage`: `1`", manifest)
+        self.assertIn("Operational detail signals targeted", manifest)
+        self.assertIn("`record`: `1`", manifest)
+        self.assertIn("`monitoring`: `1`", manifest)
+        self.assertIn("Remediation section labels targeted", manifest)
+        self.assertIn(
+            "`Quality (120/420 words, 3 groups, 7 topics)`: `1`",
+            manifest,
+        )
+        self.assertIn("Executable remediation commands", manifest)
+        self.assertIn(
+            "py -3 scripts/run_calibration_manifest_actions.py --manifest "
+            "out/calibration_manifest.json --all",
+            manifest,
+        )
+        self.assertIn("--execute --wait", manifest)
+        self.assertIn("resolve export blockers", manifest)
+        self.assertIn("Universal Topic Coverage", manifest)
+        self.assertIn("Gap calibration focus summary", manifest)
+        self.assertIn("`drafting depth`: `5` sections", manifest)
+        self.assertIn("`outline mapping`: `2` sections", manifest)
+        self.assertIn("Regeneration priority shortlist", manifest)
+        self.assertIn("Readiness blockers come first", manifest)
+        self.assertIn(
+            "`duplicate_selected` action_key=`resolve_duplicate_selected`",
+            manifest,
+        )
+        self.assertIn("`Остави най-новите`", manifest)
+        self.assertIn(
+            "`missing_requirements` action_key=`regenerate_missing_requirements`",
+            manifest,
+        )
+        self.assertIn(
+            (
+                "Quality (2 missing; missing distinctive requirement detail, "
+                "needs execution action, needs coherent passage, +1 more)"
+            ),
+            manifest,
+        )
+        self.assertIn(
+            "targets: uids=sec-quality, sec-risk; titles=Quality, Risk",
+            manifest,
+        )
+        self.assertIn(
+            "Gap `outline mapping` ui_action=`Прегледай outline mapping`: "
+            "regenerate/reference-align",
+            manifest,
+        )
+        self.assertIn("Organization", manifest)
+
+    def test_gap_summary_metrics_reads_report_summary(self):
+        metrics = gap_summary_metrics(
+            "\n".join(
+                [
+                    "- Raw recognized sections in reference TP: `26`",
+                    "- Raw recognized sections in generated TP: `24`",
+                    "- Content sections compared in reference TP: `23`",
+                    "- Content sections compared in generated TP: `22`",
+                    "- Word-like tokens в референтното ТП: `62445`",
+                    "- Word-like tokens в генерираното ТП: `9122`",
+                ]
+            )
+        )
+
+        self.assertEqual(metrics["raw_reference_sections"], 26)
+        self.assertEqual(metrics["raw_generated_sections"], 24)
+        self.assertEqual(metrics["content_reference_sections"], 23)
+        self.assertEqual(metrics["content_generated_sections"], 22)
+        self.assertEqual(metrics["reference_word_tokens"], 62445)
+        self.assertEqual(metrics["generated_word_tokens"], 9122)
+        self.assertAlmostEqual(
+            metrics["generated_reference_volume_ratio"],
+            9122 / 62445,
+        )
+
+    def test_gap_summary_metrics_reads_operational_detail_scorecard(self):
+        metrics = gap_summary_metrics(
+            "\n".join(
+                [
+                    "## Operational Detail Coverage",
+                    "| Status | Ratio | Reference signals | Generated signals | Missing signals |",
+                    "| --- | ---: | --- | --- | --- |",
+                    "| weak | 0.33 | responsible, record, corrective | record | responsible, corrective |",
+                ]
+            )
+        )
+
+        self.assertEqual(metrics["operational_detail_status"], "weak")
+        self.assertEqual(metrics["operational_detail_ratio"], 0.33)
+        self.assertEqual(
+            metrics["operational_detail_reference_signals"],
+            ["responsible", "record", "corrective"],
+        )
+        self.assertEqual(metrics["operational_detail_generated_signals"], ["record"])
+        self.assertEqual(
+            metrics["operational_detail_missing_signals"],
+            ["responsible", "corrective"],
+        )
+        self.assertEqual(metrics["operational_detail_missing_signal_count"], 2)
+
+    def test_action_execution_summary_aggregates_report_counts(self):
+        summary = action_execution_summary(
+            [
+                {
+                    "total_actions": 2,
+                    "executed_actions": 2,
+                    "status_counts": {"done": 1, "error": 1},
+                    "ready_for_bundle": False,
+                    "has_failures": True,
+                    "actions": [
+                        {
+                            "missing_reason_counts": {
+                                "missing distinctive requirement detail": 2,
+                                "needs operational evidence": 1,
+                            },
+                            "operational_detail_missing_signals": [
+                                "record",
+                                "monitoring",
+                            ],
+                            "section_labels": [
+                                "Quality (120/420 words, 3 groups)",
+                                "Environment (95/360 words, 2 groups)",
+                            ],
+                        }
+                    ],
+                },
+                {
+                    "total_actions": 1,
+                    "executed_actions": 1,
+                    "status_counts": {"done": 1},
+                    "ready_for_bundle": True,
+                    "actions": [
+                        {
+                            "missing_reason_counts": {
+                                "needs operational evidence": 1,
+                                "needs coherent passage": 1,
+                            },
+                            "operational_detail_missing_signals": [
+                                "record",
+                                "corrective",
+                            ],
+                            "section_labels": [
+                                "Quality (120/420 words, 3 groups)",
+                            ],
+                        }
+                    ],
+                },
+            ]
+        )
+
+        self.assertEqual(summary["report_count"], 2)
+        self.assertEqual(summary["total_actions"], 3)
+        self.assertEqual(summary["executed_actions"], 3)
+        self.assertEqual(summary["status_counts"], {"done": 2, "error": 1})
+        self.assertEqual(summary["ready_report_count"], 1)
+        self.assertEqual(summary["failure_report_count"], 1)
+        self.assertEqual(summary["unexecuted_report_count"], 0)
+        self.assertTrue(summary["has_failures"])
+        self.assertFalse(summary["ready_for_bundle"])
+        self.assertEqual(summary["evidence_level"], "failed")
+        self.assertEqual(
+            summary["missing_reason_counts"],
+            {
+                "needs operational evidence": 2,
+                "missing distinctive requirement detail": 2,
+                "needs coherent passage": 1,
+            },
+        )
+        self.assertEqual(
+            summary["operational_detail_missing_signal_counts"],
+            {
+                "record": 2,
+                "corrective": 1,
+                "monitoring": 1,
+            },
+        )
+        self.assertEqual(
+            summary["section_label_counts"],
+            {
+                "Quality (120/420 words, 3 groups)": 2,
+                "Environment (95/360 words, 2 groups)": 1,
+            },
+        )
+
+    def test_action_execution_summary_derives_legacy_report_verdicts(self):
+        summary = action_execution_summary(
+            [
+                {
+                    "total_actions": 2,
+                    "status_counts": {"planned": 2},
+                }
+            ]
+        )
+
+        self.assertEqual(summary["executed_actions"], 0)
+        self.assertEqual(summary["unexecuted_report_count"], 1)
+        self.assertTrue(summary["has_unexecuted_actions"])
+        self.assertFalse(summary["ready_for_bundle"])
+        self.assertEqual(summary["evidence_level"], "planned")
+
+    def test_action_execution_summary_tracks_unverified_execution_reports(self):
+        summary = action_execution_summary(
+            [
+                {
+                    "total_actions": 1,
+                    "executed_actions": 1,
+                    "status_counts": {"executed_unverified": 1},
+                    "ready_for_bundle": False,
+                    "has_unverified_actions": True,
+                }
+            ]
+        )
+
+        self.assertEqual(summary["executed_actions"], 1)
+        self.assertEqual(summary["unverified_report_count"], 1)
+        self.assertTrue(summary["has_unverified_actions"])
+        self.assertFalse(summary["has_failures"])
+        self.assertFalse(summary["ready_for_bundle"])
+        self.assertEqual(summary["evidence_level"], "unverified")
+
+    def test_load_action_execution_reports_rejects_non_object_payload(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report_path = Path(tmp) / "execution.json"
+            report_path.write_text("[]", encoding="utf-8")
+
+            with self.assertRaisesRegex(ValueError, "JSON object"):
+                load_action_execution_reports([report_path])
+
+    def test_gap_calibration_focus_counts_reads_diagnostics_table_only(self):
+        counts = gap_calibration_focus_counts(
+            "\n".join(
+                [
+                    "# Gap report",
+                    "- Content sections compared in reference TP: `1`",
+                    "- Content sections compared in generated TP: `1`",
+                    "- Word-like tokens в референтното ТП: `1000`",
+                    "- Word-like tokens в генерираното ТП: `250`",
+                    "",
+                    "## Section Gap Diagnostics",
+                    "",
+                    "| Reference section | Best generated section | Coverage | Volume | Gap reasons | Calibration focus |",
+                    "| --- | --- | ---: | ---: | --- | --- |",
+                    "| A | Section A | 0.20 | 0.10 | too short | drafting depth |",
+                    "| B | C generated | 0.10 | 0.80 | structure mismatch | outline mapping |",
+                    "| C | C generated | 0.40 | 0.90 | weak lexical coverage | grounding and checklist coverage |",
+                    "| D | D generated | 0.30 | 0.20 | too short | drafting depth |",
+                    "",
+                    "## Other",
+                    "| ignored | ignored | ignored | ignored | ignored | monitor |",
+                ]
+            )
+        )
+
+        self.assertEqual(
+            counts,
+            {
+                "drafting depth": 2,
+                "outline mapping": 1,
+                "grounding and checklist coverage": 1,
+            },
+        )
+
+    def test_gap_regeneration_priority_rows_rank_non_monitor_sections(self):
+        rows = gap_regeneration_priority_rows(
+            "\n".join(
+                [
+                    "# Gap report",
+                    "- Content sections compared in reference TP: `1`",
+                    "- Content sections compared in generated TP: `1`",
+                    "- Word-like tokens в референтното ТП: `1000`",
+                    "- Word-like tokens в генерираното ТП: `250`",
+                    "",
+                    "## Section Gap Diagnostics",
+                    "",
+                    "| Reference section | Best generated section | Coverage | Volume | Gap reasons | Calibration focus |",
+                    "| --- | --- | ---: | ---: | --- | --- |",
+                    "| Quality | Quality generated | 0.40 | 0.30 | thin detail | drafting depth |",
+                    "| Organization | Generic generated | 0.60 | 0.90 | structure mismatch | outline mapping |",
+                    "| Environment | Environment generated | 0.10 | 0.80 | missing key terms | grounding and checklist coverage |",
+                    "| Acceptable | Acceptable generated | 0.90 | 1.10 | acceptable alignment | monitor |",
+                    "",
+                    "## Other",
+                ]
+            )
+        )
+
+        self.assertEqual(
+            [row["reference_section"] for row in rows],
+            ["Organization", "Quality", "Environment"],
+        )
+        self.assertEqual(rows[0]["focus"], "outline mapping")
+        self.assertEqual(rows[1]["focus"], "drafting depth")
+        self.assertEqual(rows[2]["focus"], "grounding and checklist coverage")
+
+    def test_enrich_gap_priority_rows_maps_focus_to_real_remediation_actions(self):
+        rows = enrich_gap_priority_rows(
+            [
+                {
+                    "focus": "drafting depth",
+                    "reference_section": "Quality",
+                    "generated_section": "Quality generated",
+                    "reasons": "too short, weak operational detail",
+                },
+                {
+                    "focus": "grounding and checklist coverage",
+                    "reference_section": "Environment",
+                    "generated_section": "Environmental measures",
+                },
+                {"focus": "outline mapping", "reference_section": "Organization"},
+            ],
+            project_id="project-1",
+            section_uid_by_generated_title={
+                "Quality generated": "sec-quality",
+            },
+            operational_detail_missing_signals=["record", "monitoring"],
+        )
+
+        self.assertEqual(rows[0]["action_key"], "regenerate_quality_depth")
+        self.assertEqual(rows[0]["ui_action"], "Регенерирай подробно")
+        self.assertEqual(
+            rows[0]["api_path"],
+            "/api/v1/agents/project-1/remediation-actions/regenerate_quality_depth",
+        )
+        self.assertEqual(
+            rows[0]["request_json"],
+            {
+                "section_uids": ["sec-quality"],
+                "section_title_hints": ["Quality generated"],
+                "gap_reasons": ["too short", "weak operational detail"],
+                "reference_section": "Quality",
+                "generated_section": "Quality generated",
+                "operational_detail_missing_signals": ["record", "monitoring"],
+            },
+        )
+        self.assertEqual(
+            rows[1]["action_key"],
+            "regenerate_missing_requirements",
+        )
+        self.assertEqual(rows[1]["ui_action"], "Регенерирай покритието")
+        self.assertEqual(
+            rows[1]["api_path"],
+            "/api/v1/agents/project-1/remediation-actions/regenerate_missing_requirements",
+        )
+        self.assertEqual(
+            rows[1]["request_json"],
+            {"section_title_hints": ["Environmental measures"]},
+        )
+        self.assertNotIn("action_key", rows[2])
+        self.assertNotIn("api_path", rows[2])
+        self.assertEqual(rows[2]["ui_action"], "Прегледай outline mapping")
+
+    def test_generated_section_uid_map_reads_snapshot_metadata(self):
+        mapping = generated_section_uid_map(
+            "\n".join(
+                [
+                    "## Quality generated",
+                    "",
+                    "<!-- generation_id=gen-1; section_uid=sec-quality; variant=1 -->",
+                    "",
+                    "Generated text.",
+                ]
+            )
+        )
+
+        self.assertEqual(mapping, {"Quality generated": "sec-quality"})
+
+    def test_request_target_label_marks_truncated_targets(self):
+        label = calibration._request_target_label(
+            {
+                "section_uids": [
+                    "sec-1",
+                    "sec-2",
+                    "sec-3",
+                    "sec-4",
+                    "sec-5",
+                    "sec-6",
+                    "sec-7",
+                ],
+                "section_title_hints": [
+                    "Title 1",
+                    "Title 2",
+                    "Title 3",
+                    "Title 4",
+                    "Title 5",
+                    "Title 6",
+                    "Title 7",
+                    "Title 8",
+                ],
+            }
+        )
+
+        self.assertEqual(
+            label,
+            (
+                "uids=sec-1, sec-2, sec-3, sec-4, sec-5, sec-6; "
+                "+1 more uids; "
+                "titles=Title 1, Title 2, Title 3, Title 4, Title 5, Title 6; "
+                "+2 more titles"
+            ),
+        )
+
+    def test_readiness_priority_actions_summarize_specific_sections(self):
+        actions = readiness_priority_actions(
+            {
+                "duplicate_selected_sections": [
+                    {"section_title": "Organization", "selected_count": 2}
+                ],
+                "stale_section_details": [{"section_title": "Schedule"}],
+                "missing_requirement_sections": [
+                    {
+                        "section_title": "Quality",
+                        "missing_count": 3,
+                        "missing_items": [
+                            {"reason": "missing distinctive requirement detail"},
+                            {"reason": "needs operational evidence"},
+                        ],
+                    },
+                    {"section_title": "Safety", "missing_count": 1},
+                ],
+                "quality_sections": [
+                    {
+                        "section_title": "Environment",
+                        "word_count": 120,
+                        "min_words": 420,
+                        "requirement_count": 5,
+                        "blueprint_group_count": 3,
+                        "blueprint_topic_count": 7,
+                        "blueprint_requirement_id_count": 9,
+                        "suggested_words_per_structure": 140,
+                        "issues": [
+                            {"code": "weak_operational_detail"},
+                            {"code": "uneven_blueprint_distribution"},
+                        ],
+                    }
+                ],
+            }
+        )
+
+        self.assertEqual(len(actions), 4)
+        self.assertIn("action_key=`resolve_duplicate_selected`", actions[0])
+        self.assertIn("`Остави най-новите`", actions[0])
+        self.assertIn("Organization", actions[0])
+        self.assertIn("action_key=`regenerate_stale`", actions[1])
+        self.assertIn("bulk `Регенерирай`", actions[1])
+        self.assertIn("Schedule", actions[1])
+        self.assertIn("action_key=`regenerate_missing_requirements`", actions[2])
+        self.assertIn("bulk `Регенерирай покритието`", actions[2])
+        self.assertIn(
+            (
+                "Quality (3 missing; missing distinctive requirement detail, "
+                "needs operational evidence)"
+            ),
+            actions[2],
+        )
+        self.assertIn("action_key=`regenerate_quality_depth`", actions[3])
+        self.assertIn("bulk `Регенерирай подробно`", actions[3])
+        self.assertIn(
+            "Environment (120/420 words, 3 groups, 7 topics, "
+            "9 checklist ids, 140 words/group-topic, "
+            "issues: weak_operational_detail, uneven_blueprint_distribution)",
+            actions[3],
+        )
+
+    def test_readiness_priority_actions_use_blocker_counts_without_section_details(self):
+        actions = readiness_priority_actions(
+            {
+                "blockers": [
+                    {"code": "duplicate_selected", "count": 3},
+                    {"code": "stale_evidence", "count": 2},
+                    {"code": "missing_requirements", "count": 1},
+                    {"code": "shallow_sections", "count": 4},
+                ]
+            }
+        )
+
+        self.assertEqual(len(actions), 4)
+        self.assertIn("3 duplicate selected sections", actions[0])
+        self.assertIn("2 stale selected sections", actions[1])
+        self.assertIn("1 sections with missing requirements", actions[2])
+        self.assertIn("4 shallow/quality sections", actions[3])
+
+    def test_render_manifest_json_exposes_structured_gates_and_actions(self):
+        readiness = {
+            "status": "blocked",
+            "blockers": [
+                {"code": "duplicate_selected", "count": 1},
+                {"code": "stale_evidence", "count": 1},
+                {"code": "missing_requirements", "count": 1},
+                {"code": "shallow_sections", "count": 1},
+            ],
+            "duplicate_selected_sections": [
+                {"section_title": "Organization", "selected_count": 2}
+            ],
+            "stale_section_details": [{"section_title": "Schedule"}],
+            "missing_requirement_sections": [
+                {
+                    "section_uid": "sec-quality",
+                    "section_title": "Quality",
+                    "missing_count": 3,
+                    "missing_items": [
+                        {
+                            "reasons": [
+                                "missing distinctive requirement detail",
+                                "needs execution action",
+                                "needs coherent passage",
+                            ]
+                        },
+                        {"reason": "missing distinctive requirement detail"},
+                        {"reason": "needs operational evidence"},
+                    ],
+                },
+                {
+                    "section_uid": "sec-risk",
+                    "section_title": "Risk",
+                    "missing_count": 2,
+                },
+            ],
+            "quality_sections": [
+                {
+                    "section_uid": "sec-environment",
+                    "section_title": "Environment",
+                    "word_count": 120,
+                    "min_words": 420,
+                    "requirement_count": 5,
+                    "blueprint_group_count": 3,
+                    "blueprint_topic_count": 7,
+                    "blueprint_requirement_id_count": 9,
+                    "suggested_words_per_structure": 140,
+                    "issues": [
+                        {"code": "weak_operational_detail"},
+                        {"code": "uneven_blueprint_distribution"},
+                    ],
+                },
+                {
+                    "section_uid": "sec-safety",
+                    "section_title": "Safety",
+                    "word_count": 90,
+                    "min_words": 360,
+                    "requirement_count": 4,
+                    "blueprint_group_count": 2,
+                    "blueprint_topic_count": 5,
+                    "blueprint_requirement_id_count": 8,
+                    "suggested_words_per_structure": 120,
+                }
+            ],
+        }
+        manifest = json.loads(
+            render_manifest_json(
+                project_id="project-1",
+                reference=Path("reference.docx"),
+                selected_snapshot=Path("out/selected.md"),
+                effective_snapshot=Path("out/effective.md"),
+                readiness_report=Path("out/readiness.md"),
+                gap_report=Path("out/gap.md"),
+                tenders=[Path("tender.pdf")],
+                readiness=readiness,
+                snapshot_warnings=2,
+                gap_summary={
+                    "generated_reference_volume_ratio": 0.25,
+                    "content_generated_sections": 10,
+                },
+                gap_focus_counts={"drafting depth": 4},
+                gap_priority_rows=[
+                    {
+                        "reference_section": "A",
+                        "generated_section": "A generated",
+                        "coverage": 0.2,
+                        "volume": 0.1,
+                        "reasons": "too short",
+                        "focus": "drafting depth",
+                    }
+                ],
+                section_uid_by_generated_title={"A generated": "sec-a"},
+                action_report_paths=[Path("out/actions.json")],
+                action_execution_reports=[
+                    {
+                        "schema_version": "calibration_action_execution.v1",
+                        "total_actions": 2,
+                        "status_counts": {"done": 1, "error": 1},
+                        "actions": [
+                            {
+                                "missing_reason_counts": {
+                                    "missing distinctive requirement detail": 2,
+                                    "needs execution action": 1,
+                                    "needs operational evidence": 1,
+                                }
+                            }
+                        ],
+                    }
+                ],
+            )
+        )
+
+        self.assertEqual(manifest["schema_version"], "calibration_manifest.v1")
+        self.assertEqual(manifest["project_id"], "project-1")
+        self.assertEqual(manifest["mode"], "non-mutating")
+        self.assertEqual(
+            manifest["calibration_gates"]["docx_readiness_status"],
+            "blocked",
+        )
+        self.assertEqual(manifest["calibration_gates"]["snapshot_warnings"], 2)
+        self.assertEqual(
+            manifest["gap_quality_scorecard"]["generated_reference_volume_ratio"],
+            0.25,
+        )
+        self.assertEqual(
+            [action["action_key"] for action in manifest["readiness_actions"]],
+            [
+                "resolve_duplicate_selected",
+                "regenerate_stale",
+                "regenerate_missing_requirements",
+                "regenerate_quality_depth",
+            ],
+        )
+        self.assertEqual(
+            manifest["readiness_actions"][2]["ui_action"],
+            "Регенерирай покритието",
+        )
+        self.assertEqual(manifest["readiness_actions"][0]["api_method"], "POST")
+        self.assertEqual(
+            manifest["readiness_actions"][0]["api_path"],
+            "/api/v1/agents/project-1/remediation-actions/resolve_duplicate_selected",
+        )
+        self.assertEqual(
+            manifest["readiness_actions"][2]["api_path"],
+            "/api/v1/agents/project-1/remediation-actions/regenerate_missing_requirements",
+        )
+        self.assertEqual(
+            manifest["readiness_actions"][2]["request_json"],
+            {
+                "section_uids": ["sec-quality", "sec-risk"],
+                "section_title_hints": ["Quality", "Risk"],
+            },
+        )
+        self.assertIn(
+            (
+                "Quality (3 missing; missing distinctive requirement detail, "
+                "needs execution action, needs coherent passage, +1 more)"
+            ),
+            manifest["readiness_actions"][2]["section_labels"],
+        )
+        self.assertIn(
+            "missing distinctive requirement detail",
+            manifest["readiness_actions"][2]["summary"],
+        )
+        self.assertEqual(
+            manifest["readiness_actions"][2]["missing_reason_counts"],
+            {
+                "missing distinctive requirement detail": 2,
+                "needs coherent passage": 1,
+                "needs execution action": 1,
+                "needs operational evidence": 1,
+            },
+        )
+        self.assertEqual(
+            manifest["readiness_actions"][3]["request_json"],
+            {
+                "section_uids": ["sec-environment", "sec-safety"],
+                "section_title_hints": ["Environment", "Safety"],
+            },
+        )
+        self.assertIn(
+            "Environment (120/420 words, 3 groups, 7 topics, "
+            "9 checklist ids, 140 words/group-topic, "
+            "issues: weak_operational_detail, uneven_blueprint_distribution)",
+            manifest["readiness_actions"][3]["section_labels"],
+        )
+        self.assertIn(
+            "Safety (90/360 words, 2 groups, 5 topics, 8 checklist ids, "
+            "120 words/group-topic)",
+            manifest["readiness_actions"][3]["summary"],
+        )
+        self.assertEqual(manifest["gap_priority_rows"][0]["focus"], "drafting depth")
+        self.assertEqual(
+            manifest["gap_priority_rows"][0]["action_key"],
+            "regenerate_quality_depth",
+        )
+        self.assertEqual(manifest["gap_priority_rows"][0]["api_method"], "POST")
+        self.assertEqual(
+            manifest["gap_priority_rows"][0]["api_path"],
+            "/api/v1/agents/project-1/remediation-actions/regenerate_quality_depth",
+        )
+        self.assertEqual(
+            manifest["gap_priority_rows"][0]["request_json"],
+            {
+                "section_uids": ["sec-a"],
+                "section_title_hints": ["A generated"],
+                "gap_reasons": ["too short"],
+                "reference_section": "A",
+                "generated_section": "A generated",
+            },
+        )
+        self.assertEqual(
+            manifest["paths"]["action_execution_reports"],
+            ["out/actions.json"],
+        )
+        self.assertEqual(
+            manifest["action_execution_summary"]["status_counts"],
+            {"done": 1, "error": 1},
+        )
+        self.assertFalse(manifest["action_execution_summary"]["ready_for_bundle"])
+        self.assertTrue(manifest["action_execution_summary"]["has_failures"])
+        self.assertEqual(manifest["action_execution_summary"]["evidence_level"], "failed")
+        self.assertEqual(
+            manifest["action_execution_summary"]["missing_reason_counts"],
+            {
+                "missing distinctive requirement detail": 2,
+                "needs execution action": 1,
+                "needs operational evidence": 1,
+            },
+        )
+        self.assertEqual(
+            manifest["action_execution_reports"][0]["schema_version"],
+            "calibration_action_execution.v1",
+        )
+
+    def test_snapshot_warning_count_reads_warning_section_only(self):
+        count = snapshot_warning_count(
+            "\n".join(
+                [
+                    "# Snapshot",
+                    "- regular bullet",
+                    "## Snapshot Warnings",
+                    "- duplicate selected generations for section one",
+                    "- missing selected generation for section two",
+                    "",
+                    "## Other Section",
+                    "- not a warning",
+                ]
+            )
+        )
+
+        self.assertEqual(count, 2)
+
+    def test_run_calibration_bundle_writes_snapshot_readiness_gap_and_manifest(self):
+        original_load_snapshot = calibration.load_snapshot
+        original_export_readiness = calibration.export_readiness_report_markdown
+        original_extract_text = calibration.extract_text
+        original_render_report = calibration.render_report
+
+        async def fake_load_snapshot(project_id):
+            self.assertEqual(project_id, "project-1")
+            return (
+                "Calibration Project",
+                [{"uid": "sec-a", "title": "Section A"}],
+                [
+                    GenerationSnapshot(
+                        id="gen-old",
+                        section_uid="sec-a",
+                        variant="1",
+                        text="Old generated section",
+                        evidence_status="stale",
+                        selected=True,
+                        created_at="2026-01-01T00:00:00",
+                    ),
+                    GenerationSnapshot(
+                        id="gen-new",
+                        section_uid="sec-a",
+                        variant="2",
+                        text="New generated section",
+                        evidence_status="ok",
+                        selected=True,
+                        created_at="2026-01-02T00:00:00",
+                    ),
+                ],
+            )
+
+        async def fake_export_readiness(project_id, out_path):
+            self.assertEqual(project_id, "project-1")
+            out_path.write_text("# DOCX export readiness report", encoding="utf-8")
+            return {
+                "status": "blocked",
+                "blockers": [{"code": "stale_evidence", "count": 1}],
+            }
+
+        def fake_extract_text(path):
+            if path.name == "reference.md":
+                return "# Reference\n\nReference section"
+            if path.name == "tender.md":
+                return "Tender source text"
+            return path.read_text(encoding="utf-8")
+
+        def fake_render_report(**kwargs):
+            self.assertIn("Tender source text", kwargs["tender_text"])
+            self.assertEqual(kwargs["reference_path"], Path("reference.md"))
+            self.assertEqual(
+                kwargs["generated_path"].name,
+                "effective_proposal_snapshot.md",
+            )
+            return "\n".join(
+                [
+                    "# Gap report",
+                    "- Content sections compared in reference TP: `1`",
+                    "- Content sections compared in generated TP: `1`",
+                    "- Word-like tokens в референтното ТП: `1000`",
+                    "- Word-like tokens в генерираното ТП: `250`",
+                    "",
+                    "## Section Gap Diagnostics",
+                    "",
+                    "| Reference section | Best generated section | Coverage | Volume | Gap reasons | Calibration focus |",
+                    "| --- | --- | ---: | ---: | --- | --- |",
+                    "| A | Section A | 0.20 | 0.10 | too short | drafting depth |",
+                    "| B | B generated | 0.10 | 0.20 | missing key terms | grounding and checklist coverage |",
+                ]
+            )
+
+        calibration.load_snapshot = fake_load_snapshot
+        calibration.export_readiness_report_markdown = fake_export_readiness
+        calibration.extract_text = fake_extract_text
+        calibration.render_report = fake_render_report
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                action_report = Path(tmp) / "execution.json"
+                action_report.write_text(
+                    json.dumps(
+                        {
+                            "schema_version": "calibration_action_execution.v1",
+                            "total_actions": 1,
+                            "executed_actions": 1,
+                            "status_counts": {"done": 1},
+                            "ready_for_bundle": True,
+                            "actions": [
+                                {
+                                    "action_key": "regenerate_stale",
+                                    "final_status": "done",
+                                }
+                            ],
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+                paths = asyncio.run(
+                    run_calibration_bundle(
+                        project_id="project-1",
+                        reference=Path("reference.md"),
+                        out_dir=Path(tmp),
+                        tenders=[Path("tender.md")],
+                        action_reports=[action_report],
+                    )
+                )
+
+                selected_snapshot = paths["selected_snapshot"].read_text(encoding="utf-8")
+                effective_snapshot = paths["effective_snapshot"].read_text(encoding="utf-8")
+                self.assertIn("Old generated section", selected_snapshot)
+                self.assertIn("New generated section", selected_snapshot)
+                self.assertIn("Selected variant 1", selected_snapshot)
+                self.assertNotIn("Old generated section", effective_snapshot)
+                self.assertIn("New generated section", effective_snapshot)
+                self.assertIn(
+                    "effective-newest-selected-per-section",
+                    effective_snapshot,
+                )
+                self.assertEqual(
+                    paths["readiness_report"].read_text(encoding="utf-8"),
+                    "# DOCX export readiness report",
+                )
+                gap_report = paths["gap_report"].read_text(encoding="utf-8")
+                self.assertIn("# Gap report", gap_report)
+                self.assertIn("Section Gap Diagnostics", gap_report)
+                self.assertIn(
+                    "docx_readiness_report.md",
+                    paths["manifest"].read_text(encoding="utf-8"),
+                )
+                manifest_json = json.loads(
+                    paths["manifest_json"].read_text(encoding="utf-8")
+                )
+                self.assertEqual(
+                    manifest_json["paths"]["readiness_report"],
+                    str(paths["readiness_report"]).replace("\\", "/"),
+                )
+                self.assertEqual(
+                    manifest_json["readiness_actions"][0]["action_key"],
+                    "regenerate_stale",
+                )
+                self.assertEqual(
+                    manifest_json["readiness_actions"][0]["api_path"],
+                    "/api/v1/agents/project-1/remediation-actions/regenerate_stale",
+                )
+                self.assertIn(
+                    "effective_proposal_snapshot.md",
+                    paths["manifest"].read_text(encoding="utf-8"),
+                )
+                self.assertIn(
+                    "`stale_evidence`: `1`",
+                    paths["manifest"].read_text(encoding="utf-8"),
+                )
+                self.assertIn(
+                    "`drafting depth`: `1` sections",
+                    paths["manifest"].read_text(encoding="utf-8"),
+                )
+                self.assertIn(
+                    "Generated/reference volume ratio: `0.25`",
+                    paths["manifest"].read_text(encoding="utf-8"),
+                )
+                self.assertIn(
+                    "Action execution reports: `1` files, `1` actions",
+                    paths["manifest"].read_text(encoding="utf-8"),
+                )
+                self.assertIn(
+                    "Action evidence level: `proof`",
+                    paths["manifest"].read_text(encoding="utf-8"),
+                )
+                self.assertIn(
+                    "Action evidence ready for next bundle: `yes`",
+                    paths["manifest"].read_text(encoding="utf-8"),
+                )
+                self.assertIn(
+                    "`done`: `1`",
+                    paths["manifest"].read_text(encoding="utf-8"),
+                )
+                self.assertIn(
+                    "Regeneration priority shortlist",
+                    paths["manifest"].read_text(encoding="utf-8"),
+                )
+                self.assertIn(
+                    "Gap `drafting depth` action_key=`regenerate_quality_depth`: "
+                    "regenerate/reference-align `A`",
+                    paths["manifest"].read_text(encoding="utf-8"),
+                )
+                self.assertEqual(
+                    manifest_json["gap_priority_rows"][0]["action_key"],
+                    "regenerate_quality_depth",
+                )
+                self.assertEqual(
+                    manifest_json["gap_priority_rows"][1]["action_key"],
+                    "regenerate_missing_requirements",
+                )
+                self.assertEqual(
+                    manifest_json["gap_priority_rows"][0]["request_json"],
+                    {
+                        "section_uids": ["sec-a"],
+                        "section_title_hints": ["Section A"],
+                        "gap_reasons": ["too short"],
+                        "reference_section": "A",
+                        "generated_section": "Section A",
+                    },
+                )
+                self.assertEqual(
+                    manifest_json["paths"]["action_execution_reports"],
+                    [str(action_report).replace("\\", "/")],
+                )
+                self.assertEqual(
+                    manifest_json["action_execution_summary"]["status_counts"],
+                    {"done": 1},
+                )
+                self.assertEqual(
+                    manifest_json["action_execution_summary"]["evidence_level"],
+                    "proof",
+                )
+        finally:
+            calibration.load_snapshot = original_load_snapshot
+            calibration.export_readiness_report_markdown = original_export_readiness
+            calibration.extract_text = original_extract_text
+            calibration.render_report = original_render_report
+
+    def test_run_calibration_bundle_writes_comparison_when_previous_manifest_exists(self):
+        original_load_snapshot = calibration.load_snapshot
+        original_export_readiness = calibration.export_readiness_report_markdown
+        original_extract_text = calibration.extract_text
+        original_render_report = calibration.render_report
+
+        async def fake_load_snapshot(project_id):
+            return (
+                "Calibration Project",
+                [{"uid": "sec-a", "title": "Section A"}],
+                [
+                    GenerationSnapshot(
+                        id="gen-new",
+                        section_uid="sec-a",
+                        variant="1",
+                        text="New generated section",
+                        evidence_status="ok",
+                        selected=True,
+                        created_at="2026-01-02T00:00:00",
+                    ),
+                ],
+            )
+
+        async def fake_export_readiness(project_id, out_path):
+            out_path.write_text("# DOCX export readiness report", encoding="utf-8")
+            return {"status": "ready", "blockers": []}
+
+        def fake_extract_text(path):
+            if path.name == "reference.md":
+                return "# Reference\n\nReference section"
+            return path.read_text(encoding="utf-8")
+
+        def fake_render_report(**kwargs):
+            return "\n".join(
+                [
+                    "# Gap report",
+                    "- Content sections compared in reference TP: `1`",
+                    "- Content sections compared in generated TP: `1`",
+                    "- Word-like tokens в референтното ТП: `1000`",
+                    "- Word-like tokens в генерираното ТП: `500`",
+                    "",
+                    "## Section Gap Diagnostics",
+                    "",
+                    "| Reference section | Best generated section | Coverage | Volume | Gap reasons | Calibration focus |",
+                    "| --- | --- | ---: | ---: | --- | --- |",
+                    "| A | A generated | 0.90 | 0.50 | acceptable alignment | monitor |",
+                ]
+            )
+
+        calibration.load_snapshot = fake_load_snapshot
+        calibration.export_readiness_report_markdown = fake_export_readiness
+        calibration.extract_text = fake_extract_text
+        calibration.render_report = fake_render_report
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                previous_manifest = Path(tmp) / "previous.json"
+                previous_manifest.write_text(
+                    json.dumps(
+                        {
+                            "schema_version": "calibration_manifest.v1",
+                            "project_id": "project-1",
+                            "calibration_gates": {
+                                "snapshot_warnings": 2,
+                                "docx_readiness_status": "blocked",
+                                "docx_readiness_blockers": 3,
+                            },
+                            "gap_quality_scorecard": {
+                                "generated_reference_volume_ratio": 0.20,
+                                "content_generated_sections": 1,
+                            },
+                            "gap_calibration_focus_counts": {
+                                "drafting depth": 2,
+                            },
+                            "readiness_actions": [
+                                {"action_key": "regenerate_stale"}
+                            ],
+                            "gap_priority_rows": [
+                                {"action_key": "regenerate_quality_depth"}
+                            ],
+                            "action_execution_summary": {
+                                "section_label_counts": {
+                                    "Quality (120/420 words, 3 groups)": 1,
+                                },
+                            },
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+                action_report = Path(tmp) / "calibration_action_execution.json"
+                action_report.write_text(
+                    json.dumps(
+                        {
+                            "schema_version": "calibration_action_execution.v1",
+                            "total_actions": 1,
+                            "executed_actions": 1,
+                            "status_counts": {"done": 1},
+                            "ready_for_bundle": True,
+                            "actions": [
+                                {
+                                    "action_key": "regenerate_quality_depth",
+                                    "section_labels": [
+                                        "Quality (420/420 words, 3 groups)",
+                                    ],
+                                }
+                            ],
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+
+                paths = asyncio.run(
+                    run_calibration_bundle(
+                        project_id="project-1",
+                        reference=Path("reference.md"),
+                        out_dir=Path(tmp) / "bundle",
+                        tenders=[],
+                        previous_manifest=previous_manifest,
+                        action_reports=[action_report],
+                    )
+                )
+
+                comparison = paths["comparison"].read_text(encoding="utf-8")
+                self.assertIn("Calibration manifest comparison", comparison)
+                self.assertIn("## Action execution section label deltas", comparison)
+                self.assertIn(
+                    "| Quality (120/420 words, 3 groups) | 1 | 0 | -1 |",
+                    comparison,
+                )
+                self.assertIn(
+                    "| Quality (420/420 words, 3 groups) | 0 | 1 | +1 |",
+                    comparison,
+                )
+                self.assertIn(
+                    "| readiness blockers | 3 | 0 | -3 | improved |",
+                    comparison,
+                )
+                self.assertIn(
+                    "| generated/reference volume ratio | 0.20 | 0.50 | +0.30 | improved |",
+                    comparison,
+                )
+                self.assertIn("proceed to human review/export", comparison)
+        finally:
+            calibration.load_snapshot = original_load_snapshot
+            calibration.export_readiness_report_markdown = original_export_readiness
+            calibration.extract_text = original_extract_text
+            calibration.render_report = original_render_report
+
+
+if __name__ == "__main__":
+    unittest.main()

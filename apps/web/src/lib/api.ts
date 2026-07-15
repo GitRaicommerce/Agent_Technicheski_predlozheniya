@@ -269,7 +269,22 @@ export interface RequirementCoverageItem {
   status?: "covered" | "missing" | string;
   matched_terms?: string[];
   missing_terms?: string[];
+  distinctive_terms?: string[];
+  distinctive_matches?: string[];
+  matched_ratio?: number;
+  coherent_matched_ratio?: number;
+  coherent_matched_terms?: string[];
   required_match_count?: number;
+  required_distinctive_count?: number;
+  required_coherent_match_count?: number;
+  operational_signals?: string[];
+  operational_execution_signals?: string[];
+  requires_operational_detail?: boolean;
+  required_operational_signal_count?: number;
+  required_operational_execution_signal_count?: number;
+  reason?: string;
+  reasons?: string[];
+  remediation_guidance?: string;
 }
 
 export interface RequirementCoverage {
@@ -325,6 +340,68 @@ export interface GenerationJob {
   created_at: string;
   updated_at: string;
   completed_at?: string | null;
+}
+
+export interface DuplicateSelectionResolutionResponse {
+  status: string;
+  resolved_count: number;
+  sections: Array<{
+    section_uid: string;
+    generation_id: string;
+    previous_selected_count: number;
+  }>;
+}
+
+export interface ExportReadiness {
+  project_id: string;
+  ready: boolean;
+  status: "ready" | "blocked" | string;
+  message?: string;
+  selected_generation_count?: number;
+  selected_section_count?: number;
+  blocker_count?: number;
+  blockers?: Array<{ code: string; count: number; message: string }>;
+  duplicate_selected_sections?: unknown[];
+  duplicate_selected_count?: number;
+  stale_sections?: string[];
+  stale_section_count?: number;
+  missing_requirement_sections?: unknown[];
+  missing_requirement_count?: number;
+  quality_sections?: ExportQualitySection[];
+  quality_section_count?: number;
+}
+
+export interface ExportQualitySection {
+  section_uid: string;
+  generation_id?: string;
+  word_count?: number;
+  sentence_count?: number;
+  requirement_count?: number;
+  blueprint_group_count?: number;
+  blueprint_topic_count?: number;
+  blueprint_requirement_id_count?: number;
+  blueprint_structure_count?: number;
+  min_words?: number;
+  min_sentences?: number;
+  suggested_words_per_structure?: number;
+  structure_coverage?: {
+    anchor_count?: number;
+    covered_count?: number;
+    required_count?: number;
+    missing?: Array<{
+      label?: string;
+      terms?: string[];
+      matched_terms?: string[];
+      required_terms?: number;
+    }>;
+  };
+  operational_contract_coverage?: {
+    covered_count?: number;
+    required_count?: number;
+    covered?: Record<string, string[]>;
+    missing?: string[];
+  };
+  issues?: Array<Record<string, unknown>>;
 }
 
 export const api = {
@@ -435,9 +512,29 @@ export const api = {
         `/api/v1/agents/${projectId}/generation-jobs/retry`,
         { method: "POST" },
       ),
+    regenerateStaleGenerationJob: (projectId: string) =>
+      apiFetch<GenerationJob>(
+        `/api/v1/agents/${projectId}/generation-jobs/stale`,
+        { method: "POST" },
+      ),
+    regenerateQualityGenerationJob: (projectId: string) =>
+      apiFetch<GenerationJob>(
+        `/api/v1/agents/${projectId}/generation-jobs/quality`,
+        { method: "POST" },
+      ),
+    regenerateMissingRequirementsGenerationJob: (projectId: string) =>
+      apiFetch<GenerationJob>(
+        `/api/v1/agents/${projectId}/generation-jobs/missing-requirements`,
+        { method: "POST" },
+      ),
     selectGeneration: (projectId: string, generationId: string) =>
       apiFetch<{ status: string; generation_id: string }>(
         `/api/v1/agents/${projectId}/generations/${generationId}/select`,
+        { method: "POST" },
+      ),
+    resolveDuplicateSelectedGenerations: (projectId: string) =>
+      apiFetch<DuplicateSelectionResolutionResponse>(
+        `/api/v1/agents/${projectId}/generations/resolve-duplicates`,
         { method: "POST" },
       ),
     regenerateSection: (projectId: string, sectionUid: string) =>
@@ -447,6 +544,16 @@ export const api = {
       ),
   },
   export: {
+    readiness: (projectId: string) =>
+      apiFetch<ExportReadiness>(`/api/v1/export/${projectId}/readiness`),
+    readinessReport: async (projectId: string) => {
+      const response = await fetch(
+        buildUrl(`/api/v1/export/${projectId}/readiness/report`),
+        { cache: "no-store" },
+      );
+      await ensureOk(response);
+      return response.text();
+    },
     docx: async (projectId: string) => {
       const response = await fetch(buildUrl(`/api/v1/export/${projectId}/docx`));
       await ensureOk(response);

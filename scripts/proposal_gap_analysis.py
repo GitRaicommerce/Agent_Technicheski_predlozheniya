@@ -44,8 +44,48 @@ STOPWORDS = {
     "the",
     "and",
     "with",
+    "\u0441\u043b\u0435\u0434\u0432\u0430",
+    "\u0442\u0440\u044f\u0431\u0432\u0430",
+    "\u0438\u0437\u0438\u0441\u043a\u0432\u0430",
+    "\u0438\u0437\u0438\u0441\u043a\u0432\u0430\u043d\u0435",
+    "\u0438\u0437\u0438\u0441\u043a\u0432\u0430\u043d\u0435\u0442\u043e",
+    "\u0443\u0447\u0430\u0441\u0442\u043d\u0438\u043a",
+    "\u0443\u0447\u0430\u0441\u0442\u043d\u0438\u043a\u044a\u0442",
+    "\u043e\u0444\u0435\u0440\u0442\u0430",
+    "\u043e\u0444\u0435\u0440\u0442\u0430\u0442\u0430",
+    "\u0442\u0435\u0445\u043d\u0438\u0447\u0435\u0441\u043a\u043e",
+    "\u0442\u0435\u0445\u043d\u0438\u0447\u0435\u0441\u043a\u043e\u0442\u043e",
+    "\u043f\u0440\u0435\u0434\u043b\u043e\u0436\u0435\u043d\u0438\u0435",
+    "\u043f\u0440\u0435\u0434\u043b\u043e\u0436\u0435\u043d\u0438\u0435\u0442\u043e",
+    "\u0441\u044a\u0434\u044a\u0440\u0436\u0430",
+    "\u043f\u0440\u0435\u0434\u0441\u0442\u0430\u0432\u0438",
+    "\u043f\u0440\u0435\u0434\u0441\u0442\u0430\u0432\u044f\u043d\u0435",
+    "\u043e\u043f\u0438\u0448\u0435",
+    "\u043e\u043f\u0438\u0441\u0430\u043d\u0438\u0435",
+    "\u043f\u043e\u0434\u0440\u043e\u0431\u043d\u043e",
+    "\u0438\u0437\u043f\u044a\u043b\u043d\u0435\u043d\u0438\u0435",
+    "\u0438\u0437\u043f\u044a\u043b\u043d\u0435\u043d\u0438\u0435\u0442\u043e",
+    "\u043a\u0430\u043a\u0442\u043e",
+    "\u043a\u043e\u0435\u0442\u043e",
+    "\u043a\u043e\u0438\u0442\u043e",
+    "\u0432\u0441\u0438\u0447\u043a\u0438",
+    "\u0431\u044a\u0434\u0430\u0442",
+    "\u043c\u043e\u0436\u0435",
+    "\u043c\u043e\u0433\u0430\u0442",
+    "\u0447\u0440\u0435\u0437",
+    "\u043e\u0431\u0435\u043a\u0442",
+    "\u043e\u0431\u0435\u043a\u0442\u0430",
+    "\u043f\u043e\u0440\u044a\u0447\u043a\u0430",
+    "\u043f\u043e\u0440\u044a\u0447\u043a\u0430\u0442\u0430",
+    "\u0434\u0435\u0439\u043d\u043e\u0441\u0442",
+    "\u0434\u0435\u0439\u043d\u043e\u0441\u0442\u0438",
+    "\u0434\u0435\u0439\u043d\u043e\u0441\u0442\u0438\u0442\u0435",
+    "\u043c\u044f\u0440\u043a\u0430",
+    "\u043c\u044f\u0440\u043a\u0430\u0442\u0430",
+    "\u0440\u0430\u0431\u043e\u0442\u0430",
+    "\u0440\u0430\u0431\u043e\u0442\u0430\u0442\u0430",
+    "\u0442\u0435\u0445\u043d\u0438\u0447\u043a\u0438",
 }
-
 
 @dataclass
 class Section:
@@ -57,6 +97,240 @@ class Section:
         return tokenize(self.text)
 
 
+TOPIC_RULES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
+    (
+        "organization",
+        "Organization, roles and resources",
+        (
+            "organization",
+            "team",
+            "resource",
+            "responsib",
+            "\u043e\u0440\u0433\u0430\u043d\u0438\u0437\u0430\u0446",
+            "\u0435\u043a\u0438\u043f",
+            "\u0440\u0435\u0441\u0443\u0440\u0441",
+            "\u043e\u0442\u0433\u043e\u0432\u043e\u0440\u043d",
+        ),
+    ),
+    (
+        "schedule",
+        "Schedule, sequence and milestones",
+        (
+            "schedule",
+            "sequence",
+            "milestone",
+            "deadline",
+            "\u0433\u0440\u0430\u0444\u0438\u043a",
+            "\u0435\u0442\u0430\u043f",
+            "\u0441\u0440\u043e\u043a",
+            "\u043f\u043e\u0441\u043b\u0435\u0434\u043e\u0432\u0430\u0442\u0435\u043b\u043d",
+        ),
+    ),
+    (
+        "quality",
+        "Quality control and acceptance",
+        (
+            "quality",
+            "control",
+            "inspection",
+            "acceptance",
+            "protocol",
+            "\u043a\u0430\u0447\u0435\u0441\u0442\u0432",
+            "\u043a\u043e\u043d\u0442\u0440\u043e\u043b",
+            "\u043f\u0440\u0438\u0435\u043c\u0430\u043d",
+            "\u043f\u0440\u043e\u0442\u043e\u043a\u043e\u043b",
+        ),
+    ),
+    (
+        "risk",
+        "Risk and unforeseen circumstances",
+        (
+            "risk",
+            "unforeseen",
+            "mitigation",
+            "escalation",
+            "\u0440\u0438\u0441\u043a",
+            "\u043d\u0435\u043f\u0440\u0435\u0434\u0432\u0438\u0434",
+            "\u0435\u0441\u043a\u0430\u043b\u0430\u0446",
+        ),
+    ),
+    (
+        "environment",
+        "Environmental protection",
+        (
+            "environment",
+            "dust",
+            "waste",
+            "soil",
+            "pollution",
+            "\u043e\u043a\u043e\u043b\u043d\u0430 \u0441\u0440\u0435\u0434\u0430",
+            "\u043f\u0440\u0430\u0445",
+            "\u043e\u0442\u043f\u0430\u0434",
+            "\u043f\u043e\u0447\u0432",
+            "\u0437\u0430\u043c\u044a\u0440\u0441",
+        ),
+    ),
+    (
+        "communication",
+        "Communication and coordination",
+        (
+            "communication",
+            "coordination",
+            "meeting",
+            "reporting",
+            "authority",
+            "\u043a\u043e\u043c\u0443\u043d\u0438\u043a\u0430\u0446",
+            "\u043a\u043e\u043e\u0440\u0434\u0438\u043d\u0430\u0446",
+            "\u0432\u044a\u0437\u043b\u043e\u0436\u0438\u0442\u0435\u043b",
+            "\u043d\u0430\u0434\u0437\u043e\u0440",
+        ),
+    ),
+    (
+        "safety",
+        "Health, safety and fire safety",
+        (
+            "safety",
+            "health",
+            "fire",
+            "incident",
+            "\u0431\u0435\u0437\u043e\u043f\u0430\u0441",
+            "\u0437\u0434\u0440\u0430\u0432",
+            "\u043f\u043e\u0436\u0430\u0440",
+            "\u0438\u043d\u0446\u0438\u0434\u0435\u043d\u0442",
+        ),
+    ),
+    (
+        "documentation",
+        "Documentation, records and reporting",
+        (
+            "document",
+            "record",
+            "report",
+            "protocol",
+            "\u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442",
+            "\u043e\u0442\u0447\u0435\u0442",
+            "\u043f\u0440\u043e\u0442\u043e\u043a\u043e\u043b",
+            "\u0435\u043a\u0437\u0435\u043a\u0443\u0442\u0438\u0432",
+        ),
+    ),
+)
+
+OPERATIONAL_DETAIL_SIGNALS: tuple[str, ...] = (
+    "acceptance",
+    "action",
+    "approval",
+    "control",
+    "corrective",
+    "document",
+    "evidence",
+    "escalation",
+    "inspection",
+    "monitoring",
+    "protocol",
+    "record",
+    "reporting",
+    "responsible",
+    "role",
+    "sequence",
+    "\u0434\u0435\u0439\u0441\u0442\u0432",
+    "\u0434\u043e\u043a\u0430\u0437\u0430\u0442",
+    "\u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442",
+    "\u0435\u0441\u043a\u0430\u043b\u0430\u0446",
+    "\u0437\u0430\u043f\u0438\u0441",
+    "\u043a\u043e\u043d\u0442\u0440\u043e\u043b",
+    "\u043a\u043e\u0440\u0435\u043a\u0442",
+    "\u043c\u043e\u043d\u0438\u0442\u043e\u0440",
+    "\u043e\u0442\u0433\u043e\u0432\u043e\u0440",
+    "\u043e\u0442\u0447\u0435\u0442",
+    "\u043f\u0440\u0438\u0435\u043c",
+    "\u043f\u0440\u043e\u0432\u0435\u0440",
+    "\u043f\u0440\u043e\u0442\u043e\u043a\u043e\u043b",
+    "\u0440\u043e\u043b",
+)
+
+CONTENT_SECTION_HINTS = (
+    "approach",
+    "method",
+    "methodology",
+    "organization",
+    "programme",
+    "program",
+    "schedule",
+    "sequence",
+    "quality",
+    "risk",
+    "environment",
+    "safety",
+    "communication",
+    "coordination",
+    "resource",
+    "control",
+    "documentation",
+    "\u043f\u043e\u0434\u0445\u043e\u0434",
+    "\u043c\u0435\u0442\u043e\u0434",
+    "\u043c\u0435\u0442\u043e\u0434\u0438\u043a",
+    "\u043e\u0440\u0433\u0430\u043d\u0438\u0437\u0430\u0446",
+    "\u0440\u0430\u0431\u043e\u0442\u043d\u0430 \u043f\u0440\u043e\u0433\u0440\u0430\u043c",
+    "\u043f\u0440\u043e\u0433\u0440\u0430\u043c\u0430",
+    "\u0433\u0440\u0430\u0444\u0438\u043a",
+    "\u0435\u0442\u0430\u043f",
+    "\u043f\u043e\u0441\u043b\u0435\u0434\u043e\u0432\u0430\u0442\u0435\u043b\u043d",
+    "\u043a\u0430\u0447\u0435\u0441\u0442\u0432",
+    "\u0440\u0438\u0441\u043a",
+    "\u043e\u043a\u043e\u043b\u043d\u0430 \u0441\u0440\u0435\u0434\u0430",
+    "\u0431\u0435\u0437\u043e\u043f\u0430\u0441",
+    "\u0437\u0434\u0440\u0430\u0432",
+    "\u043f\u043e\u0436\u0430\u0440",
+    "\u043a\u043e\u043c\u0443\u043d\u0438\u043a\u0430\u0446",
+    "\u043a\u043e\u043e\u0440\u0434\u0438\u043d\u0430\u0446",
+    "\u0440\u0435\u0441\u0443\u0440\u0441",
+    "\u043a\u043e\u043d\u0442\u0440\u043e\u043b",
+    "\u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442",
+)
+
+NON_CONTENT_TITLE_HINTS = (
+    "cover",
+    "contents",
+    "table of contents",
+    "signature",
+    "signed",
+    "declaration",
+    "appendix",
+    "annex",
+    "form",
+    "participant",
+    "bidder",
+    "greeting",
+    "price",
+    "financial",
+    "address",
+    "contact",
+    "\u0441\u044a\u0434\u044a\u0440\u0436\u0430\u043d\u0438\u0435",
+    "\u0434\u0435\u043a\u043b\u0430\u0440\u0430\u0446",
+    "\u043f\u043e\u0434\u043f\u0438\u0441",
+    "\u043f\u0435\u0447\u0430\u0442",
+    "\u043f\u0440\u0438\u043b\u043e\u0436\u0435\u043d\u0438\u0435",
+    "\u043e\u0431\u0440\u0430\u0437\u0435\u0446",
+    "\u0443\u0447\u0430\u0441\u0442\u043d\u0438\u043a",
+    "\u043a\u0430\u043d\u0434\u0438\u0434\u0430\u0442",
+    "\u0443\u0432\u0430\u0436\u0430\u0435\u043c\u0438",
+    "\u0433\u043e\u0441\u043f\u043e\u0434\u0430",
+    "\u043e\u0444\u0435\u0440\u0442\u0430",
+    "\u0446\u0435\u043d\u043e\u0432",
+    "\u0444\u0438\u043d\u0430\u043d\u0441",
+    "\u0430\u0434\u0440\u0435\u0441",
+    "\u043a\u043e\u043d\u0442\u0430\u043a\u0442",
+)
+
+ADMINISTRATIVE_EXACT_TITLE_HINTS = {
+    "participant",
+    "bidder",
+    "candidate",
+    "\u0443\u0447\u0430\u0441\u0442\u043d\u0438\u043a",
+    "\u043a\u0430\u043d\u0434\u0438\u0434\u0430\u0442",
+}
+
+
 def normalize_text(value: str) -> str:
     value = html.unescape(value)
     value = value.replace("\xa0", " ")
@@ -66,7 +340,7 @@ def normalize_text(value: str) -> str:
 
 
 def tokenize(text: str) -> list[str]:
-    tokens = re.findall(r"[0-9a-zа-я]+", text.lower())
+    tokens = re.findall(r"[0-9a-z\u0400-\u04FF]+", text.lower())
     return [token for token in tokens if len(token) >= 4 and token not in STOPWORDS]
 
 
@@ -129,10 +403,10 @@ def looks_like_heading(line: str) -> bool:
         return False
     if clean.endswith(".") and len(clean.split()) > 10:
         return False
-    if re.match(r"^(\d+[\.\)]|[IVX]+[\.\)]|[А-Я]\))\s+", clean):
+    if re.match(r"^(\d+[\.\)]|[IVX]+[\.\)]|[\u0400-\u04FF]\))\s+", clean):
         return True
-    letters = re.findall(r"[A-Za-zА-Яа-я]", clean)
-    uppercase = re.findall(r"[A-ZА-Я]", clean)
+    letters = re.findall(r"[A-Za-z\u0400-\u04FF]", clean)
+    uppercase = re.findall(r"[A-Z\u0400-\u042F]", clean)
     return bool(letters) and len(uppercase) / len(letters) > 0.72 and len(clean.split()) <= 12
 
 
@@ -144,7 +418,13 @@ def split_sections(text: str) -> list[Section]:
 
     for line in lines:
         raw_line = line.lstrip("\ufeff").strip()
-        is_heading = looks_like_heading(raw_line)
+        markdown_heading = re.match(r"^(#{1,6})\s+\S+", raw_line)
+        is_nested_markdown_heading = (
+            bool(markdown_heading)
+            and len(markdown_heading.group(1)) >= 3
+            and current_title != "Р”РѕРєСѓРјРµРЅС‚"
+        )
+        is_heading = looks_like_heading(raw_line) and not is_nested_markdown_heading
         line = re.sub(r"^#{1,6}\s+", "", raw_line).strip()
         if not line:
             if current_lines:
@@ -172,6 +452,136 @@ def top_keywords(sections: Iterable[Section], limit: int = 80) -> list[str]:
     return [word for word, _ in counts.most_common(limit)]
 
 
+def section_topic_hit_count(section: Section) -> int:
+    text = normalize_text(f"{section.title}\n{section.text}").lower()
+    hits = 0
+    for _, _, keywords in TOPIC_RULES:
+        if any(keyword in text for keyword in keywords):
+            hits += 1
+    return hits
+
+
+def is_content_section(section: Section) -> bool:
+    title = normalize_text(section.title).lower()
+    text = normalize_text(section.text).lower()
+    combined = f"{title}\n{text}"
+    word_count = len(section.words)
+    topic_hit_count = section_topic_hit_count(section)
+    has_content_hint = any(hint in combined for hint in CONTENT_SECTION_HINTS)
+    has_non_content_title_hint = any(
+        hint in title for hint in NON_CONTENT_TITLE_HINTS
+    )
+
+    if title.strip(" :.-") in ADMINISTRATIVE_EXACT_TITLE_HINTS:
+        return False
+    if has_non_content_title_hint and topic_hit_count == 0:
+        return False
+    if has_non_content_title_hint and word_count < 160 and topic_hit_count < 2:
+        return False
+    if word_count < 45 and topic_hit_count == 0:
+        return False
+    if word_count < 90 and has_non_content_title_hint:
+        return False
+    if topic_hit_count >= 2 or has_content_hint:
+        return True
+    if word_count >= 160 and topic_hit_count >= 1:
+        return True
+    return True
+
+
+def content_sections(sections: list[Section]) -> list[Section]:
+    filtered = [section for section in sections if is_content_section(section)]
+    return filtered or sections
+
+
+def section_gap_reasons(
+    title_score: float,
+    coverage: float,
+    length_ratio: float,
+    missing_keywords: list[str],
+    operational_detail_ratio: float = 1.0,
+) -> list[str]:
+    reasons: list[str] = []
+    if title_score < 0.12:
+        reasons.append("structure mismatch")
+    if length_ratio < 0.35:
+        reasons.append("too short")
+    elif length_ratio < 0.65:
+        reasons.append("thin detail")
+    if coverage < 0.35 and missing_keywords:
+        reasons.append("missing key terms")
+    elif coverage < 0.55:
+        reasons.append("weak lexical coverage")
+    if operational_detail_ratio < 0.4:
+        reasons.append("weak operational detail")
+    elif operational_detail_ratio < 0.7:
+        reasons.append("partial operational detail")
+    return reasons or ["acceptable alignment"]
+
+
+def calibration_focus_for_reasons(reasons: list[str]) -> str:
+    if "structure mismatch" in reasons:
+        return "outline mapping"
+    if (
+        "too short" in reasons
+        or "thin detail" in reasons
+        or "weak operational detail" in reasons
+        or "partial operational detail" in reasons
+    ):
+        return "drafting depth"
+    if "missing key terms" in reasons or "weak lexical coverage" in reasons:
+        return "grounding and checklist coverage"
+    return "monitor"
+
+
+def render_section_gap_diagnostics_lines(
+    reference_sections: list[Section],
+    generated_sections: list[Section],
+) -> list[str]:
+    lines = [
+        "",
+        "## Section Gap Diagnostics",
+        "",
+        "| Reference section | Best generated section | Coverage | Volume | Gap reasons | Calibration focus |",
+        "| --- | --- | ---: | ---: | --- | --- |",
+    ]
+
+    for reference in reference_sections:
+        generated, title_score = best_generated_match(reference, generated_sections)
+        reference_keywords = top_keywords([reference], limit=35)
+        generated_keywords = set(top_keywords([generated], limit=60))
+        missing = [word for word in reference_keywords if word not in generated_keywords][:12]
+        coverage = score_overlap(reference.words, generated.words)
+        if title_score < 0.12:
+            coverage *= 0.75
+        length_ratio = len(generated.words) / max(1, len(reference.words))
+        op_ratio = operational_detail_ratio(reference.text, generated.text)
+        reasons = section_gap_reasons(
+            title_score=title_score,
+            coverage=coverage,
+            length_ratio=length_ratio,
+            missing_keywords=missing,
+            operational_detail_ratio=op_ratio,
+        )
+        focus = calibration_focus_for_reasons(reasons)
+        lines.append(
+            "| "
+            + " | ".join(
+                [
+                    reference.title.replace("|", "\\|")[:90],
+                    generated.title.replace("|", "\\|")[:90],
+                    f"{coverage:.2f}",
+                    f"{length_ratio:.2f}",
+                    ", ".join(reasons).replace("|", "\\|"),
+                    focus,
+                ]
+            )
+            + " |"
+        )
+
+    return lines
+
+
 def score_overlap(reference_words: list[str], generated_words: list[str]) -> float:
     if not reference_words:
         return 1.0
@@ -179,6 +589,19 @@ def score_overlap(reference_words: list[str], generated_words: list[str]) -> flo
     generated = Counter(generated_words)
     matched = sum(min(count, generated[word]) for word, count in reference.items())
     return matched / sum(reference.values())
+
+
+def operational_signal_hits(text: str) -> list[str]:
+    normalized = normalize_text(text).lower()
+    return [signal for signal in OPERATIONAL_DETAIL_SIGNALS if signal in normalized]
+
+
+def operational_detail_ratio(reference_text: str, generated_text: str) -> float:
+    reference_hits = operational_signal_hits(reference_text)
+    if len(reference_hits) < 3:
+        return 1.0
+    generated_hits = set(operational_signal_hits(generated_text))
+    return len(set(reference_hits) & generated_hits) / len(set(reference_hits))
 
 
 def best_generated_match(reference: Section, generated_sections: list[Section]) -> tuple[Section, float]:
@@ -216,6 +639,226 @@ def find_tender_snippets(tender_text: str, keywords: list[str], limit: int = 3) 
     return snippets
 
 
+def analyze_topic_coverage(
+    reference_text: str,
+    generated_text: str,
+) -> list[dict[str, object]]:
+    reference_normalized = normalize_text(reference_text).lower()
+    generated_normalized = normalize_text(generated_text).lower()
+    result: list[dict[str, object]] = []
+
+    for key, label, keywords in TOPIC_RULES:
+        reference_hits = [
+            keyword for keyword in keywords if keyword in reference_normalized
+        ]
+        if not reference_hits:
+            continue
+
+        generated_hits = [
+            keyword for keyword in keywords if keyword in generated_normalized
+        ]
+        if not generated_hits:
+            status = "missing"
+        elif len(generated_hits) < max(2, len(reference_hits) // 2):
+            status = "partial"
+        else:
+            status = "covered"
+
+        result.append(
+            {
+                "key": key,
+                "label": label,
+                "status": status,
+                "reference_hits": reference_hits,
+                "generated_hits": generated_hits,
+                "missing_hits": [
+                    keyword for keyword in reference_hits if keyword not in generated_hits
+                ],
+            }
+        )
+
+    return result
+
+
+def analyze_operational_detail_coverage(
+    reference_text: str,
+    generated_text: str,
+) -> dict[str, object]:
+    reference_hits = list(dict.fromkeys(operational_signal_hits(reference_text)))
+    generated_hits = list(dict.fromkeys(operational_signal_hits(generated_text)))
+    if len(reference_hits) < 3:
+        return {
+            "status": "n/a",
+            "ratio": 1.0,
+            "reference_hits": reference_hits,
+            "generated_hits": generated_hits,
+            "missing_hits": [],
+        }
+
+    generated_set = set(generated_hits)
+    missing_hits = [signal for signal in reference_hits if signal not in generated_set]
+    ratio = (len(reference_hits) - len(missing_hits)) / len(reference_hits)
+    if ratio >= 0.7:
+        status = "covered"
+    elif ratio >= 0.4:
+        status = "partial"
+    else:
+        status = "weak"
+    return {
+        "status": status,
+        "ratio": ratio,
+        "reference_hits": reference_hits,
+        "generated_hits": generated_hits,
+        "missing_hits": missing_hits,
+    }
+
+
+def render_operational_detail_lines(
+    reference_sections: list[Section],
+    generated_sections: list[Section],
+) -> list[str]:
+    row = analyze_operational_detail_coverage(
+        "\n\n".join(section.text for section in reference_sections),
+        "\n\n".join(section.text for section in generated_sections),
+    )
+    return [
+        "",
+        "## Operational Detail Coverage",
+        "",
+        "| Status | Ratio | Reference signals | Generated signals | Missing signals |",
+        "| --- | ---: | --- | --- | --- |",
+        (
+            "| "
+            + " | ".join(
+                [
+                    str(row["status"]),
+                    f"{float(row['ratio']):.2f}",
+                    ", ".join(row["reference_hits"]).replace("|", "\\|") or "n/a",
+                    ", ".join(row["generated_hits"]).replace("|", "\\|") or "n/a",
+                    ", ".join(row["missing_hits"]).replace("|", "\\|") or "n/a",
+                ]
+            )
+            + " |"
+        ),
+    ]
+
+
+def render_topic_coverage_lines(
+    reference_sections: list[Section],
+    generated_sections: list[Section],
+) -> list[str]:
+    rows = analyze_topic_coverage(
+        "\n\n".join(section.text for section in reference_sections),
+        "\n\n".join(section.text for section in generated_sections),
+    )
+    lines = [
+        "",
+        "## Universal Topic Coverage",
+        "",
+        "| Topic | Status | Reference signals | Generated signals | Missing signals |",
+        "| --- | --- | --- | --- | --- |",
+    ]
+
+    if not rows:
+        lines.append("| n/a | no reference topic signals | n/a | n/a | n/a |")
+        return lines
+
+    for row in rows:
+        lines.append(
+            "| "
+            + " | ".join(
+                [
+                    str(row["label"]).replace("|", "\\|"),
+                    str(row["status"]),
+                    ", ".join(row["reference_hits"]).replace("|", "\\|"),
+                    ", ".join(row["generated_hits"]).replace("|", "\\|") or "n/a",
+                    ", ".join(row["missing_hits"]).replace("|", "\\|") or "n/a",
+                ]
+            )
+            + " |"
+        )
+    return lines
+
+
+def render_calibration_recommendation_lines(
+    reference_sections: list[Section],
+    generated_sections: list[Section],
+) -> list[str]:
+    rows = analyze_topic_coverage(
+        "\n\n".join(section.text for section in reference_sections),
+        "\n\n".join(section.text for section in generated_sections),
+    )
+    operational = analyze_operational_detail_coverage(
+        "\n\n".join(section.text for section in reference_sections),
+        "\n\n".join(section.text for section in generated_sections),
+    )
+    risky_rows = [
+        row for row in rows if row.get("status") in {"missing", "partial"}
+    ]
+    lines = ["", "## Calibration Recommendations", ""]
+
+    has_operational_gap = operational.get("status") in {"weak", "partial"}
+    if not risky_rows and not has_operational_gap:
+        lines.append(
+            "1. Universal topic coverage looks aligned. Focus calibration on "
+            "section-level depth, source grounding, and final DOCX readiness."
+        )
+        return lines
+
+    missing = [row for row in risky_rows if row.get("status") == "missing"]
+    partial = [row for row in risky_rows if row.get("status") == "partial"]
+    if missing:
+        labels = ", ".join(str(row["label"]) for row in missing)
+        signals = sorted(
+            {
+                str(signal)
+                for row in missing
+                for signal in row.get("missing_hits", [])
+            }
+        )
+        lines.append(
+            "1. Revisit outline extraction and drafting blueprint grouping for "
+            f"missing topics: {labels}."
+        )
+        if signals:
+            lines.append(
+                "2. Confirm the tender checklist and grounding chunks include "
+                "these missing signals: "
+                + ", ".join(signals[:16])
+                + "."
+            )
+        next_index = 3 if signals else 2
+    else:
+        next_index = 1
+
+    if partial:
+        labels = ", ".join(str(row["label"]) for row in partial)
+        lines.append(
+            f"{next_index}. Increase drafting depth and prompt specificity for "
+            f"partially covered topics: {labels}."
+        )
+        next_index += 1
+
+    if operational.get("status") in {"weak", "partial"}:
+        missing_signals = ", ".join(
+            str(signal) for signal in operational.get("missing_hits", [])[:12]
+        )
+        suffix = f" Missing signals: {missing_signals}." if missing_signals else ""
+        lines.append(
+            f"{next_index}. Strengthen operational drafting detail with roles, "
+            "controls, records, monitoring, acceptance evidence, sequence, "
+            f"escalation and corrective actions.{suffix}"
+        )
+        next_index += 1
+
+    lines.append(
+        f"{next_index}. After regenerating the proposal, rerun DOCX readiness "
+        "and this gap analysis to verify topic coverage, section depth, and "
+        "requirement coverage together."
+    )
+    return lines
+
+
 def coverage_label(coverage: float, length_ratio: float) -> str:
     if coverage >= 0.72 and length_ratio >= 0.65:
         return "добро"
@@ -232,6 +875,11 @@ def render_report(
     generated_path: Path,
     tender_paths: list[Path],
 ) -> str:
+    raw_reference_count = len(reference_sections)
+    raw_generated_count = len(generated_sections)
+    reference_sections = content_sections(reference_sections)
+    generated_sections = content_sections(generated_sections)
+
     lines: list[str] = [
         "# Анализ на пропуските в техническото предложение",
         "",
@@ -249,6 +897,14 @@ def render_report(
     generated_words = sum(len(section.words) for section in generated_sections)
     lines.extend(
         [
+            f"- Raw recognized sections in reference TP: `{raw_reference_count}`",
+            f"- Raw recognized sections in generated TP: `{raw_generated_count}`",
+            f"- Content sections compared in reference TP: `{len(reference_sections)}`",
+            f"- Content sections compared in generated TP: `{len(generated_sections)}`",
+        ]
+    )
+    lines.extend(
+        [
             f"- Разпознати секции в референтното ТП: `{len(reference_sections)}`",
             f"- Разпознати секции в генерираното ТП: `{len(generated_sections)}`",
             f"- Word-like tokens в референтното ТП: `{reference_words}`",
@@ -262,6 +918,25 @@ def render_report(
             "| Секция в референтното ТП | Най-близка секция в генерираното ТП | Покритие | Обем | Статус | Липсващи ключови термини |",
             "| --- | --- | ---: | ---: | --- | --- |",
         ]
+    )
+
+    section_coverage_start = next(
+        index
+        for index, line in enumerate(lines)
+        if line.startswith("## ") and "Покритие" in line
+    )
+    lines[section_coverage_start:section_coverage_start] = (
+        render_topic_coverage_lines(reference_sections, generated_sections)
+        + render_operational_detail_lines(reference_sections, generated_sections)
+        + render_calibration_recommendation_lines(
+            reference_sections,
+            generated_sections,
+        )
+        + render_section_gap_diagnostics_lines(
+            reference_sections,
+            generated_sections,
+        )
+        + [""]
     )
 
     detail_blocks: list[str] = []
