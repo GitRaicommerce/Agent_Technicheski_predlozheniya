@@ -269,6 +269,33 @@ def _quality_repair_feedback(
                         "  Add concrete operational evidence such as: "
                         + ", ".join(examples[:8])
                     )
+            if issue.get("code") == "incomplete_operational_contract":
+                missing_groups = [
+                    str(group)
+                    for group in issue.get("missing_contract_groups") or []
+                    if group
+                ]
+                covered_groups = [
+                    str(group)
+                    for group in issue.get("covered_contract_groups") or []
+                    if group
+                ]
+                lines.append(
+                    "  Operational response contract: "
+                    f"{issue.get('covered_contract_group_count', 0)}/"
+                    f"{issue.get('required_contract_group_count', 0)} "
+                    "components covered."
+                )
+                if covered_groups:
+                    lines.append(
+                        "  Already covered components: "
+                        + ", ".join(covered_groups[:8])
+                    )
+                if missing_groups:
+                    lines.append(
+                        "  Add missing components: "
+                        + ", ".join(missing_groups[:8])
+                    )
         lines.append(
             "- Current/minimum words: "
             f"{depth_assessment.get('word_count')}/"

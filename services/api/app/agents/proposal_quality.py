@@ -56,6 +56,88 @@ OPERATIONAL_SIGNAL_TERMS = {
     "\u043f\u0440\u043e\u0442\u043e\u043a\u043e\u043b",
     "\u0440\u043e\u043b",
 }
+OPERATIONAL_CONTRACT_GROUPS = {
+    "action": (
+        "action",
+        "actions",
+        "applies",
+        "assigns",
+        "defines",
+        "documents",
+        "executes",
+        "implements",
+        "keeps",
+        "monitors",
+        "performs",
+        "prepares",
+        "records",
+        "\u0432\u044a\u0437\u043b\u0430\u0433",
+        "\u0434\u0435\u0439\u0441\u0442\u0432",
+        "\u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442\u0438\u0440",
+        "\u0437\u0430\u043f\u0438\u0441\u0432",
+        "\u0438\u0437\u0432\u044a\u0440\u0448",
+        "\u0438\u0437\u043f\u044a\u043b\u043d",
+        "\u043e\u0441\u0438\u0433\u0443\u0440",
+        "\u043e\u0440\u0433\u0430\u043d\u0438\u0437\u0438\u0440",
+        "\u043f\u043e\u0434\u0433\u043e\u0442\u0432",
+        "\u043f\u0440\u0438\u043b\u0430\u0433",
+        "\u0441\u044a\u0441\u0442\u0430\u0432",
+    ),
+    "responsible_role": (
+        "owner",
+        "responsible",
+        "role",
+        "roles",
+        "team",
+        "\u0435\u043a\u0438\u043f",
+        "\u043e\u0442\u0433\u043e\u0432\u043e\u0440",
+        "\u0440\u043e\u043b",
+        "\u0440\u044a\u043a\u043e\u0432",
+        "\u0441\u043f\u0435\u0446\u0438\u0430\u043b\u0438\u0441\u0442",
+    ),
+    "control_point": (
+        "check",
+        "control",
+        "inspection",
+        "monitoring",
+        "review",
+        "\u043a\u043e\u043d\u0442\u0440\u043e\u043b",
+        "\u043c\u043e\u043d\u0438\u0442\u043e\u0440",
+        "\u043f\u0440\u0435\u0433\u043b\u0435\u0434",
+        "\u043f\u0440\u043e\u0432\u0435\u0440",
+    ),
+    "evidence_record": (
+        "acceptance",
+        "approval",
+        "document",
+        "evidence",
+        "protocol",
+        "record",
+        "report",
+        "\u0434\u043e\u043a\u0430\u0437\u0430\u0442",
+        "\u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442",
+        "\u0437\u0430\u043f\u0438\u0441",
+        "\u043e\u0434\u043e\u0431\u0440",
+        "\u043e\u0442\u0447\u0435\u0442",
+        "\u043f\u0440\u0438\u0435\u043c",
+        "\u043f\u0440\u043e\u0442\u043e\u043a\u043e\u043b",
+    ),
+    "sequence_link": (
+        "dependency",
+        "handover",
+        "milestone",
+        "phase",
+        "schedule",
+        "sequence",
+        "timing",
+        "\u0433\u0440\u0430\u0444\u0438\u043a",
+        "\u0435\u0442\u0430\u043f",
+        "\u0437\u0430\u0432\u044a\u0440\u0448",
+        "\u043f\u043e\u0441\u043b\u0435\u0434\u043e\u0432",
+        "\u043f\u0440\u0435\u0434\u0430\u0432",
+        "\u0441\u0440\u043e\u043a",
+    ),
+}
 STRUCTURE_ANCHOR_STOP_WORDS = {
     "category",
     "group",
@@ -97,6 +179,24 @@ def _operational_signal_matches(text: str) -> list[str]:
     return sorted(
         signal for signal in OPERATIONAL_SIGNAL_TERMS if signal in normalized
     )
+
+
+def _operational_contract_coverage(text: str) -> dict[str, Any]:
+    normalized = str(text or "").lower()
+    covered: dict[str, list[str]] = {}
+    missing: list[str] = []
+    for group, signals in OPERATIONAL_CONTRACT_GROUPS.items():
+        matches = sorted({signal for signal in signals if signal in normalized})
+        if matches:
+            covered[group] = matches
+        else:
+            missing.append(group)
+    return {
+        "covered_count": len(covered),
+        "required_count": 4,
+        "covered": covered,
+        "missing": missing,
+    }
 
 
 def _sentence_count(text: str) -> int:
@@ -337,6 +437,7 @@ def assess_generation_depth(
     min_words = target["min_words"]
     min_sentences = target["min_sentences"]
     structure_coverage = _blueprint_structure_coverage(text, drafting_blueprint)
+    operational_contract_coverage = _operational_contract_coverage(text)
     issues: list[dict[str, Any]] = []
 
     if (requirement_count > 0 or blueprint_structure_count > 1) and word_count < min_words:
@@ -447,6 +548,35 @@ def assess_generation_depth(
             }
         )
 
+    if (
+        (requirement_count > 1 or blueprint_structure_count > 1)
+        and word_count >= min_words
+        and sentence_count >= min_sentences
+        and operational_contract_coverage["covered_count"]
+        < operational_contract_coverage["required_count"]
+    ):
+        issues.append(
+            {
+                "code": "incomplete_operational_contract",
+                "message": (
+                    "Generated text is long enough but does not cover enough "
+                    "parts of the operational response contract: action, "
+                    "responsible role, control point, evidence record, and "
+                    "sequence link."
+                ),
+                "covered_contract_group_count": operational_contract_coverage[
+                    "covered_count"
+                ],
+                "required_contract_group_count": operational_contract_coverage[
+                    "required_count"
+                ],
+                "covered_contract_groups": list(
+                    operational_contract_coverage["covered"].keys()
+                ),
+                "missing_contract_groups": operational_contract_coverage["missing"],
+            }
+        )
+
     return {
         "status": "needs_review" if issues else "ok",
         "word_count": word_count,
@@ -461,6 +591,7 @@ def assess_generation_depth(
         "min_sentences": min_sentences,
         "suggested_words_per_structure": target["suggested_words_per_structure"],
         "structure_coverage": structure_coverage,
+        "operational_contract_coverage": operational_contract_coverage,
         "issues": issues,
     }
 
@@ -555,7 +686,10 @@ def format_generation_depth_target_for_prompt(target: dict[str, Any]) -> str:
             (
                 "- Meet the target through concrete actions, roles, controls, "
                 "documents, sequence, acceptance evidence, and tender-specific "
-                "details; do not pad the section with repetition."
+                "details. The section should visibly cover the operational "
+                "response contract: action, responsible role, control point, "
+                "evidence record, and sequence link; do not pad the section "
+                "with repetition."
             ),
         ]
     )

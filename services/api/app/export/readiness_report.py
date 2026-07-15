@@ -29,6 +29,7 @@ def _issue_label(code: str) -> str:
         "uneven_blueprint_distribution": "липсващо покритие на blueprint групи/теми",
         "repetitive_content": "повтарящ се/паднат текст",
         "weak_operational_detail": "слаба оперативна конкретика",
+        "incomplete_operational_contract": "непълен оперативен отговор",
     }
     return labels.get(code, code)
 

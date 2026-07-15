@@ -330,6 +330,49 @@ def test_generation_depth_rejects_long_anchor_rich_text_without_operational_deta
     assert issue["operational_signal_count"] < issue["min_operational_signal_count"]
 
 
+def test_generation_depth_rejects_long_text_with_incomplete_operational_contract():
+    coverage = {
+        "total": 4,
+        "covered": 4,
+        "missing": 0,
+        "missing_ids": [],
+    }
+    control_only_sentences = []
+    for cycle in range(35):
+        for topic in ["dust", "waste", "soil", "water"]:
+            control_only_sentences.append(
+                "For "
+                f"{topic}, the section describes control monitoring inspection "
+                f"review cycle {cycle + 1}, with control monitoring inspection "
+                "review repeated as the main assurance method. "
+            )
+
+    result = assess_generation_depth(
+        "".join(control_only_sentences),
+        coverage,
+        drafting_blueprint=_environment_topic_blueprint(),
+    )
+
+    assert result["word_count"] >= result["min_words"]
+    assert result["sentence_count"] >= result["min_sentences"]
+    assert result["structure_coverage"]["covered_count"] == 4
+    assert "incomplete_operational_contract" in {
+        issue["code"] for issue in result["issues"]
+    }
+    issue = next(
+        item
+        for item in result["issues"]
+        if item["code"] == "incomplete_operational_contract"
+    )
+    assert issue["covered_contract_groups"] == ["control_point"]
+    assert {
+        "action",
+        "responsible_role",
+        "evidence_record",
+        "sequence_link",
+    } <= set(issue["missing_contract_groups"])
+
+
 def test_generation_depth_requires_enough_terms_for_multi_word_blueprint_anchors():
     coverage = {
         "total": 4,
@@ -435,6 +478,11 @@ def test_generation_depth_target_prompt_matches_export_gate_thresholds():
     assert "6 drafting blueprint groups with 0 required topics" in prompt
     assert "Distribute the depth across the blueprint structure" in prompt
     assert "for each major group/topic" in prompt
+    assert "operational response contract" in prompt
+    assert (
+        "action, responsible role, control point, evidence record, and sequence link"
+        in prompt
+    )
     assert str(target["min_words"]) in prompt
 
 
