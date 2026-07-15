@@ -697,6 +697,47 @@ def test_common_blueprint_keeps_many_specific_requirements_visible():
     assert target["min_words"] >= 1400
 
 
+def test_common_blueprint_keeps_many_categories_visible_beyond_group_limit():
+    requirement_items = [
+        {
+            "id": f"req-category-{index}",
+            "text": (
+                f"Describe operational controls for category {index} with "
+                "responsible role, control record, and acceptance evidence."
+            ),
+            "importance": "mandatory",
+            "category": f"category-{index}",
+            "category_label": f"Category {index}",
+            "topic": f"category {index} controls",
+        }
+        for index in range(1, 13)
+    ]
+
+    blueprint = build_drafting_blueprint(
+        section_title="Complex methodology",
+        requirement_items=requirement_items,
+        max_groups=8,
+    )
+    prompt = format_drafting_blueprint_for_prompt(blueprint)
+    target = build_generation_depth_target(
+        requirement_coverage={"total": len(requirement_items)},
+        drafting_blueprint=blueprint,
+    )
+
+    assert len(blueprint["groups"]) == 8
+    assert [group["label"] for group in blueprint["additional_groups"]] == [
+        "Category 9",
+        "Category 10",
+        "Category 11",
+        "Category 12",
+    ]
+    assert "Additional blueprint groups to cover explicitly" in prompt
+    assert "Category 12 (req-category-12)" in prompt
+    assert target["blueprint_group_count"] == 12
+    assert target["blueprint_requirement_id_count"] == 12
+    assert target["min_words"] >= 2400
+
+
 def test_common_readiness_report_guides_mixed_blocker_remediation():
     chunks = [
         make_chunk(

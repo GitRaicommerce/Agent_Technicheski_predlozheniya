@@ -24,6 +24,19 @@ STRUCTURE_ANCHOR_STOP_WORDS = {
 }
 
 
+def _blueprint_groups(drafting_blueprint: dict[str, Any] | None) -> list[dict[str, Any]]:
+    if not isinstance(drafting_blueprint, dict):
+        return []
+
+    groups: list[dict[str, Any]] = []
+    for key in ("groups", "additional_groups"):
+        raw_groups = drafting_blueprint.get(key)
+        if not isinstance(raw_groups, list):
+            continue
+        groups.extend(group for group in raw_groups if isinstance(group, dict))
+    return groups
+
+
 def _word_count(text: str) -> int:
     return len(re.findall(r"[0-9A-Za-zА-Яа-я]+", text or ""))
 
@@ -77,37 +90,28 @@ def _coverage_total(requirement_coverage: dict[str, Any] | None) -> int:
 
 
 def _blueprint_group_count(drafting_blueprint: dict[str, Any] | None) -> int:
-    if not isinstance(drafting_blueprint, dict):
-        return 0
-
-    groups = drafting_blueprint.get("groups")
-    if not isinstance(groups, list):
-        return 0
-
     count = 0
-    for group in groups:
-        if not isinstance(group, dict):
-            continue
+    for group in _blueprint_groups(drafting_blueprint):
         requirements = group.get("requirements")
+        additional_requirements = group.get("additional_requirements")
+        requirement_ids = group.get("requirement_ids")
         has_requirements = isinstance(requirements, list) and len(requirements) > 0
+        has_additional = (
+            isinstance(additional_requirements, list)
+            and len(additional_requirements) > 0
+        )
+        has_requirement_ids = (
+            isinstance(requirement_ids, list) and len(requirement_ids) > 0
+        )
         has_label = bool(group.get("label") or group.get("category"))
-        if has_requirements or has_label:
+        if has_requirements or has_additional or has_requirement_ids or has_label:
             count += 1
     return count
 
 
 def _blueprint_topic_count(drafting_blueprint: dict[str, Any] | None) -> int:
-    if not isinstance(drafting_blueprint, dict):
-        return 0
-
-    groups = drafting_blueprint.get("groups")
-    if not isinstance(groups, list):
-        return 0
-
     count = 0
-    for group in groups:
-        if not isinstance(group, dict):
-            continue
+    for group in _blueprint_groups(drafting_blueprint):
         topic_details = group.get("topic_details")
         if isinstance(topic_details, list):
             count += sum(
@@ -126,17 +130,8 @@ def _blueprint_topic_count(drafting_blueprint: dict[str, Any] | None) -> int:
 def _blueprint_requirement_id_count(
     drafting_blueprint: dict[str, Any] | None,
 ) -> int:
-    if not isinstance(drafting_blueprint, dict):
-        return 0
-
-    groups = drafting_blueprint.get("groups")
-    if not isinstance(groups, list):
-        return 0
-
     requirement_ids: list[str] = []
-    for group in groups:
-        if not isinstance(group, dict):
-            continue
+    for group in _blueprint_groups(drafting_blueprint):
         group_ids = group.get("requirement_ids")
         if isinstance(group_ids, list):
             requirement_ids.extend(
@@ -157,12 +152,7 @@ def _blueprint_requirement_id_count(
 def _blueprint_structure_anchors(
     drafting_blueprint: dict[str, Any] | None,
 ) -> list[dict[str, Any]]:
-    if not isinstance(drafting_blueprint, dict):
-        return []
-
-    groups = drafting_blueprint.get("groups")
-    if not isinstance(groups, list):
-        return []
+    groups = _blueprint_groups(drafting_blueprint)
 
     anchors: list[dict[str, Any]] = []
     for group in groups:

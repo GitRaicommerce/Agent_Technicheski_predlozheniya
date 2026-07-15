@@ -169,3 +169,38 @@ def test_drafting_blueprint_keeps_overflow_requirements_visible_in_prompt():
     assert "additional requirements to cover explicitly" in prompt
     assert "req-quality-11 [quality topic 11]" in prompt
     assert "req-quality-13 [quality topic 13]" in prompt
+
+
+def test_drafting_blueprint_keeps_overflow_groups_visible_in_prompt():
+    requirement_items = [
+        {
+            "id": f"req-category-{index}",
+            "text": f"Describe category {index} operational controls.",
+            "importance": "mandatory",
+            "category": f"category-{index}",
+            "category_label": f"Category {index}",
+            "topic": f"topic {index}",
+        }
+        for index in range(1, 6)
+    ]
+
+    blueprint = build_drafting_blueprint(
+        section_title="Complex work programme",
+        requirement_items=requirement_items,
+        max_groups=3,
+    )
+    prompt = format_drafting_blueprint_for_prompt(blueprint)
+
+    assert [group["label"] for group in blueprint["groups"]] == [
+        "Category 1",
+        "Category 2",
+        "Category 3",
+    ]
+    assert [group["label"] for group in blueprint["additional_groups"]] == [
+        "Category 4",
+        "Category 5",
+    ]
+    assert "Additional blueprint groups to cover explicitly" in prompt
+    assert "Category 4 (req-category-4)" in prompt
+    assert "Category 5 (req-category-5)" in prompt
+    assert "Describe category 5 operational controls." in prompt

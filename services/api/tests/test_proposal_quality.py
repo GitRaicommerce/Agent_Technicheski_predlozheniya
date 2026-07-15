@@ -447,6 +447,62 @@ def test_generation_depth_target_counts_overflow_blueprint_requirement_ids():
     assert "13 blueprint requirement ids" in prompt
 
 
+def test_generation_depth_target_counts_overflow_blueprint_groups():
+    blueprint = {
+        "groups": [
+            {
+                "category": "organization",
+                "label": "Organization",
+                "requirement_ids": ["req-organization"],
+                "requirements": [{"id": "req-organization"}],
+                "topics": ["roles"],
+            },
+            {
+                "category": "schedule",
+                "label": "Schedule",
+                "requirement_ids": ["req-schedule"],
+                "requirements": [{"id": "req-schedule"}],
+                "topics": ["sequence"],
+            },
+        ],
+        "additional_groups": [
+            {
+                "category": "quality",
+                "label": "Quality",
+                "requirement_ids": ["req-quality"],
+                "requirements": [{"id": "req-quality"}],
+                "topics": ["inspection"],
+            },
+            {
+                "category": "risk",
+                "label": "Risk",
+                "requirement_ids": ["req-risk"],
+                "requirements": [{"id": "req-risk"}],
+                "topics": ["escalation"],
+            },
+        ],
+    }
+
+    target = build_generation_depth_target(
+        requirement_coverage={"total": 4},
+        drafting_blueprint=blueprint,
+    )
+    result = assess_generation_depth(
+        "Short generic work programme with roles and schedule only.",
+        {"total": 4},
+        drafting_blueprint=blueprint,
+    )
+
+    assert target["blueprint_group_count"] == 4
+    assert target["blueprint_requirement_id_count"] == 4
+    assert target["min_words"] >= 1000
+    assert result["blueprint_group_count"] == 4
+    assert result["status"] == "needs_review"
+    assert "too_short_for_requirements" in {
+        issue["code"] for issue in result["issues"]
+    }
+
+
 def test_generation_depth_target_prompt_omits_zero_sentence_target():
     target = build_generation_depth_target(
         requirement_coverage={"total": 1, "items": [{"id": "req-1"}]},

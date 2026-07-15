@@ -213,12 +213,33 @@ def build_drafting_blueprint(
                 topic_detail["requirement_ids"].append(requirement_id)
                 break
 
-    groups = list(groups_by_key.values())[:max_groups]
+    all_groups = list(groups_by_key.values())
+    groups = all_groups[:max_groups]
+    additional_groups = [
+        {
+            "category": group.get("category"),
+            "label": group.get("label"),
+            "requirement_ids": group.get("requirement_ids") or [],
+            "topics": group.get("topics") or [],
+            "requirements": [
+                {
+                    "id": item.get("id"),
+                    "text": _clean(item.get("text"), limit=180),
+                    "importance": item.get("importance"),
+                }
+                for item in (group.get("requirements") or [])
+                if isinstance(item, dict) and item.get("id")
+            ],
+            "additional_requirements": group.get("additional_requirements") or [],
+        }
+        for group in all_groups[max_groups:]
+    ]
     return {
         "section_title": _clean(section_title),
         "global_instructions": BLUEPRINT_GLOBAL_INSTRUCTIONS,
         "context_cues": _context_cues(project_grounding_context),
         "groups": groups,
+        "additional_groups": additional_groups,
     }
 
 
@@ -293,5 +314,47 @@ def format_drafting_blueprint_for_prompt(blueprint: dict[str, Any]) -> str:
                 suffix = f" [{topic}]" if topic else ""
                 text = _clean(item.get("text"), limit=180)
                 lines.append(f"     - {item.get('id')}{suffix}: {text}")
+
+    additional_groups = [
+        group
+        for group in blueprint.get("additional_groups") or []
+        if isinstance(group, dict) and group.get("requirement_ids")
+    ]
+    if additional_groups:
+        lines.append("Additional blueprint groups to cover explicitly:")
+        for group in additional_groups:
+            label = _clean(group.get("label")) or _clean(group.get("category"))
+            requirement_ids = ", ".join(
+                str(item)
+                for item in group.get("requirement_ids") or []
+                if item
+            )
+            suffix = f" ({requirement_ids})" if requirement_ids else ""
+            lines.append(f"- {label}{suffix}")
+            topics = [
+                _clean(topic)
+                for topic in group.get("topics") or []
+                if _clean(topic)
+            ]
+            if topics:
+                lines.append(f"  topics: {', '.join(topics[:8])}")
+            for item in group.get("requirements") or []:
+                if not isinstance(item, dict) or not item.get("id"):
+                    continue
+                lines.append(
+                    "  - requirement "
+                    f"{item.get('id')} ({item.get('importance')}): "
+                    f"{_clean(item.get('text'), limit=180)}"
+                )
+            extra = [
+                item
+                for item in group.get("additional_requirements") or []
+                if isinstance(item, dict) and item.get("id")
+            ]
+            if extra:
+                lines.append(
+                    "  - plus compact requirements: "
+                    + ", ".join(str(item.get("id")) for item in extra[:10])
+                )
 
     return "\n".join(lines)
