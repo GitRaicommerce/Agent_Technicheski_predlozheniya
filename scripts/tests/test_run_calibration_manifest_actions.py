@@ -29,6 +29,7 @@ load_manifest = manifest_actions_module.load_manifest
 main = manifest_actions_module.main
 manifest_actions = manifest_actions_module.manifest_actions
 missing_reason_summary = manifest_actions_module.missing_reason_summary
+operational_signal_summary = manifest_actions_module.operational_signal_summary
 render_execution_report_json = manifest_actions_module.render_execution_report_json
 render_execution_report_markdown = manifest_actions_module.render_execution_report_markdown
 request_target_summary = manifest_actions_module.request_target_summary
@@ -77,11 +78,18 @@ class CalibrationManifestActionTests(unittest.TestCase):
 
     def test_manifest_actions_preserve_missing_reason_counts(self):
         manifest = {
+            "gap_quality_scorecard": {
+                "operational_detail_missing_signals": [
+                    "record",
+                    "monitoring",
+                    "corrective",
+                ]
+            },
             "readiness_actions": [
                 {
-                    "action_key": "regenerate_missing_requirements",
+                    "action_key": "regenerate_quality_depth",
                     "api_method": "POST",
-                    "api_path": "/api/v1/agents/project-1/remediation-actions/regenerate_missing_requirements",
+                    "api_path": "/api/v1/agents/project-1/remediation-actions/regenerate_quality_depth",
                     "section_count": 2,
                     "section_labels": [
                         "Environment (120/420 words, 3 groups)",
@@ -127,6 +135,14 @@ class CalibrationManifestActionTests(unittest.TestCase):
                 "needs execution action=1; "
                 "needs operational evidence=1"
             ),
+        )
+        self.assertEqual(
+            actions[0].operational_detail_missing_signals,
+            ["record", "monitoring", "corrective"],
+        )
+        self.assertEqual(
+            operational_signal_summary(actions[0]),
+            "record, monitoring, corrective",
         )
 
     def test_manifest_actions_synthesize_dispatcher_path_for_legacy_readiness_rows(self):
@@ -538,6 +554,10 @@ class CalibrationManifestActionTests(unittest.TestCase):
                 "needs execution action": 1,
                 "needs operational evidence": 1,
             },
+            operational_detail_missing_signals=[
+                "record",
+                "monitoring",
+            ],
             request_json={
                 "section_uids": ["sec-a"],
                 "section_title_hints": ["Section A"],
@@ -604,6 +624,14 @@ class CalibrationManifestActionTests(unittest.TestCase):
                 "needs operational evidence=1"
             ),
         )
+        self.assertEqual(
+            payload["actions"][0]["operational_detail_missing_signals"],
+            ["record", "monitoring"],
+        )
+        self.assertEqual(
+            payload["actions"][0]["operational_detail_missing_signal_summary"],
+            "record, monitoring",
+        )
         self.assertIn("Ready for calibration bundle: `no`", markdown)
         self.assertIn("Evidence level: `planned`", markdown)
         self.assertIn("Has unexecuted actions: `yes`", markdown)
@@ -613,7 +641,7 @@ class CalibrationManifestActionTests(unittest.TestCase):
             "Section A (120/420 words, 3 groups, 7 topics); "
             "Section B (95/360 words, 2 groups, 4 topics) | "
             "missing distinctive requirement detail=2; needs execution action=1; "
-            "needs operational evidence=1 |",
+            "needs operational evidence=1 | record, monitoring |",
             markdown,
         )
         self.assertIn("Section A \\| Section B", markdown)

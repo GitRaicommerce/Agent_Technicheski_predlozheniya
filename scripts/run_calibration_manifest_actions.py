@@ -29,6 +29,7 @@ class ManifestAction:
     summary: str = ""
     section_labels: list[str] | None = None
     missing_reason_counts: dict[str, int] | None = None
+    operational_detail_missing_signals: list[str] | None = None
 
 
 def load_manifest(path: Path) -> dict[str, Any]:
@@ -47,6 +48,16 @@ def _action_dedupe_key(
     return (action_key, api_path, request_part)
 
 
+def _string_list(value: Any) -> list[str]:
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+    if isinstance(value, str) and value.strip():
+        if value.strip().lower() == "n/a":
+            return []
+        return [item.strip() for item in value.split(",") if item.strip()]
+    return []
+
+
 def manifest_actions(manifest: dict[str, Any]) -> list[ManifestAction]:
     raw_readiness_actions = manifest.get("readiness_actions") or []
     if not isinstance(raw_readiness_actions, list):
@@ -54,6 +65,12 @@ def manifest_actions(manifest: dict[str, Any]) -> list[ManifestAction]:
     raw_gap_rows = manifest.get("gap_priority_rows") or []
     if not isinstance(raw_gap_rows, list):
         raise ValueError("Manifest gap_priority_rows must be a list")
+    scorecard = manifest.get("gap_quality_scorecard") or {}
+    if not isinstance(scorecard, dict):
+        scorecard = {}
+    global_operational_missing_signals = _string_list(
+        scorecard.get("operational_detail_missing_signals")
+    )
 
     actions: list[ManifestAction] = []
     seen: set[tuple[str, str, str]] = set()
@@ -117,6 +134,11 @@ def manifest_actions(manifest: dict[str, Any]) -> list[ManifestAction]:
                     if str(reason).strip()
                 }
                 or None,
+                operational_detail_missing_signals=(
+                    global_operational_missing_signals
+                    if action_key == "regenerate_quality_depth"
+                    else None
+                ),
             )
         )
 
@@ -154,6 +176,11 @@ def manifest_actions(manifest: dict[str, Any]) -> list[ManifestAction]:
                 blocker_code=focus,
                 section_count=1,
                 summary=", ".join(summary_parts),
+                operational_detail_missing_signals=(
+                    global_operational_missing_signals
+                    if action_key == "regenerate_quality_depth"
+                    else None
+                ),
             )
         )
     return actions
@@ -358,6 +385,16 @@ def missing_reason_summary(action: ManifestAction) -> str:
     return "; ".join(parts[:4])
 
 
+def operational_signal_summary(action: ManifestAction) -> str:
+    signals = action.operational_detail_missing_signals or []
+    if not signals:
+        return ""
+    parts = signals[:8]
+    if len(signals) > 8:
+        parts.append(f"+{len(signals) - 8} more")
+    return ", ".join(parts)
+
+
 def section_label_summary(action: ManifestAction) -> str:
     if action.section_labels:
         parts = action.section_labels[:4]
@@ -395,6 +432,12 @@ def action_execution_record(
         "section_label_summary": section_label_summary(action),
         "missing_reason_counts": action.missing_reason_counts or {},
         "missing_reason_summary": missing_reason_summary(action),
+        "operational_detail_missing_signals": (
+            action.operational_detail_missing_signals or []
+        ),
+        "operational_detail_missing_signal_summary": operational_signal_summary(
+            action
+        ),
         "request_json": action.request_json or {},
         "target_summary": action_target_summary(action),
         "executed": executed,
@@ -482,8 +525,8 @@ def render_execution_report_markdown(records: list[dict[str, Any]]) -> str:
         f"- Has unexecuted actions: `{'yes' if summary['has_unexecuted_actions'] else 'no'}`",
         f"- Recommendation: {summary['recommendation']}",
         "",
-        "| Action key | Source | Executed | Final status | Sections | Targets | Section labels | Missing reasons | Summary |",
-        "| --- | --- | --- | --- | ---: | --- | --- | --- | --- |",
+        "| Action key | Source | Executed | Final status | Sections | Targets | Section labels | Missing reasons | Operational signals | Summary |",
+        "| --- | --- | --- | --- | ---: | --- | --- | --- | --- | --- |",
     ]
     for record in records:
         lines.append(
@@ -504,6 +547,9 @@ def render_execution_report_markdown(records: list[dict[str, Any]]) -> str:
                         "|",
                         "\\|",
                     ),
+                    str(
+                        record.get("operational_detail_missing_signal_summary") or ""
+                    ).replace("|", "\\|"),
                     str(record.get("summary") or "").replace("|", "\\|"),
                 ]
             )

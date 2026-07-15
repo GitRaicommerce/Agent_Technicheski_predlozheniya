@@ -213,6 +213,7 @@
 - Propagated the operational-detail gap ratio/status into calibration manifest scorecards and before/after comparison deltas, so reruns can prove whether operational substance improved.
 - Made before/after calibration recommendations treat weak or partial operational-detail coverage as a remaining quality blocker even when export readiness is clear and generated/reference volume improves.
 - Preserved the exact missing operational-detail signals in calibration manifests and before/after comparison reports, so remediation can target concrete gaps such as records, monitoring, corrective actions, or responsible roles.
+- Preserved missing operational-detail signals through calibration action execution reports and attached bundle summaries, so proof/dry-run evidence shows which concrete operational gaps a detailed regeneration action was meant to repair.
 
 ## Active Goals
 

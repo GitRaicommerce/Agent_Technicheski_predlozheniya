@@ -74,6 +74,7 @@ def load_action_execution_reports(paths: list[Path]) -> list[dict[str, Any]]:
 def action_execution_summary(reports: list[dict[str, Any]]) -> dict[str, Any]:
     status_counts: dict[str, int] = {}
     missing_reason_counts: dict[str, int] = {}
+    operational_signal_counts: dict[str, int] = {}
     section_label_counts: dict[str, int] = {}
     total_actions = 0
     executed_actions = 0
@@ -118,19 +119,24 @@ def action_execution_summary(reports: list[dict[str, Any]]) -> dict[str, Any]:
                         section_label_counts.get(label_text, 0) + 1
                     )
             raw_reason_counts = action.get("missing_reason_counts") or {}
-            if not isinstance(raw_reason_counts, dict):
-                continue
-            for reason, count in raw_reason_counts.items():
-                reason_label = str(reason).strip()
-                if not reason_label:
-                    continue
-                try:
-                    reason_count = int(count)
-                except (TypeError, ValueError):
-                    reason_count = 0
-                missing_reason_counts[reason_label] = (
-                    missing_reason_counts.get(reason_label, 0) + reason_count
-                )
+            if isinstance(raw_reason_counts, dict):
+                for reason, count in raw_reason_counts.items():
+                    reason_label = str(reason).strip()
+                    if not reason_label:
+                        continue
+                    try:
+                        reason_count = int(count)
+                    except (TypeError, ValueError):
+                        reason_count = 0
+                    missing_reason_counts[reason_label] = (
+                        missing_reason_counts.get(reason_label, 0) + reason_count
+                    )
+            for signal in action.get("operational_detail_missing_signals") or []:
+                signal_label = str(signal).strip()
+                if signal_label:
+                    operational_signal_counts[signal_label] = (
+                        operational_signal_counts.get(signal_label, 0) + 1
+                    )
         if not raw_counts:
             continue
         for status, count in raw_counts.items():
@@ -165,6 +171,12 @@ def action_execution_summary(reports: list[dict[str, Any]]) -> dict[str, Any]:
         "status_counts": status_counts,
         "missing_reason_counts": dict(
             sorted(missing_reason_counts.items(), key=lambda item: (-item[1], item[0]))
+        ),
+        "operational_detail_missing_signal_counts": dict(
+            sorted(
+                operational_signal_counts.items(),
+                key=lambda item: (-item[1], item[0]),
+            )
         ),
         "section_label_counts": dict(
             sorted(section_label_counts.items(), key=lambda item: (-item[1], item[0]))
@@ -969,6 +981,13 @@ def render_manifest(
             lines.append("- Missing requirement reasons addressed:")
             for reason, count in missing_reason_counts.items():
                 lines.append(f"  - `{reason}`: `{count}`")
+        operational_signal_counts = action_summary.get(
+            "operational_detail_missing_signal_counts"
+        ) or {}
+        if operational_signal_counts:
+            lines.append("- Operational detail signals targeted:")
+            for signal, count in operational_signal_counts.items():
+                lines.append(f"  - `{signal}`: `{count}`")
         section_label_counts = action_summary.get("section_label_counts") or {}
         if section_label_counts:
             lines.append("- Remediation section labels targeted:")

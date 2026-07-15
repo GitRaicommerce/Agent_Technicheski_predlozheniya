@@ -154,6 +154,10 @@ class RunProposalCalibrationTests(unittest.TestCase):
                                 "needs execution action": 1,
                                 "needs coherent passage": 1,
                             },
+                            "operational_detail_missing_signals": [
+                                "record",
+                                "monitoring",
+                            ],
                             "section_labels": [
                                 "Quality (120/420 words, 3 groups, 7 topics)",
                             ],
@@ -190,6 +194,9 @@ class RunProposalCalibrationTests(unittest.TestCase):
         self.assertIn("`missing distinctive requirement detail`: `2`", manifest)
         self.assertIn("`needs execution action`: `1`", manifest)
         self.assertIn("`needs coherent passage`: `1`", manifest)
+        self.assertIn("Operational detail signals targeted", manifest)
+        self.assertIn("`record`: `1`", manifest)
+        self.assertIn("`monitoring`: `1`", manifest)
         self.assertIn("Remediation section labels targeted", manifest)
         self.assertIn(
             "`Quality (120/420 words, 3 groups, 7 topics)`: `1`",
@@ -294,6 +301,10 @@ class RunProposalCalibrationTests(unittest.TestCase):
                                 "missing distinctive requirement detail": 2,
                                 "needs operational evidence": 1,
                             },
+                            "operational_detail_missing_signals": [
+                                "record",
+                                "monitoring",
+                            ],
                             "section_labels": [
                                 "Quality (120/420 words, 3 groups)",
                                 "Environment (95/360 words, 2 groups)",
@@ -312,6 +323,10 @@ class RunProposalCalibrationTests(unittest.TestCase):
                                 "needs operational evidence": 1,
                                 "needs coherent passage": 1,
                             },
+                            "operational_detail_missing_signals": [
+                                "record",
+                                "corrective",
+                            ],
                             "section_labels": [
                                 "Quality (120/420 words, 3 groups)",
                             ],
@@ -337,6 +352,14 @@ class RunProposalCalibrationTests(unittest.TestCase):
                 "needs operational evidence": 2,
                 "missing distinctive requirement detail": 2,
                 "needs coherent passage": 1,
+            },
+        )
+        self.assertEqual(
+            summary["operational_detail_missing_signal_counts"],
+            {
+                "record": 2,
+                "corrective": 1,
+                "monitoring": 1,
             },
         )
         self.assertEqual(
