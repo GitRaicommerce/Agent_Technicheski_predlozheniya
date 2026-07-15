@@ -225,6 +225,7 @@
 - Corrected proposal-depth word counting to use the full Unicode Cyrillic range, with regression coverage for real Bulgarian text so quality gates do not undercount tender-specific Bulgarian narrative.
 - Corrected requirement-coverage tokenization to use the full Unicode Cyrillic range, with regression coverage for Bulgarian checklist text so coverage diagnostics do not lose tender-specific Cyrillic terms.
 - Corrected proposal gap analysis tokenization and heading heuristics to use the full Unicode Cyrillic range, so real Bulgarian reference/generated comparisons do not lose tender-specific terms or section cues.
+- Reduced proposal gap analysis keyword noise by filtering generic Bulgarian procurement terms such as requirement, technical proposal, describe, participant, and execution, keeping calibration focus on substantive technical terms.
 
 ## Active Goals
 

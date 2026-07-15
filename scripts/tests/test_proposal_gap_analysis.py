@@ -54,6 +54,25 @@ class ProposalGapAnalysisTests(unittest.TestCase):
         self.assertIn("\u0437\u0430\u043f\u0438\u0441\u0438", tokens)
         self.assertEqual(score_overlap(tokens, tokenize(text)), 1.0)
 
+    def test_tokenize_filters_generic_procurement_terms(self):
+        tokens = tokenize(
+            "\u0421\u043b\u0435\u0434\u0432\u0430 \u0434\u0430 \u0441\u0435 "
+            "\u043e\u043f\u0438\u0448\u0435 \u0442\u043e\u0432\u0430 "
+            "\u0438\u0437\u0438\u0441\u043a\u0432\u0430\u043d\u0435 \u0432 "
+            "\u0442\u0435\u0445\u043d\u0438\u0447\u0435\u0441\u043a\u043e\u0442\u043e "
+            "\u043f\u0440\u0435\u0434\u043b\u043e\u0436\u0435\u043d\u0438\u0435 "
+            "\u0441 \u043a\u043e\u043d\u0442\u0440\u043e\u043b \u0438 "
+            "\u043f\u0440\u043e\u0442\u043e\u043a\u043e\u043b."
+        )
+
+        self.assertEqual(
+            tokens,
+            [
+                "\u043a\u043e\u043d\u0442\u0440\u043e\u043b",
+                "\u043f\u0440\u043e\u0442\u043e\u043a\u043e\u043b",
+            ],
+        )
+
     def test_content_section_filter_excludes_formal_front_matter(self):
         sections = [
             Section("Cover", "Submitted by Example Ltd. Address and contact."),
