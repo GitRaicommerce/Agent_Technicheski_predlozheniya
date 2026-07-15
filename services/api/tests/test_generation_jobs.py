@@ -544,7 +544,29 @@ async def test_create_drafting_quality_job_targets_quality_sections(mock_db):
             new=AsyncMock(
                 return_value={
                     "quality_sections": [
-                        {"section_uid": "sec-quality"},
+                        {
+                            "section_uid": "sec-quality",
+                            "word_count": 900,
+                            "min_words": 1400,
+                            "suggested_words_per_structure": 350,
+                            "issues": [
+                                {
+                                    "code": "weak_operational_detail",
+                                    "operational_signal_count": 2,
+                                    "min_operational_signal_count": 5,
+                                    "expected_operational_signal_examples": [
+                                        "responsible role",
+                                        "control record",
+                                    ],
+                                }
+                            ],
+                            "structure_coverage": {
+                                "missing": [
+                                    {"label": "quality acceptance"},
+                                    {"label": "quality records"},
+                                ]
+                            },
+                        },
                         {"section_uid": "sec-quality"},
                     ]
                 }
@@ -557,6 +579,37 @@ async def test_create_drafting_quality_job_targets_quality_sections(mock_db):
     assert job.result_json == {
         "target_section_uids": ["sec-quality"],
         "target_reason": "quality_review",
+        "target_guidance": {
+            "sec-quality": {
+                "instructions": [
+                    (
+                        "Regenerate this section to resolve quality/depth issues: "
+                        "weak_operational_detail."
+                    ),
+                    (
+                        "Expand the section from 900 to at least 1400 words when "
+                        "the tender sources support it."
+                    ),
+                    (
+                        "Distribute the substance across every major blueprint "
+                        "group/topic with roughly 350+ words per structure when "
+                        "supported by sources."
+                    ),
+                    (
+                        "Explicitly develop missing blueprint groups/topics: "
+                        "quality acceptance, quality records."
+                    ),
+                    (
+                        "Add concrete operational detail: responsible roles, "
+                        "controls, records, monitoring evidence, acceptance "
+                        "criteria, reporting sequence, escalation, and corrective "
+                        "actions."
+                    ),
+                    "Operational signal diagnostics: 2/5 matched.",
+                    "Use examples such as: responsible role, control record.",
+                ]
+            }
+        },
     }
     load_selected.assert_awaited_once_with(project.id, mock_db)
     build_readiness.assert_awaited_once_with(

@@ -206,6 +206,7 @@
 - Added an end-to-end calibration regression proving action-execution section labels flow through the follow-up bundle manifest and into before/after comparison deltas.
 - Added a universal weak-operational-detail depth gate, blocking long blueprint-aware sections that mention the right topics but lack concrete roles, controls, records, monitoring, acceptance evidence, sequence, or corrective actions, with backend report and web remediation labels.
 - Fed weak-operational-detail diagnostics into drafting quality-repair prompts, including matched/required operational signal counts and concrete examples to add during regeneration.
+- Passed quality/depth blocker diagnostics into targeted quality regeneration jobs, so reruns know the exact issue codes, word targets, missing blueprint topics, and weak-operational-detail examples before drafting starts.
 
 ## Active Goals
 

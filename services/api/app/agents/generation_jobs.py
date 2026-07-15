@@ -213,11 +213,14 @@ async def create_drafting_quality_job(project: Project, db) -> GenerationJob:
     if not section_uids:
         raise ValueError("No shallow selected sections to regenerate.")
 
+    target_guidance = _quality_target_guidance(quality_sections)
+
     return await create_drafting_job(
         project=project,
         db=db,
         target_section_uids=section_uids,
         target_reason="quality_review",
+        target_guidance=target_guidance or None,
         job_type="drafting_quality",
     )
 
@@ -337,6 +340,84 @@ def _missing_requirement_target_guidance(
                     ),
                 }
             )
+    return guidance_by_section
+
+
+def _quality_target_guidance(
+    quality_sections: list[dict[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    guidance_by_section: dict[str, dict[str, Any]] = {}
+    for section in quality_sections:
+        section_uid = str(section.get("section_uid") or "")
+        if not section_uid:
+            continue
+        instructions: list[str] = []
+        issue_codes = [
+            str(issue.get("code"))
+            for issue in section.get("issues") or []
+            if isinstance(issue, dict) and issue.get("code")
+        ]
+        if issue_codes:
+            instructions.append(
+                "Regenerate this section to resolve quality/depth issues: "
+                + ", ".join(issue_codes)
+                + "."
+            )
+        if section.get("word_count") is not None and section.get("min_words"):
+            instructions.append(
+                "Expand the section from "
+                f"{section.get('word_count')} to at least "
+                f"{section.get('min_words')} words when the tender sources support it."
+            )
+        if section.get("suggested_words_per_structure"):
+            instructions.append(
+                "Distribute the substance across every major blueprint group/topic "
+                f"with roughly {section.get('suggested_words_per_structure')}+ "
+                "words per structure when supported by sources."
+            )
+        structure_coverage = section.get("structure_coverage")
+        if isinstance(structure_coverage, dict):
+            missing_labels = [
+                str(item.get("label"))
+                for item in structure_coverage.get("missing") or []
+                if isinstance(item, dict) and item.get("label")
+            ]
+            if missing_labels:
+                instructions.append(
+                    "Explicitly develop missing blueprint groups/topics: "
+                    + ", ".join(missing_labels[:12])
+                    + "."
+                )
+
+        for issue in section.get("issues") or []:
+            if not isinstance(issue, dict):
+                continue
+            if issue.get("code") != "weak_operational_detail":
+                continue
+            instructions.append(
+                "Add concrete operational detail: responsible roles, controls, "
+                "records, monitoring evidence, acceptance criteria, reporting "
+                "sequence, escalation, and corrective actions."
+            )
+            instructions.append(
+                "Operational signal diagnostics: "
+                f"{issue.get('operational_signal_count', 0)}/"
+                f"{issue.get('min_operational_signal_count', 0)} matched."
+            )
+            examples = [
+                str(example)
+                for example in issue.get("expected_operational_signal_examples") or []
+                if example
+            ]
+            if examples:
+                instructions.append(
+                    "Use examples such as: " + ", ".join(examples[:8]) + "."
+                )
+
+        if instructions:
+            guidance_by_section[section_uid] = {
+                "instructions": list(dict.fromkeys(instructions)),
+            }
     return guidance_by_section
 
 
