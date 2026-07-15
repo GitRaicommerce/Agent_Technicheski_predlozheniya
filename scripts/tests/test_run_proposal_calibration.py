@@ -323,6 +323,13 @@ class RunProposalCalibrationTests(unittest.TestCase):
             "`Quality (120/420 words, 3 groups, 7 topics)`: `1`",
             manifest,
         )
+        self.assertIn("Executable remediation commands", manifest)
+        self.assertIn(
+            "py -3 scripts/run_calibration_manifest_actions.py --manifest "
+            "out/calibration_manifest.json --all",
+            manifest,
+        )
+        self.assertIn("--execute --wait", manifest)
         self.assertIn("resolve export blockers", manifest)
         self.assertIn("Universal Topic Coverage", manifest)
         self.assertIn("Gap calibration focus summary", manifest)

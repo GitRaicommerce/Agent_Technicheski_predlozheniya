@@ -1048,6 +1048,42 @@ def render_manifest(
         lines.append(
             "- `none`: No remediation action execution report was attached to this bundle."
         )
+    executable_action_count = len(structured_readiness_actions) + sum(
+        1 for row in gap_priority_rows if row.get("action_key")
+    )
+    if executable_action_count:
+        manifest_json_path = gap_report.parent / "calibration_manifest.json"
+        action_json_path = gap_report.parent / "calibration_action_execution.json"
+        action_md_path = gap_report.parent / "calibration_action_execution.md"
+        dry_run_command = (
+            "py -3 scripts/run_calibration_manifest_actions.py "
+            f"--manifest {_display_path(manifest_json_path)} --all "
+            f"--out-json {_display_path(action_json_path)} "
+            f"--out-md {_display_path(action_md_path)}"
+        )
+        execute_command = dry_run_command + " --execute --wait"
+        lines.extend(
+            [
+                "",
+                "## Executable remediation commands",
+                "",
+                (
+                    f"- Executable actions found: `{executable_action_count}`. "
+                    "Run dry-run first, then execute against a live API stack."
+                ),
+                "- Dry-run all manifest actions:",
+                "",
+                "```powershell",
+                dry_run_command,
+                "```",
+                "",
+                "- Execute all manifest actions and wait for generation jobs:",
+                "",
+                "```powershell",
+                execute_command,
+                "```",
+            ]
+        )
     lines.extend(["", "## Gap calibration focus summary", ""])
     if gap_focus_counts:
         for focus, count in sorted(
