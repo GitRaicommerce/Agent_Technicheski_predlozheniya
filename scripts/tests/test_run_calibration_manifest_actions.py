@@ -686,6 +686,50 @@ class CalibrationManifestActionTests(unittest.TestCase):
         )
         self.assertIn("Section A \\| Section B", markdown)
 
+    def test_action_execution_reports_include_run_context(self):
+        action = ManifestAction(
+            action_key="resolve_duplicate_selected",
+            api_method="POST",
+            api_path="/api/v1/example",
+        )
+        record = action_execution_record(
+            action,
+            url="http://localhost/api/v1/example",
+            executed=False,
+        )
+        context = {
+            "manifest_path": "local_analysis/run/calibration_manifest.json",
+            "project_id": "project-1",
+            "api_base": "http://localhost:8000",
+            "execution_mode": "dry-run",
+            "wait": False,
+            "selected_action_keys": ["resolve_duplicate_selected"],
+        }
+
+        payload = json.loads(
+            render_execution_report_json([record], context=context)
+        )
+        markdown = render_execution_report_markdown([record], context=context)
+
+        self.assertEqual(
+            payload["manifest_path"],
+            "local_analysis/run/calibration_manifest.json",
+        )
+        self.assertEqual(payload["project_id"], "project-1")
+        self.assertEqual(payload["api_base"], "http://localhost:8000")
+        self.assertEqual(payload["execution_mode"], "dry-run")
+        self.assertEqual(
+            payload["selected_action_keys"],
+            ["resolve_duplicate_selected"],
+        )
+        self.assertIn(
+            "Manifest: `local_analysis/run/calibration_manifest.json`",
+            markdown,
+        )
+        self.assertIn("Project id: `project-1`", markdown)
+        self.assertIn("API base: `http://localhost:8000`", markdown)
+        self.assertIn("Execution mode: `dry-run`", markdown)
+
     def test_action_execution_summary_marks_successful_waited_actions_ready(self):
         action = ManifestAction(
             action_key="regenerate_stale",

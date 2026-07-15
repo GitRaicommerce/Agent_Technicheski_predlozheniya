@@ -535,32 +535,58 @@ def action_execution_summary(records: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def render_execution_report_json(records: list[dict[str, Any]]) -> str:
+def render_execution_report_json(
+    records: list[dict[str, Any]],
+    *,
+    context: dict[str, Any] | None = None,
+) -> str:
     summary = action_execution_summary(records)
     payload = {
         "schema_version": "calibration_action_execution.v1",
+        **(context or {}),
         **summary,
         "actions": records,
     }
     return json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
 
 
-def render_execution_report_markdown(records: list[dict[str, Any]]) -> str:
+def render_execution_report_markdown(
+    records: list[dict[str, Any]],
+    *,
+    context: dict[str, Any] | None = None,
+) -> str:
     summary = action_execution_summary(records)
     lines = [
         "# Calibration action execution report",
         "",
-        f"- Total actions: `{summary['total_actions']}`",
-        f"- Executed actions: `{summary['executed_actions']}`",
-        f"- Evidence level: `{summary['evidence_level']}`",
-        f"- Ready for calibration bundle: `{'yes' if summary['ready_for_bundle'] else 'no'}`",
-        f"- Has failures: `{'yes' if summary['has_failures'] else 'no'}`",
-        f"- Has unexecuted actions: `{'yes' if summary['has_unexecuted_actions'] else 'no'}`",
-        f"- Recommendation: {summary['recommendation']}",
-        "",
-        "| Action key | Source | Executed | Final status | Sections | Targets | Guidance | Section labels | Missing reasons | Operational signals | Summary |",
-        "| --- | --- | --- | --- | ---: | --- | --- | --- | --- | --- | --- |",
     ]
+    if context:
+        manifest_path = str(context.get("manifest_path") or "").strip()
+        project_id = str(context.get("project_id") or "").strip()
+        api_base = str(context.get("api_base") or "").strip()
+        execution_mode = str(context.get("execution_mode") or "").strip()
+        if manifest_path:
+            lines.append(f"- Manifest: `{manifest_path}`")
+        if project_id:
+            lines.append(f"- Project id: `{project_id}`")
+        if api_base:
+            lines.append(f"- API base: `{api_base}`")
+        if execution_mode:
+            lines.append(f"- Execution mode: `{execution_mode}`")
+    lines.extend(
+        [
+            f"- Total actions: `{summary['total_actions']}`",
+            f"- Executed actions: `{summary['executed_actions']}`",
+            f"- Evidence level: `{summary['evidence_level']}`",
+            f"- Ready for calibration bundle: `{'yes' if summary['ready_for_bundle'] else 'no'}`",
+            f"- Has failures: `{'yes' if summary['has_failures'] else 'no'}`",
+            f"- Has unexecuted actions: `{'yes' if summary['has_unexecuted_actions'] else 'no'}`",
+            f"- Recommendation: {summary['recommendation']}",
+            "",
+            "| Action key | Source | Executed | Final status | Sections | Targets | Guidance | Section labels | Missing reasons | Operational signals | Summary |",
+            "| --- | --- | --- | --- | ---: | --- | --- | --- | --- | --- | --- |",
+        ]
+    )
     for record in records:
         lines.append(
             "| "
@@ -640,6 +666,14 @@ def main(argv: list[str]) -> int:
             raise ValueError("Use --all or --action-key when running with --execute")
 
         project_id = str(manifest.get("project_id") or "") or None
+        report_context = {
+            "manifest_path": str(args.manifest),
+            "project_id": project_id or "",
+            "api_base": args.api_base,
+            "execution_mode": "execute" if args.execute else "dry-run",
+            "wait": bool(args.wait),
+            "selected_action_keys": [action.action_key for action in selected],
+        }
         exit_code = 0
         execution_records: list[dict[str, Any]] = []
         for action in selected:
@@ -677,13 +711,19 @@ def main(argv: list[str]) -> int:
         if args.out_json:
             args.out_json.parent.mkdir(parents=True, exist_ok=True)
             args.out_json.write_text(
-                render_execution_report_json(execution_records),
+                render_execution_report_json(
+                    execution_records,
+                    context=report_context,
+                ),
                 encoding="utf-8",
             )
         if args.out_md:
             args.out_md.parent.mkdir(parents=True, exist_ok=True)
             args.out_md.write_text(
-                render_execution_report_markdown(execution_records),
+                render_execution_report_markdown(
+                    execution_records,
+                    context=report_context,
+                ),
                 encoding="utf-8",
             )
         return exit_code
