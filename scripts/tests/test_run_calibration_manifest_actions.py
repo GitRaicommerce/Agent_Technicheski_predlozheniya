@@ -35,6 +35,7 @@ render_execution_report_json = manifest_actions_module.render_execution_report_j
 render_execution_report_markdown = manifest_actions_module.render_execution_report_markdown
 request_target_summary = manifest_actions_module.request_target_summary
 section_label_summary = manifest_actions_module.section_label_summary
+selected_action_plan = manifest_actions_module.selected_action_plan
 select_actions = manifest_actions_module.select_actions
 wait_for_job_result = manifest_actions_module.wait_for_job_result
 
@@ -728,6 +729,10 @@ class CalibrationManifestActionTests(unittest.TestCase):
             action_key="resolve_duplicate_selected",
             api_method="POST",
             api_path="/api/v1/example",
+            source="readiness_actions",
+            blocker_code="duplicate_selected",
+            section_count=14,
+            summary="Duplicate sections",
         )
         record = action_execution_record(
             action,
@@ -741,6 +746,7 @@ class CalibrationManifestActionTests(unittest.TestCase):
             "execution_mode": "dry-run",
             "wait": False,
             "selected_action_keys": ["resolve_duplicate_selected"],
+            "selected_action_plan": selected_action_plan([action]),
         }
 
         payload = json.loads(
@@ -759,6 +765,19 @@ class CalibrationManifestActionTests(unittest.TestCase):
             payload["selected_action_keys"],
             ["resolve_duplicate_selected"],
         )
+        self.assertEqual(
+            payload["selected_action_plan"],
+            [
+                {
+                    "order": 1,
+                    "action_key": "resolve_duplicate_selected",
+                    "source": "readiness_actions",
+                    "blocker_code": "duplicate_selected",
+                    "section_count": 14,
+                    "target_summary": "sections=Duplicate sections",
+                }
+            ],
+        )
         self.assertIn(
             "Manifest: `local_analysis/run/calibration_manifest.json`",
             markdown,
@@ -766,6 +785,12 @@ class CalibrationManifestActionTests(unittest.TestCase):
         self.assertIn("Project id: `project-1`", markdown)
         self.assertIn("API base: `http://localhost:8000`", markdown)
         self.assertIn("Execution mode: `dry-run`", markdown)
+        self.assertIn("Execution plan:", markdown)
+        self.assertIn(
+            "1. resolve_duplicate_selected (readiness_actions, sections=14) - "
+            "sections=Duplicate sections",
+            markdown,
+        )
 
     def test_action_execution_summary_marks_successful_waited_actions_ready(self):
         action = ManifestAction(

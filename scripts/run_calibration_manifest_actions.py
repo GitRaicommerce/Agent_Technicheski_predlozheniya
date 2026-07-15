@@ -450,6 +450,20 @@ def section_label_summary(action: ManifestAction) -> str:
     return ""
 
 
+def selected_action_plan(actions: list[ManifestAction]) -> list[dict[str, Any]]:
+    return [
+        {
+            "order": index,
+            "action_key": action.action_key,
+            "source": action.source,
+            "blocker_code": action.blocker_code,
+            "section_count": action.section_count,
+            "target_summary": action_target_summary(action),
+        }
+        for index, action in enumerate(actions, start=1)
+    ]
+
+
 def action_execution_record(
     action: ManifestAction,
     *,
@@ -587,6 +601,25 @@ def render_execution_report_markdown(
             lines.append(f"- API base: `{api_base}`")
         if execution_mode:
             lines.append(f"- Execution mode: `{execution_mode}`")
+        plan = [
+            item
+            for item in context.get("selected_action_plan") or []
+            if isinstance(item, dict)
+        ]
+        if plan:
+            lines.append("- Execution plan:")
+            for item in plan[:12]:
+                target = str(item.get("target_summary") or "").strip()
+                suffix = f" - {target}" if target else ""
+                lines.append(
+                    "  "
+                    f"{item.get('order')}. {item.get('action_key')}"
+                    f" ({item.get('source') or 'unknown'}, "
+                    f"sections={item.get('section_count') or 0})"
+                    f"{suffix}"
+                )
+            if len(plan) > 12:
+                lines.append(f"  ... +{len(plan) - 12} more actions")
     lines.extend(
         [
             f"- Total actions: `{summary['total_actions']}`",
@@ -687,6 +720,7 @@ def main(argv: list[str]) -> int:
             "execution_mode": "execute" if args.execute else "dry-run",
             "wait": bool(args.wait),
             "selected_action_keys": [action.action_key for action in selected],
+            "selected_action_plan": selected_action_plan(selected),
         }
         exit_code = 0
         execution_records: list[dict[str, Any]] = []

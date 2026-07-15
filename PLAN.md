@@ -221,6 +221,7 @@
 - Re-ran the Pernik calibration remediation cycle in non-mutating `--actions-only --all` dry-run mode against the stored manifest; it planned `resolve_duplicate_selected` and `regenerate_stale` for 14 sections each, produced planned-level action reports under `local_analysis/`, and correctly kept `ready_for_bundle=false` until real `--execute --wait` proof exists.
 - Made calibration action execution reports self-contained by adding manifest path, project id, API base, execution mode, wait flag, and selected action keys to the JSON report and readable Markdown header.
 - Added conservative legacy mojibake repair for human-facing calibration action report labels, so older manifests with mis-decoded Bulgarian section names remain reviewable without changing executable action payloads.
+- Added ordered remediation execution-plan metadata to calibration action reports, making dry-run and proof reports show the exact action order, source, section counts, and target summaries before real execution.
 
 ## Active Goals
 
