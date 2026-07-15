@@ -74,6 +74,7 @@ def load_action_execution_reports(paths: list[Path]) -> list[dict[str, Any]]:
 def action_execution_summary(reports: list[dict[str, Any]]) -> dict[str, Any]:
     status_counts: dict[str, int] = {}
     missing_reason_counts: dict[str, int] = {}
+    section_label_counts: dict[str, int] = {}
     total_actions = 0
     executed_actions = 0
     ready_report_count = 0
@@ -110,6 +111,12 @@ def action_execution_summary(reports: list[dict[str, Any]]) -> dict[str, Any]:
         for action in report.get("actions") or []:
             if not isinstance(action, dict):
                 continue
+            for label in action.get("section_labels") or []:
+                label_text = str(label).strip()
+                if label_text:
+                    section_label_counts[label_text] = (
+                        section_label_counts.get(label_text, 0) + 1
+                    )
             raw_reason_counts = action.get("missing_reason_counts") or {}
             if not isinstance(raw_reason_counts, dict):
                 continue
@@ -158,6 +165,9 @@ def action_execution_summary(reports: list[dict[str, Any]]) -> dict[str, Any]:
         "status_counts": status_counts,
         "missing_reason_counts": dict(
             sorted(missing_reason_counts.items(), key=lambda item: (-item[1], item[0]))
+        ),
+        "section_label_counts": dict(
+            sorted(section_label_counts.items(), key=lambda item: (-item[1], item[0]))
         ),
         "ready_report_count": ready_report_count,
         "failure_report_count": failure_report_count,
@@ -885,6 +895,15 @@ def render_manifest(
             lines.append("- Missing requirement reasons addressed:")
             for reason, count in missing_reason_counts.items():
                 lines.append(f"  - `{reason}`: `{count}`")
+        section_label_counts = action_summary.get("section_label_counts") or {}
+        if section_label_counts:
+            lines.append("- Remediation section labels targeted:")
+            for index, (label, count) in enumerate(section_label_counts.items()):
+                if index >= 8:
+                    remaining = len(section_label_counts) - index
+                    lines.append(f"  - `+{remaining} more`: `...`")
+                    break
+                lines.append(f"  - `{label}`: `{count}`")
     else:
         lines.append(
             "- `none`: No remediation action execution report was attached to this bundle."

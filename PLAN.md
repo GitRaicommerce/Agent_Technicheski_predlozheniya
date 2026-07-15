@@ -202,6 +202,7 @@
 - Enriched calibration manifest quality/depth remediation labels with word targets, blueprint group/topic counts, checklist id counts, and suggested words per group/topic so reviewers can see structural depth pressure before running remediation.
 - Preserved calibration remediation section labels in action execution JSON and Markdown reports, so dry-run and executed remediation evidence keeps the same structural depth diagnostics reviewers saw in the manifest.
 - Preserved remediation section-label context in before/after calibration manifest target comparisons, making structural depth changes visible alongside action target deltas.
+- Aggregated remediation section-label evidence back into calibration bundle manifests, so follow-up bundles show which structurally weak or depth-heavy sections were targeted by attached action reports.
 
 ## Active Goals
 

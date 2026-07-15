@@ -147,7 +147,10 @@ class RunProposalCalibrationTests(unittest.TestCase):
                                 "missing distinctive requirement detail": 2,
                                 "needs execution action": 1,
                                 "needs coherent passage": 1,
-                            }
+                            },
+                            "section_labels": [
+                                "Quality (120/420 words, 3 groups, 7 topics)",
+                            ],
                         }
                     ],
                 }
@@ -176,6 +179,11 @@ class RunProposalCalibrationTests(unittest.TestCase):
         self.assertIn("`missing distinctive requirement detail`: `2`", manifest)
         self.assertIn("`needs execution action`: `1`", manifest)
         self.assertIn("`needs coherent passage`: `1`", manifest)
+        self.assertIn("Remediation section labels targeted", manifest)
+        self.assertIn(
+            "`Quality (120/420 words, 3 groups, 7 topics)`: `1`",
+            manifest,
+        )
         self.assertIn("resolve export blockers", manifest)
         self.assertIn("Universal Topic Coverage", manifest)
         self.assertIn("Gap calibration focus summary", manifest)
@@ -249,7 +257,11 @@ class RunProposalCalibrationTests(unittest.TestCase):
                             "missing_reason_counts": {
                                 "missing distinctive requirement detail": 2,
                                 "needs operational evidence": 1,
-                            }
+                            },
+                            "section_labels": [
+                                "Quality (120/420 words, 3 groups)",
+                                "Environment (95/360 words, 2 groups)",
+                            ],
                         }
                     ],
                 },
@@ -263,7 +275,10 @@ class RunProposalCalibrationTests(unittest.TestCase):
                             "missing_reason_counts": {
                                 "needs operational evidence": 1,
                                 "needs coherent passage": 1,
-                            }
+                            },
+                            "section_labels": [
+                                "Quality (120/420 words, 3 groups)",
+                            ],
                         }
                     ],
                 },
@@ -286,6 +301,13 @@ class RunProposalCalibrationTests(unittest.TestCase):
                 "needs operational evidence": 2,
                 "missing distinctive requirement detail": 2,
                 "needs coherent passage": 1,
+            },
+        )
+        self.assertEqual(
+            summary["section_label_counts"],
+            {
+                "Quality (120/420 words, 3 groups)": 2,
+                "Environment (95/360 words, 2 groups)": 1,
             },
         )
 
