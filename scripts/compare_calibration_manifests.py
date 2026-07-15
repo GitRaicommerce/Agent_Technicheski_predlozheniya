@@ -359,6 +359,29 @@ def recommendation(before: dict[str, Any], after: dict[str, Any]) -> str:
             "Run coverage regeneration for remaining grounding/checklist gaps and "
             "rerun the calibration bundle."
         )
+    after_operational_ratio = after.get("operational_detail_ratio")
+    after_operational_status = after.get("operational_detail_status")
+    before_operational_ratio = before.get("operational_detail_ratio")
+    operational_is_weak = after_operational_status in {"weak", "partial"} or (
+        after_operational_ratio is not None and after_operational_ratio < 0.70
+    )
+    operational_did_not_improve = (
+        before_operational_ratio is not None
+        and after_operational_ratio is not None
+        and after_operational_ratio <= before_operational_ratio
+    )
+    if operational_is_weak and operational_did_not_improve:
+        return (
+            "Operational detail coverage is still weak and did not improve; run "
+            "detailed regeneration focused on roles, controls, records, sequence, "
+            "monitoring, acceptance evidence, escalation, and corrective actions."
+        )
+    if operational_is_weak:
+        return (
+            "Operational detail coverage improved but remains weak/partial; run "
+            "another detailed regeneration pass before treating the generated "
+            "proposal as reference-quality."
+        )
     before_ratio = before.get("volume_ratio")
     after_ratio = after.get("volume_ratio")
     if before_ratio is not None and after_ratio is not None and after_ratio <= before_ratio:

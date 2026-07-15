@@ -479,6 +479,52 @@ class CompareCalibrationManifestsTests(unittest.TestCase):
 
         self.assertIn("Review outline mapping next", text)
 
+    def test_render_comparison_prioritizes_weak_operational_detail_after_readiness(self):
+        text = render_comparison(
+            manifest(
+                blockers=0,
+                volume_ratio=0.30,
+                operational_detail_ratio=0.45,
+                operational_detail_status="partial",
+            ),
+            manifest(
+                blockers=0,
+                volume_ratio=0.65,
+                operational_detail_ratio=0.55,
+                operational_detail_status="partial",
+            ),
+        )
+
+        self.assertIn(
+            "| operational detail ratio | 0.45 | 0.55 | +0.10 | improved |",
+            text,
+        )
+        self.assertIn(
+            "Operational detail coverage improved but remains weak/partial",
+            text,
+        )
+
+    def test_render_comparison_flags_operational_detail_that_did_not_improve(self):
+        text = render_comparison(
+            manifest(
+                blockers=0,
+                volume_ratio=0.30,
+                operational_detail_ratio=0.45,
+                operational_detail_status="partial",
+            ),
+            manifest(
+                blockers=0,
+                volume_ratio=0.70,
+                operational_detail_ratio=0.45,
+                operational_detail_status="partial",
+            ),
+        )
+
+        self.assertIn(
+            "Operational detail coverage is still weak and did not improve",
+            text,
+        )
+
     def test_main_writes_markdown_report(self):
         with tempfile.TemporaryDirectory() as tmp:
             before_path = Path(tmp) / "before.json"

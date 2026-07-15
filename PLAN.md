@@ -211,6 +211,7 @@
 - Surfaced quality/depth issue codes such as `weak_operational_detail` inside calibration readiness action labels, so manifest shortlists and action reports show not only section depth numbers but also the blocker causes.
 - Added operational-detail coverage diagnostics to proposal gap analysis, comparing reference and generated signals for roles, controls, records, monitoring, acceptance, sequence, escalation, and corrective actions.
 - Propagated the operational-detail gap ratio/status into calibration manifest scorecards and before/after comparison deltas, so reruns can prove whether operational substance improved.
+- Made before/after calibration recommendations treat weak or partial operational-detail coverage as a remaining quality blocker even when export readiness is clear and generated/reference volume improves.
 
 ## Active Goals
 
