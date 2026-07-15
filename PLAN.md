@@ -215,6 +215,7 @@
 - Preserved the exact missing operational-detail signals in calibration manifests and before/after comparison reports, so remediation can target concrete gaps such as records, monitoring, corrective actions, or responsible roles.
 - Preserved missing operational-detail signals through calibration action execution reports and attached bundle summaries, so proof/dry-run evidence shows which concrete operational gaps a detailed regeneration action was meant to repair.
 - Added before/after comparison deltas for operational-detail signals targeted by attached action execution evidence, so calibration reviews can see whether remediation focus shifted or cleared across reruns.
+- Passed calibration gap reasons and missing operational-detail signals from gap-priority quality/depth actions into targeted drafting guidance, so reference-comparison findings become concrete regeneration instructions instead of report-only diagnostics.
 
 ## Active Goals
 

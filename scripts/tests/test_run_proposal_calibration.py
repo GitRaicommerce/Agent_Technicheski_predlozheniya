@@ -467,6 +467,7 @@ class RunProposalCalibrationTests(unittest.TestCase):
                     "focus": "drafting depth",
                     "reference_section": "Quality",
                     "generated_section": "Quality generated",
+                    "reasons": "too short, weak operational detail",
                 },
                 {
                     "focus": "grounding and checklist coverage",
@@ -479,6 +480,7 @@ class RunProposalCalibrationTests(unittest.TestCase):
             section_uid_by_generated_title={
                 "Quality generated": "sec-quality",
             },
+            operational_detail_missing_signals=["record", "monitoring"],
         )
 
         self.assertEqual(rows[0]["action_key"], "regenerate_quality_depth")
@@ -492,6 +494,10 @@ class RunProposalCalibrationTests(unittest.TestCase):
             {
                 "section_uids": ["sec-quality"],
                 "section_title_hints": ["Quality generated"],
+                "gap_reasons": ["too short", "weak operational detail"],
+                "reference_section": "Quality",
+                "generated_section": "Quality generated",
+                "operational_detail_missing_signals": ["record", "monitoring"],
             },
         )
         self.assertEqual(
@@ -829,6 +835,9 @@ class RunProposalCalibrationTests(unittest.TestCase):
             {
                 "section_uids": ["sec-a"],
                 "section_title_hints": ["A generated"],
+                "gap_reasons": ["too short"],
+                "reference_section": "A",
+                "generated_section": "A generated",
             },
         )
         self.assertEqual(
@@ -1071,6 +1080,9 @@ class RunProposalCalibrationTests(unittest.TestCase):
                     {
                         "section_uids": ["sec-a"],
                         "section_title_hints": ["Section A"],
+                        "gap_reasons": ["too short"],
+                        "reference_section": "A",
+                        "generated_section": "Section A",
                     },
                 )
                 self.assertEqual(

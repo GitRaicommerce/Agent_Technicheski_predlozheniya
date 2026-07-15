@@ -398,8 +398,10 @@ def enrich_gap_priority_rows(
     *,
     project_id: str | None = None,
     section_uid_by_generated_title: dict[str, str] | None = None,
+    operational_detail_missing_signals: list[str] | None = None,
 ) -> list[dict[str, Any]]:
     section_uid_by_generated_title = section_uid_by_generated_title or {}
+    operational_detail_missing_signals = operational_detail_missing_signals or []
     enriched: list[dict[str, Any]] = []
     for row in rows:
         focus = str(row.get("focus") or "")
@@ -426,6 +428,24 @@ def enrich_gap_priority_rows(
                 item["request_json"] = {
                     "section_title_hints": [generated_section],
                 }
+            request_json = item.get("request_json")
+            if isinstance(request_json, dict) and action_key == READINESS_ACTION_KEYS["shallow_sections"]:
+                reasons = [
+                    reason.strip()
+                    for reason in str(item.get("reasons") or "").split(",")
+                    if reason.strip()
+                ]
+                if reasons:
+                    request_json["gap_reasons"] = reasons
+                reference_section = str(item.get("reference_section") or "").strip()
+                if reference_section:
+                    request_json["reference_section"] = reference_section
+                if generated_section:
+                    request_json["generated_section"] = generated_section
+                if operational_detail_missing_signals:
+                    request_json["operational_detail_missing_signals"] = (
+                        operational_detail_missing_signals
+                    )
         enriched.append(item)
     return enriched
 
@@ -852,6 +872,11 @@ def render_manifest(
         gap_priority_rows or [],
         project_id=project_id,
         section_uid_by_generated_title=section_uid_by_generated_title,
+        operational_detail_missing_signals=gap_summary.get(
+            "operational_detail_missing_signals"
+        )
+        if isinstance(gap_summary.get("operational_detail_missing_signals"), list)
+        else None,
     )
     readiness_actions = readiness_priority_actions(readiness)
     structured_readiness_actions = structured_readiness_priority_actions(
@@ -1144,6 +1169,14 @@ def render_manifest_json(
             gap_priority_rows or [],
             project_id=project_id,
             section_uid_by_generated_title=section_uid_by_generated_title,
+            operational_detail_missing_signals=(gap_summary or {}).get(
+                "operational_detail_missing_signals"
+            )
+            if isinstance(
+                (gap_summary or {}).get("operational_detail_missing_signals"),
+                list,
+            )
+            else None,
         ),
     }
     return json.dumps(payload, ensure_ascii=False, indent=2) + "\n"

@@ -48,6 +48,10 @@ class OrchestratorRequest(BaseModel):
 class RemediationActionRequest(BaseModel):
     section_uids: list[str] = Field(default_factory=list)
     section_title_hints: list[str] = Field(default_factory=list)
+    gap_reasons: list[str] = Field(default_factory=list)
+    reference_section: str | None = None
+    generated_section: str | None = None
+    operational_detail_missing_signals: list[str] = Field(default_factory=list)
 
 
 @router.post("/chat")
@@ -685,13 +689,20 @@ async def run_generation_remediation_action(
                 target_reason=f"calibration_gap:{action_key}",
             )
         elif requested_section_uids and action_key == "regenerate_quality_depth":
-            job = await create_drafting_job(
-                project=project,
-                db=db,
-                target_section_uids=requested_section_uids,
-                target_reason=f"calibration_gap:{action_key}",
-                job_type="drafting_quality",
+            quality_guidance = _calibration_quality_target_guidance(
+                requested_section_uids,
+                req,
             )
+            job_kwargs: dict[str, Any] = {
+                "project": project,
+                "db": db,
+                "target_section_uids": requested_section_uids,
+                "target_reason": f"calibration_gap:{action_key}",
+                "job_type": "drafting_quality",
+            }
+            if quality_guidance:
+                job_kwargs["target_guidance"] = quality_guidance
+            job = await create_drafting_job(**job_kwargs)
         elif action_key == "regenerate_stale":
             job = await create_drafting_stale_job(project=project, db=db)
         elif action_key == "regenerate_missing_requirements":
@@ -705,6 +716,80 @@ async def run_generation_remediation_action(
         "action_key": action_key,
         "status": "queued",
         "result": _generation_job_response(job).model_dump(),
+    }
+
+
+def _calibration_quality_target_guidance(
+    section_uids: list[str],
+    req: RemediationActionRequest | None,
+) -> dict[str, dict[str, Any]] | None:
+    if not req:
+        return None
+
+    reasons = [
+        str(reason).strip()
+        for reason in req.gap_reasons
+        if str(reason).strip()
+    ]
+    operational_signals = [
+        str(signal).strip()
+        for signal in req.operational_detail_missing_signals
+        if str(signal).strip()
+    ]
+    reference_section = str(req.reference_section or "").strip()
+    generated_section = str(req.generated_section or "").strip()
+    instructions: list[str] = []
+
+    if reasons:
+        instructions.append(
+            "Address calibration gap reasons from the reference comparison: "
+            + ", ".join(reasons)
+            + "."
+        )
+    if reference_section:
+        instructions.append(
+            "Align the regenerated section with reference-calibration topic: "
+            f"{reference_section}."
+        )
+    if generated_section:
+        instructions.append(
+            "Use the current generated section as the base to improve: "
+            f"{generated_section}."
+        )
+    if any(reason in {"too short", "thin detail"} for reason in reasons):
+        instructions.append(
+            "Expand the section into developed tender-specific narrative depth "
+            "instead of a short generic summary."
+        )
+    if any(reason in {"missing key terms", "weak lexical coverage"} for reason in reasons):
+        instructions.append(
+            "Recover missing tender concepts and source-grounded terminology from "
+            "the project documents while keeping the text coherent."
+        )
+    if operational_signals or any(
+        reason in {"weak operational detail", "partial operational detail"}
+        for reason in reasons
+    ):
+        instructions.append(
+            "Add concrete operational detail: responsible roles, controls, records, "
+            "monitoring evidence, acceptance criteria, reporting sequence, "
+            "escalation, and corrective actions."
+        )
+    if operational_signals:
+        instructions.append(
+            "Calibration missing operational signals to cover where source support "
+            "exists: "
+            + ", ".join(operational_signals[:12])
+            + "."
+        )
+
+    unique_instructions = list(dict.fromkeys(instructions))
+    if not unique_instructions:
+        return None
+
+    return {
+        section_uid: {"instructions": unique_instructions}
+        for section_uid in section_uids
     }
 
 
