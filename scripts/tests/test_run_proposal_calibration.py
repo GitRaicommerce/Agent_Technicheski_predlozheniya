@@ -123,6 +123,12 @@ class RunProposalCalibrationTests(unittest.TestCase):
                 "reference_word_tokens": 8000,
                 "generated_word_tokens": 2400,
                 "generated_reference_volume_ratio": 0.30,
+                "operational_detail_status": "weak",
+                "operational_detail_ratio": 0.33,
+                "operational_detail_missing_signals": [
+                    "responsible",
+                    "corrective",
+                ],
             },
             gap_priority_rows=[
                 {
@@ -174,6 +180,11 @@ class RunProposalCalibrationTests(unittest.TestCase):
         self.assertIn("`10` generated / `12` reference", manifest)
         self.assertIn("`2400` generated / `8000` reference", manifest)
         self.assertIn("Generated/reference volume ratio: `0.30`", manifest)
+        self.assertIn("Operational detail coverage: `0.33` (`weak`)", manifest)
+        self.assertIn(
+            "Missing operational signals: `responsible`, `corrective`",
+            manifest,
+        )
         self.assertIn("Action execution reports: `1` files, `1` actions", manifest)
         self.assertIn("Missing requirement reasons addressed", manifest)
         self.assertIn("`missing distinctive requirement detail`: `2`", manifest)
@@ -257,6 +268,16 @@ class RunProposalCalibrationTests(unittest.TestCase):
 
         self.assertEqual(metrics["operational_detail_status"], "weak")
         self.assertEqual(metrics["operational_detail_ratio"], 0.33)
+        self.assertEqual(
+            metrics["operational_detail_reference_signals"],
+            ["responsible", "record", "corrective"],
+        )
+        self.assertEqual(metrics["operational_detail_generated_signals"], ["record"])
+        self.assertEqual(
+            metrics["operational_detail_missing_signals"],
+            ["responsible", "corrective"],
+        )
+        self.assertEqual(metrics["operational_detail_missing_signal_count"], 2)
 
     def test_action_execution_summary_aggregates_report_counts(self):
         summary = action_execution_summary(

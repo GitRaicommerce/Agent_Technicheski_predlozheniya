@@ -29,6 +29,7 @@ def manifest(
     volume_ratio: float = 0.30,
     operational_detail_ratio: float | None = None,
     operational_detail_status: str | None = None,
+    operational_detail_missing_signals: list[str] | None = None,
     focus_counts: dict[str, int] | None = None,
     readiness_actions: list[dict] | None = None,
     gap_rows: list[dict] | None = None,
@@ -56,6 +57,18 @@ def manifest(
                 if operational_detail_status is not None
                 else {}
             ),
+            **(
+                {
+                    "operational_detail_missing_signals": (
+                        operational_detail_missing_signals
+                    ),
+                    "operational_detail_missing_signal_count": len(
+                        operational_detail_missing_signals
+                    ),
+                }
+                if operational_detail_missing_signals is not None
+                else {}
+            ),
         },
         "gap_calibration_focus_counts": focus_counts or {},
         "action_execution_summary": action_execution_summary or {},
@@ -73,6 +86,7 @@ class CompareCalibrationManifestsTests(unittest.TestCase):
                 volume_ratio=0.42,
                 operational_detail_ratio=0.35,
                 operational_detail_status="weak",
+                operational_detail_missing_signals=["responsible", "corrective"],
                 focus_counts={"drafting depth": 3},
                 readiness_actions=[
                     {"action_key": "regenerate_stale"},
@@ -99,6 +113,11 @@ class CompareCalibrationManifestsTests(unittest.TestCase):
         self.assertEqual(summary["volume_ratio"], 0.42)
         self.assertEqual(summary["operational_detail_ratio"], 0.35)
         self.assertEqual(summary["operational_detail_status"], "weak")
+        self.assertEqual(
+            summary["operational_detail_missing_signals"],
+            ["responsible", "corrective"],
+        )
+        self.assertEqual(summary["operational_detail_missing_signal_count"], 2)
         self.assertEqual(summary["gap_focus_counts"]["drafting depth"], 3)
         self.assertEqual(
             summary["readiness_action_counts"],
@@ -126,6 +145,7 @@ class CompareCalibrationManifestsTests(unittest.TestCase):
             warnings=2,
             volume_ratio=0.20,
             operational_detail_ratio=0.30,
+            operational_detail_missing_signals=["responsible", "record"],
             focus_counts={"drafting depth": 5, "outline mapping": 1},
             readiness_actions=[{"action_key": "regenerate_stale"}],
             gap_rows=[{"action_key": "regenerate_quality_depth"}],
@@ -135,6 +155,7 @@ class CompareCalibrationManifestsTests(unittest.TestCase):
             warnings=0,
             volume_ratio=0.45,
             operational_detail_ratio=0.75,
+            operational_detail_missing_signals=[],
             focus_counts={"drafting depth": 1},
             gap_rows=[{"action_key": "regenerate_quality_depth"}],
             action_execution_summary={
@@ -157,6 +178,9 @@ class CompareCalibrationManifestsTests(unittest.TestCase):
             "| operational detail ratio | 0.30 | 0.75 | +0.45 | improved |",
             text,
         )
+        self.assertIn("## Operational detail missing signal deltas", text)
+        self.assertIn("| record | 1 | 0 | -1 |", text)
+        self.assertIn("| responsible | 1 | 0 | -1 |", text)
         self.assertIn("| outline mapping | 1 | 0 | -1 |", text)
         self.assertIn(
             "| readiness_actions | `regenerate_stale` | 1 | 0 | -1 |",
@@ -492,6 +516,7 @@ class CompareCalibrationManifestsTests(unittest.TestCase):
                 volume_ratio=0.65,
                 operational_detail_ratio=0.55,
                 operational_detail_status="partial",
+                operational_detail_missing_signals=["record", "monitoring"],
             ),
         )
 
@@ -503,6 +528,7 @@ class CompareCalibrationManifestsTests(unittest.TestCase):
             "Operational detail coverage improved but remains weak/partial",
             text,
         )
+        self.assertIn("Missing signals: record, monitoring.", text)
 
     def test_render_comparison_flags_operational_detail_that_did_not_improve(self):
         text = render_comparison(
@@ -517,6 +543,7 @@ class CompareCalibrationManifestsTests(unittest.TestCase):
                 volume_ratio=0.70,
                 operational_detail_ratio=0.45,
                 operational_detail_status="partial",
+                operational_detail_missing_signals=["record", "monitoring"],
             ),
         )
 
@@ -524,6 +551,7 @@ class CompareCalibrationManifestsTests(unittest.TestCase):
             "Operational detail coverage is still weak and did not improve",
             text,
         )
+        self.assertIn("Missing signals: record, monitoring.", text)
 
     def test_main_writes_markdown_report(self):
         with tempfile.TemporaryDirectory() as tmp:

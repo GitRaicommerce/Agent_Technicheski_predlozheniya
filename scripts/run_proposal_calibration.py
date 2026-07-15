@@ -236,8 +236,14 @@ def gap_calibration_focus_counts(markdown: str) -> dict[str, int]:
     return counts
 
 
-def gap_summary_metrics(markdown: str) -> dict[str, int | float | str]:
-    metrics: dict[str, int | float | str] = {}
+def _signal_list(value: str) -> list[str]:
+    if value.strip().lower() in {"", "n/a"}:
+        return []
+    return [item.strip() for item in value.split(",") if item.strip()]
+
+
+def gap_summary_metrics(markdown: str) -> dict[str, Any]:
+    metrics: dict[str, Any] = {}
     line_patterns = {
         "raw_reference_sections": r"Raw recognized sections in reference TP:\s*`(\d+)`",
         "raw_generated_sections": r"Raw recognized sections in generated TP:\s*`(\d+)`",
@@ -260,6 +266,17 @@ def gap_summary_metrics(markdown: str) -> dict[str, int | float | str]:
                     continue
                 metrics["operational_detail_status"] = cells[0]
                 metrics["operational_detail_ratio"] = ratio
+                metrics["operational_detail_reference_signals"] = _signal_list(
+                    cells[2]
+                )
+                metrics["operational_detail_generated_signals"] = _signal_list(
+                    cells[3]
+                )
+                missing_signals = _signal_list(cells[4])
+                metrics["operational_detail_missing_signals"] = missing_signals
+                metrics["operational_detail_missing_signal_count"] = len(
+                    missing_signals
+                )
 
     reference_words = metrics.get("reference_word_tokens")
     generated_words = metrics.get("generated_word_tokens")
@@ -804,7 +821,7 @@ def render_manifest(
     tenders: list[Path],
     readiness: dict[str, Any] | None = None,
     snapshot_warnings: int = 0,
-    gap_summary: dict[str, int | float | str] | None = None,
+    gap_summary: dict[str, Any] | None = None,
     gap_focus_counts: dict[str, int] | None = None,
     gap_priority_rows: list[dict[str, Any]] | None = None,
     section_uid_by_generated_title: dict[str, str] | None = None,
@@ -896,6 +913,23 @@ def render_manifest(
                     else ""
                 )
             )
+            operational_missing = gap_summary.get(
+                "operational_detail_missing_signals"
+            )
+            if isinstance(operational_missing, list) and operational_missing:
+                visible_signals = [
+                    str(signal) for signal in operational_missing[:10]
+                ]
+                suffix = (
+                    f" (+{len(operational_missing) - 10} more)"
+                    if len(operational_missing) > 10
+                    else ""
+                )
+                lines.append(
+                    "- Missing operational signals: `"
+                    + "`, `".join(visible_signals)
+                    + f"`{suffix}"
+                )
     else:
         lines.append("- `n/a`: Gap summary metrics were not found in the report.")
     lines.extend(["", "## Remediation action execution evidence", ""])
@@ -1040,7 +1074,7 @@ def render_manifest_json(
     tenders: list[Path],
     readiness: dict[str, Any] | None = None,
     snapshot_warnings: int = 0,
-    gap_summary: dict[str, int | float | str] | None = None,
+    gap_summary: dict[str, Any] | None = None,
     gap_focus_counts: dict[str, int] | None = None,
     gap_priority_rows: list[dict[str, Any]] | None = None,
     section_uid_by_generated_title: dict[str, str] | None = None,

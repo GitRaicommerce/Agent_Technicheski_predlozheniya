@@ -55,6 +55,16 @@ def _string_items(value: Any) -> list[str]:
     return [str(item).strip() for item in value if str(item).strip()]
 
 
+def _string_list_value(value: Any) -> list[str]:
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+    if isinstance(value, str) and value.strip():
+        if value.strip().lower() == "n/a":
+            return []
+        return [item.strip() for item in value.split(",") if item.strip()]
+    return []
+
+
 def _request_target_summary(request_json: Any) -> str:
     if not isinstance(request_json, dict):
         return ""
@@ -219,6 +229,12 @@ def summarize_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
         "operational_detail_status": str(
             scorecard.get("operational_detail_status") or "unknown"
         ),
+        "operational_detail_missing_signals": _string_list_value(
+            scorecard.get("operational_detail_missing_signals")
+        ),
+        "operational_detail_missing_signal_count": _int_value(
+            scorecard.get("operational_detail_missing_signal_count")
+        ),
         "content_generated_sections": _int_value(
             scorecard.get("content_generated_sections")
         ),
@@ -371,16 +387,29 @@ def recommendation(before: dict[str, Any], after: dict[str, Any]) -> str:
         and after_operational_ratio <= before_operational_ratio
     )
     if operational_is_weak and operational_did_not_improve:
+        missing_signals = after.get("operational_detail_missing_signals") or []
+        signal_hint = (
+            " Missing signals: " + ", ".join(missing_signals[:8]) + "."
+            if missing_signals
+            else ""
+        )
         return (
             "Operational detail coverage is still weak and did not improve; run "
             "detailed regeneration focused on roles, controls, records, sequence, "
             "monitoring, acceptance evidence, escalation, and corrective actions."
+            f"{signal_hint}"
         )
     if operational_is_weak:
+        missing_signals = after.get("operational_detail_missing_signals") or []
+        signal_hint = (
+            " Missing signals: " + ", ".join(missing_signals[:8]) + "."
+            if missing_signals
+            else ""
+        )
         return (
             "Operational detail coverage improved but remains weak/partial; run "
             "another detailed regeneration pass before treating the generated "
-            "proposal as reference-quality."
+            f"proposal as reference-quality.{signal_hint}"
         )
     before_ratio = before.get("volume_ratio")
     after_ratio = after.get("volume_ratio")
@@ -447,6 +476,33 @@ def render_comparison(before_manifest: dict[str, Any], after_manifest: dict[str,
             )
             + " |"
         )
+
+    lines.extend(
+        [
+            "",
+            "## Operational detail missing signal deltas",
+            "",
+            "| Signal | Before missing | After missing | Delta |",
+            "| --- | ---: | ---: | ---: |",
+        ]
+    )
+    before_missing_signals = {
+        signal: 1 for signal in before["operational_detail_missing_signals"]
+    }
+    after_missing_signals = {
+        signal: 1 for signal in after["operational_detail_missing_signals"]
+    }
+    signal_rows_added = False
+    for signal in _sorted_keys(before_missing_signals, after_missing_signals):
+        before_count = before_missing_signals.get(signal, 0)
+        after_count = after_missing_signals.get(signal, 0)
+        signal_rows_added = True
+        lines.append(
+            f"| {_escape_md_cell(signal)} | {before_count} | {after_count} | "
+            f"{_format_delta(before_count, after_count)} |"
+        )
+    if not signal_rows_added:
+        lines.append("| n/a | 0 | 0 | +0 |")
 
     lines.extend(
         [
