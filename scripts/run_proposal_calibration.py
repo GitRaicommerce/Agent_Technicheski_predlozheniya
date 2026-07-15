@@ -236,8 +236,8 @@ def gap_calibration_focus_counts(markdown: str) -> dict[str, int]:
     return counts
 
 
-def gap_summary_metrics(markdown: str) -> dict[str, int | float]:
-    metrics: dict[str, int | float] = {}
+def gap_summary_metrics(markdown: str) -> dict[str, int | float | str]:
+    metrics: dict[str, int | float | str] = {}
     line_patterns = {
         "raw_reference_sections": r"Raw recognized sections in reference TP:\s*`(\d+)`",
         "raw_generated_sections": r"Raw recognized sections in generated TP:\s*`(\d+)`",
@@ -251,6 +251,15 @@ def gap_summary_metrics(markdown: str) -> dict[str, int | float]:
             match = re.search(pattern, line)
             if match:
                 metrics[key] = int(match.group(1))
+        if line.startswith("| ") and " | " in line:
+            cells = _split_markdown_table_row(line)
+            if len(cells) >= 5 and cells[0] in {"covered", "partial", "weak", "n/a"}:
+                try:
+                    ratio = float(cells[1])
+                except ValueError:
+                    continue
+                metrics["operational_detail_status"] = cells[0]
+                metrics["operational_detail_ratio"] = ratio
 
     reference_words = metrics.get("reference_word_tokens")
     generated_words = metrics.get("generated_word_tokens")
@@ -795,7 +804,7 @@ def render_manifest(
     tenders: list[Path],
     readiness: dict[str, Any] | None = None,
     snapshot_warnings: int = 0,
-    gap_summary: dict[str, int | float] | None = None,
+    gap_summary: dict[str, int | float | str] | None = None,
     gap_focus_counts: dict[str, int] | None = None,
     gap_priority_rows: list[dict[str, Any]] | None = None,
     section_uid_by_generated_title: dict[str, str] | None = None,
@@ -875,6 +884,18 @@ def render_manifest(
         )
         if isinstance(volume_ratio, float):
             lines.append(f"- Generated/reference volume ratio: `{volume_ratio:.2f}`")
+        operational_ratio = gap_summary.get("operational_detail_ratio")
+        operational_status = gap_summary.get("operational_detail_status")
+        if isinstance(operational_ratio, float):
+            lines.append(
+                "- Operational detail coverage: "
+                f"`{operational_ratio:.2f}`"
+                + (
+                    f" (`{operational_status}`)"
+                    if isinstance(operational_status, str)
+                    else ""
+                )
+            )
     else:
         lines.append("- `n/a`: Gap summary metrics were not found in the report.")
     lines.extend(["", "## Remediation action execution evidence", ""])
@@ -1019,7 +1040,7 @@ def render_manifest_json(
     tenders: list[Path],
     readiness: dict[str, Any] | None = None,
     snapshot_warnings: int = 0,
-    gap_summary: dict[str, int | float] | None = None,
+    gap_summary: dict[str, int | float | str] | None = None,
     gap_focus_counts: dict[str, int] | None = None,
     gap_priority_rows: list[dict[str, Any]] | None = None,
     section_uid_by_generated_title: dict[str, str] | None = None,

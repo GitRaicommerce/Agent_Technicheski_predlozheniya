@@ -27,6 +27,8 @@ def manifest(
     blockers: int = 0,
     warnings: int = 0,
     volume_ratio: float = 0.30,
+    operational_detail_ratio: float | None = None,
+    operational_detail_status: str | None = None,
     focus_counts: dict[str, int] | None = None,
     readiness_actions: list[dict] | None = None,
     gap_rows: list[dict] | None = None,
@@ -44,6 +46,16 @@ def manifest(
             "generated_reference_volume_ratio": volume_ratio,
             "content_generated_sections": 10,
             "content_reference_sections": 12,
+            **(
+                {"operational_detail_ratio": operational_detail_ratio}
+                if operational_detail_ratio is not None
+                else {}
+            ),
+            **(
+                {"operational_detail_status": operational_detail_status}
+                if operational_detail_status is not None
+                else {}
+            ),
         },
         "gap_calibration_focus_counts": focus_counts or {},
         "action_execution_summary": action_execution_summary or {},
@@ -59,6 +71,8 @@ class CompareCalibrationManifestsTests(unittest.TestCase):
                 blockers=2,
                 warnings=1,
                 volume_ratio=0.42,
+                operational_detail_ratio=0.35,
+                operational_detail_status="weak",
                 focus_counts={"drafting depth": 3},
                 readiness_actions=[
                     {"action_key": "regenerate_stale"},
@@ -83,6 +97,8 @@ class CompareCalibrationManifestsTests(unittest.TestCase):
         self.assertEqual(summary["readiness_blockers"], 2)
         self.assertEqual(summary["snapshot_warnings"], 1)
         self.assertEqual(summary["volume_ratio"], 0.42)
+        self.assertEqual(summary["operational_detail_ratio"], 0.35)
+        self.assertEqual(summary["operational_detail_status"], "weak")
         self.assertEqual(summary["gap_focus_counts"]["drafting depth"], 3)
         self.assertEqual(
             summary["readiness_action_counts"],
@@ -109,6 +125,7 @@ class CompareCalibrationManifestsTests(unittest.TestCase):
             blockers=3,
             warnings=2,
             volume_ratio=0.20,
+            operational_detail_ratio=0.30,
             focus_counts={"drafting depth": 5, "outline mapping": 1},
             readiness_actions=[{"action_key": "regenerate_stale"}],
             gap_rows=[{"action_key": "regenerate_quality_depth"}],
@@ -117,6 +134,7 @@ class CompareCalibrationManifestsTests(unittest.TestCase):
             blockers=0,
             warnings=0,
             volume_ratio=0.45,
+            operational_detail_ratio=0.75,
             focus_counts={"drafting depth": 1},
             gap_rows=[{"action_key": "regenerate_quality_depth"}],
             action_execution_summary={
@@ -133,6 +151,10 @@ class CompareCalibrationManifestsTests(unittest.TestCase):
         self.assertIn("| readiness blockers | 3 | 0 | -3 | improved |", text)
         self.assertIn(
             "| generated/reference volume ratio | 0.20 | 0.45 | +0.25 | improved |",
+            text,
+        )
+        self.assertIn(
+            "| operational detail ratio | 0.30 | 0.75 | +0.45 | improved |",
             text,
         )
         self.assertIn("| outline mapping | 1 | 0 | -1 |", text)

@@ -213,6 +213,12 @@ def summarize_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
         "volume_ratio": _float_value(
             scorecard.get("generated_reference_volume_ratio")
         ),
+        "operational_detail_ratio": _float_value(
+            scorecard.get("operational_detail_ratio")
+        ),
+        "operational_detail_status": str(
+            scorecard.get("operational_detail_status") or "unknown"
+        ),
         "content_generated_sections": _int_value(
             scorecard.get("content_generated_sections")
         ),
@@ -311,7 +317,7 @@ def _direction_for_metric(metric: str, before: Any, after: Any) -> str:
         if after > before:
             return "regressed"
         return "unchanged"
-    if metric == "generated/reference volume ratio":
+    if metric in {"generated/reference volume ratio", "operational detail ratio"}:
         if after > before:
             return "improved"
         if after < before:
@@ -392,6 +398,11 @@ def render_comparison(before_manifest: dict[str, Any], after_manifest: dict[str,
             "generated/reference volume ratio",
             before["volume_ratio"],
             after["volume_ratio"],
+        ),
+        (
+            "operational detail ratio",
+            before["operational_detail_ratio"],
+            after["operational_detail_ratio"],
         ),
         (
             "content generated sections",

@@ -243,6 +243,21 @@ class RunProposalCalibrationTests(unittest.TestCase):
             9122 / 62445,
         )
 
+    def test_gap_summary_metrics_reads_operational_detail_scorecard(self):
+        metrics = gap_summary_metrics(
+            "\n".join(
+                [
+                    "## Operational Detail Coverage",
+                    "| Status | Ratio | Reference signals | Generated signals | Missing signals |",
+                    "| --- | ---: | --- | --- | --- |",
+                    "| weak | 0.33 | responsible, record, corrective | record | responsible, corrective |",
+                ]
+            )
+        )
+
+        self.assertEqual(metrics["operational_detail_status"], "weak")
+        self.assertEqual(metrics["operational_detail_ratio"], 0.33)
+
     def test_action_execution_summary_aggregates_report_counts(self):
         summary = action_execution_summary(
             [
