@@ -158,7 +158,14 @@ def _missing_requirement_remediation_guidance(item: dict) -> str:
     ):
         guidance.append(
             "write active execution steps using concrete verbs such as assigns, "
-            "performs, keeps, documents, monitors, or applies"
+            "performs, keeps, documents, monitors, or applies; for Bulgarian use "
+            "\u0438\u0437\u0432\u044a\u0440\u0448\u0432\u0430, "
+            "\u043e\u0441\u0438\u0433\u0443\u0440\u044f\u0432\u0430, "
+            "\u043e\u0440\u0433\u0430\u043d\u0438\u0437\u0438\u0440\u0430, "
+            "\u043f\u0440\u043e\u0432\u0435\u0440\u044f\u0432\u0430, "
+            "\u043a\u043e\u043d\u0442\u0440\u043e\u043b\u0438\u0440\u0430, "
+            "\u0441\u044a\u0441\u0442\u0430\u0432\u044f, or "
+            "\u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442\u0438\u0440\u0430"
         )
 
     return "; ".join(guidance) + "."

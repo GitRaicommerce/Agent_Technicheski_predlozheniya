@@ -871,6 +871,9 @@ def test_common_missing_requirement_remediation_flows_into_targeted_drafting_gui
     assert "needs execution action" in missing_item["reasons"]
     assert "add operational evidence" in missing_item["remediation_guidance"]
     assert "write active execution steps" in missing_item["remediation_guidance"]
+    assert "\u0438\u0437\u0432\u044a\u0440\u0448\u0432\u0430" in missing_item[
+        "remediation_guidance"
+    ]
 
     target_guidance = _missing_requirement_target_guidance([readiness_section])
     section_guidance = _merge_section_drafting_guidance(

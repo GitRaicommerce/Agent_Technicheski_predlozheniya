@@ -210,6 +210,12 @@ async def test_export_readiness_aggregates_multiple_blockers(client, mock_db):
     assert "write active execution steps" in missing_items[1][
         "remediation_guidance"
     ]
+    assert "\u0438\u0437\u0432\u044a\u0440\u0448\u0432\u0430" in missing_items[1][
+        "remediation_guidance"
+    ]
+    assert "\u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442\u0438\u0440\u0430" in missing_items[1][
+        "remediation_guidance"
+    ]
     assert missing_items[1]["operational_signals"] == ["record"]
     assert missing_items[1]["operational_execution_signals"] == []
     assert missing_items[1]["required_operational_signal_count"] == 2
