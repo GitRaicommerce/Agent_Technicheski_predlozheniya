@@ -81,7 +81,7 @@ def _blueprint_groups(drafting_blueprint: dict[str, Any] | None) -> list[dict[st
 
 
 def _word_count(text: str) -> int:
-    return len(re.findall(r"[0-9A-Za-zА-Яа-я]+", text or ""))
+    return len(re.findall(r"[0-9A-Za-z\u0400-\u04FF]+", text or ""))
 
 
 def _tokens(text: str) -> list[str]:

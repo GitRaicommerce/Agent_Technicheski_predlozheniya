@@ -222,6 +222,7 @@
 - Made calibration action execution reports self-contained by adding manifest path, project id, API base, execution mode, wait flag, and selected action keys to the JSON report and readable Markdown header.
 - Added conservative legacy mojibake repair for human-facing calibration action report labels, so older manifests with mis-decoded Bulgarian section names remain reviewable without changing executable action payloads.
 - Added ordered remediation execution-plan metadata to calibration action reports, making dry-run and proof reports show the exact action order, source, section counts, and target summaries before real execution.
+- Corrected proposal-depth word counting to use the full Unicode Cyrillic range, with regression coverage for real Bulgarian text so quality gates do not undercount tender-specific Bulgarian narrative.
 
 ## Active Goals
 
