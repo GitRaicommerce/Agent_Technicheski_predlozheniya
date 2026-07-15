@@ -530,6 +530,10 @@ class RunProposalCalibrationTests(unittest.TestCase):
                         "blueprint_topic_count": 7,
                         "blueprint_requirement_id_count": 9,
                         "suggested_words_per_structure": 140,
+                        "issues": [
+                            {"code": "weak_operational_detail"},
+                            {"code": "uneven_blueprint_distribution"},
+                        ],
                     }
                 ],
             }
@@ -555,7 +559,8 @@ class RunProposalCalibrationTests(unittest.TestCase):
         self.assertIn("bulk `Регенерирай подробно`", actions[3])
         self.assertIn(
             "Environment (120/420 words, 3 groups, 7 topics, "
-            "9 checklist ids, 140 words/group-topic)",
+            "9 checklist ids, 140 words/group-topic, "
+            "issues: weak_operational_detail, uneven_blueprint_distribution)",
             actions[3],
         )
 
@@ -606,6 +611,10 @@ class RunProposalCalibrationTests(unittest.TestCase):
                     "blueprint_topic_count": 7,
                     "blueprint_requirement_id_count": 9,
                     "suggested_words_per_structure": 140,
+                    "issues": [
+                        {"code": "weak_operational_detail"},
+                        {"code": "uneven_blueprint_distribution"},
+                    ],
                 },
                 {
                     "section_uid": "sec-safety",
@@ -737,7 +746,8 @@ class RunProposalCalibrationTests(unittest.TestCase):
         )
         self.assertIn(
             "Environment (120/420 words, 3 groups, 7 topics, "
-            "9 checklist ids, 140 words/group-topic)",
+            "9 checklist ids, 140 words/group-topic, "
+            "issues: weak_operational_detail, uneven_blueprint_distribution)",
             manifest["readiness_actions"][3]["section_labels"],
         )
         self.assertIn(

@@ -478,6 +478,22 @@ def _missing_requirement_label(section: dict[str, Any]) -> str:
     return f"{_section_label(section)} ({missing_count} missing{reason_summary})"
 
 
+def _quality_issue_summary(section: dict[str, Any]) -> str:
+    issue_codes: list[str] = []
+    for issue in section.get("issues") or []:
+        if not isinstance(issue, dict):
+            continue
+        code = str(issue.get("code") or "").strip()
+        if code and code not in issue_codes:
+            issue_codes.append(code)
+    if not issue_codes:
+        return ""
+
+    visible = issue_codes[:3]
+    suffix = f", +{len(issue_codes) - 3} more" if len(issue_codes) > 3 else ""
+    return "issues: " + ", ".join(visible) + suffix
+
+
 def _quality_section_label(section: dict[str, Any]) -> str:
     word_count = int(section.get("word_count") or 0)
     min_words = int(section.get("min_words") or 0)
@@ -497,6 +513,9 @@ def _quality_section_label(section: dict[str, Any]) -> str:
         diagnostics.append(f"{blueprint_requirement_ids} checklist ids")
     if suggested_words:
         diagnostics.append(f"{suggested_words} words/group-topic")
+    issue_summary = _quality_issue_summary(section)
+    if issue_summary:
+        diagnostics.append(issue_summary)
 
     return f"{_section_label(section)} ({', '.join(diagnostics)})"
 
