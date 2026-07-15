@@ -504,7 +504,10 @@ class RunProposalCalibrationTests(unittest.TestCase):
                         "word_count": 120,
                         "min_words": 420,
                         "requirement_count": 5,
+                        "blueprint_group_count": 3,
                         "blueprint_topic_count": 7,
+                        "blueprint_requirement_id_count": 9,
+                        "suggested_words_per_structure": 140,
                     }
                 ],
             }
@@ -528,7 +531,11 @@ class RunProposalCalibrationTests(unittest.TestCase):
         )
         self.assertIn("action_key=`regenerate_quality_depth`", actions[3])
         self.assertIn("bulk `Регенерирай подробно`", actions[3])
-        self.assertIn("Environment (120/420 words)", actions[3])
+        self.assertIn(
+            "Environment (120/420 words, 3 groups, 7 topics, "
+            "9 checklist ids, 140 words/group-topic)",
+            actions[3],
+        )
 
     def test_render_manifest_json_exposes_structured_gates_and_actions(self):
         readiness = {
@@ -573,7 +580,10 @@ class RunProposalCalibrationTests(unittest.TestCase):
                     "word_count": 120,
                     "min_words": 420,
                     "requirement_count": 5,
+                    "blueprint_group_count": 3,
                     "blueprint_topic_count": 7,
+                    "blueprint_requirement_id_count": 9,
+                    "suggested_words_per_structure": 140,
                 },
                 {
                     "section_uid": "sec-safety",
@@ -581,7 +591,10 @@ class RunProposalCalibrationTests(unittest.TestCase):
                     "word_count": 90,
                     "min_words": 360,
                     "requirement_count": 4,
+                    "blueprint_group_count": 2,
                     "blueprint_topic_count": 5,
+                    "blueprint_requirement_id_count": 8,
+                    "suggested_words_per_structure": 120,
                 }
             ],
         }
@@ -699,6 +712,16 @@ class RunProposalCalibrationTests(unittest.TestCase):
                 "section_uids": ["sec-environment", "sec-safety"],
                 "section_title_hints": ["Environment", "Safety"],
             },
+        )
+        self.assertIn(
+            "Environment (120/420 words, 3 groups, 7 topics, "
+            "9 checklist ids, 140 words/group-topic)",
+            manifest["readiness_actions"][3]["section_labels"],
+        )
+        self.assertIn(
+            "Safety (90/360 words, 2 groups, 5 topics, 8 checklist ids, "
+            "120 words/group-topic)",
+            manifest["readiness_actions"][3]["summary"],
         )
         self.assertEqual(manifest["gap_priority_rows"][0]["focus"], "drafting depth")
         self.assertEqual(

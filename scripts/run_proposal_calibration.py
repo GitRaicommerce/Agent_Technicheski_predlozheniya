@@ -468,6 +468,29 @@ def _missing_requirement_label(section: dict[str, Any]) -> str:
     return f"{_section_label(section)} ({missing_count} missing{reason_summary})"
 
 
+def _quality_section_label(section: dict[str, Any]) -> str:
+    word_count = int(section.get("word_count") or 0)
+    min_words = int(section.get("min_words") or 0)
+    diagnostics = [f"{word_count}/{min_words} words"]
+
+    blueprint_groups = int(section.get("blueprint_group_count") or 0)
+    blueprint_topics = int(section.get("blueprint_topic_count") or 0)
+    blueprint_requirement_ids = int(
+        section.get("blueprint_requirement_id_count") or 0
+    )
+    suggested_words = int(section.get("suggested_words_per_structure") or 0)
+    if blueprint_groups:
+        diagnostics.append(f"{blueprint_groups} groups")
+    if blueprint_topics:
+        diagnostics.append(f"{blueprint_topics} topics")
+    if blueprint_requirement_ids:
+        diagnostics.append(f"{blueprint_requirement_ids} checklist ids")
+    if suggested_words:
+        diagnostics.append(f"{suggested_words} words/group-topic")
+
+    return f"{_section_label(section)} ({', '.join(diagnostics)})"
+
+
 def _missing_requirement_reason_counts(
     sections: list[dict[str, Any]],
 ) -> dict[str, int]:
@@ -562,14 +585,7 @@ def readiness_priority_actions(readiness: dict[str, Any] | None) -> list[str]:
             ),
             reverse=True,
         )
-        labels = [
-            (
-                f"{_section_label(item)} "
-                f"({int(item.get('word_count') or 0)}/"
-                f"{int(item.get('min_words') or 0)} words)"
-            )
-            for item in quality_sections
-        ]
+        labels = [_quality_section_label(item) for item in quality_sections]
         actions.append(
             "`shallow_sections` action_key=`regenerate_quality_depth`: използвайте Generations bulk `Регенерирай подробно` "
             "за по-развит разказ, контроли, записи, роли и последователност - "
@@ -703,14 +719,9 @@ def structured_readiness_priority_actions(
             ),
             reverse=True,
         )
-        labels = [
-            (
-                f"{_section_label(item)} "
-                f"({int(item.get('word_count') or 0)}/"
-                f"{int(item.get('min_words') or 0)} words)"
-            )
-            for item in quality_sections
-        ] or [f"{quality_count} shallow/depth-blocked sections"]
+        labels = [_quality_section_label(item) for item in quality_sections] or [
+            f"{quality_count} shallow/depth-blocked sections"
+        ]
         action = {
             "blocker_code": "shallow_sections",
             "action_key": READINESS_ACTION_KEYS["shallow_sections"],
