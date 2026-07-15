@@ -700,6 +700,7 @@ describe("GenerationsPanel", () => {
               { code: "uneven_blueprint_distribution" },
               { code: "repetitive_content" },
               { code: "weak_operational_detail" },
+              { code: "incomplete_operational_contract" },
             ],
           },
         ]}
@@ -760,6 +761,8 @@ describe("GenerationsPanel", () => {
       .toHaveTextContent("повтарящ се текст");
     expect(screen.getByTestId("generation-quality-depth-sec-quality"))
       .toHaveTextContent("слаба оперативна конкретика");
+    expect(screen.getByTestId("generation-quality-depth-sec-quality"))
+      .toHaveTextContent("непълен оперативен отговор");
   });
 
   it("focuses the attention filter when requested by export remediation", async () => {

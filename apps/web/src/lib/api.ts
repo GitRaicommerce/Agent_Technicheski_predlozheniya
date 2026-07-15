@@ -395,6 +395,12 @@ export interface ExportQualitySection {
       required_terms?: number;
     }>;
   };
+  operational_contract_coverage?: {
+    covered_count?: number;
+    required_count?: number;
+    covered?: Record<string, string[]>;
+    missing?: string[];
+  };
   issues?: Array<Record<string, unknown>>;
 }
 

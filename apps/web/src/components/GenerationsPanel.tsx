@@ -1114,6 +1114,7 @@ function qualityIssueLabels(detail: ExportQualitySection): string[] {
     uneven_blueprint_distribution: "неравномерно покритие на темите",
     repetitive_content: "повтарящ се текст",
     weak_operational_detail: "слаба оперативна конкретика",
+    incomplete_operational_contract: "непълен оперативен отговор",
   };
   const issues = Array.isArray(detail.issues) ? detail.issues : [];
   return [
