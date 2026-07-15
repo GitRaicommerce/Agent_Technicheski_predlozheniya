@@ -1113,6 +1113,7 @@ function qualityIssueLabels(detail: ExportQualitySection): string[] {
     too_few_developed_sentences: "малко развити изречения",
     uneven_blueprint_distribution: "неравномерно покритие на темите",
     repetitive_content: "повтарящ се текст",
+    weak_operational_detail: "слаба оперативна конкретика",
   };
   const issues = Array.isArray(detail.issues) ? detail.issues : [];
   return [

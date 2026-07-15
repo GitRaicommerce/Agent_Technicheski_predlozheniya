@@ -699,6 +699,7 @@ describe("GenerationsPanel", () => {
               { code: "too_few_developed_sentences" },
               { code: "uneven_blueprint_distribution" },
               { code: "repetitive_content" },
+              { code: "weak_operational_detail" },
             ],
           },
         ]}
@@ -757,6 +758,8 @@ describe("GenerationsPanel", () => {
       .toHaveTextContent("неравномерно покритие на темите");
     expect(screen.getByTestId("generation-quality-depth-sec-quality"))
       .toHaveTextContent("повтарящ се текст");
+    expect(screen.getByTestId("generation-quality-depth-sec-quality"))
+      .toHaveTextContent("слаба оперативна конкретика");
   });
 
   it("focuses the attention filter when requested by export remediation", async () => {

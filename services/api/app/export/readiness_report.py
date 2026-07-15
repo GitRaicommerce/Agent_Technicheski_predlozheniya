@@ -28,6 +28,7 @@ def _issue_label(code: str) -> str:
         "too_few_developed_sentences": "малко развити изречения",
         "uneven_blueprint_distribution": "липсващо покритие на blueprint групи/теми",
         "repetitive_content": "повтарящ се/паднат текст",
+        "weak_operational_detail": "слаба оперативна конкретика",
     }
     return labels.get(code, code)
 

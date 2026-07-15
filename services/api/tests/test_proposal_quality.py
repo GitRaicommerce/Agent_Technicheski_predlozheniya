@@ -280,6 +280,41 @@ def test_generation_depth_rejects_long_text_with_uneven_blueprint_distribution()
     assert balanced["structure_coverage"]["covered_count"] == 4
 
 
+def test_generation_depth_rejects_long_anchor_rich_text_without_operational_detail():
+    coverage = {
+        "total": 4,
+        "covered": 4,
+        "missing": 0,
+        "missing_ids": [],
+    }
+    weak_sentences = []
+    for cycle in range(25):
+        for topic in ["dust", "waste", "soil", "water"]:
+            weak_sentences.append(
+                "The "
+                f"{topic} topic is presented in conceptual layer {cycle + 1} "
+                "with background, principles, general approach, context, "
+                "importance, assumptions, scope, and expected positive effect. "
+            )
+
+    result = assess_generation_depth(
+        "".join(weak_sentences),
+        coverage,
+        drafting_blueprint=_environment_topic_blueprint(),
+    )
+
+    assert result["word_count"] >= result["min_words"]
+    assert result["sentence_count"] >= result["min_sentences"]
+    assert result["structure_coverage"]["covered_count"] == 4
+    assert "weak_operational_detail" in {
+        issue["code"] for issue in result["issues"]
+    }
+    issue = next(
+        item for item in result["issues"] if item["code"] == "weak_operational_detail"
+    )
+    assert issue["operational_signal_count"] < issue["min_operational_signal_count"]
+
+
 def test_generation_depth_requires_enough_terms_for_multi_word_blueprint_anchors():
     coverage = {
         "total": 4,

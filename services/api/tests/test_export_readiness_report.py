@@ -112,6 +112,7 @@ def test_render_export_readiness_report_includes_blockers_and_actions():
                         {"code": "too_short_for_requirements"},
                         {"code": "uneven_blueprint_distribution"},
                         {"code": "repetitive_content"},
+                        {"code": "weak_operational_detail"},
                     ],
                 }
             ],
@@ -143,6 +144,7 @@ def test_render_export_readiness_report_includes_blockers_and_actions():
     assert "твърде кратко за свързаните изисквания (`too_short_for_requirements`)" in report
     assert "липсващо покритие на blueprint групи/теми (`uneven_blueprint_distribution`)" in report
     assert "повтарящ се/паднат текст (`repetitive_content`)" in report
+    assert "слаба оперативна конкретика (`weak_operational_detail`)" in report
     assert "structure coverage: 1/3 required (4 detected groups/topics)" in report
     assert (
         "missing groups/topics: waste segregation (1/2 terms: waste), "

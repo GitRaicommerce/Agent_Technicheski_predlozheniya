@@ -13,6 +13,49 @@ BLUEPRINT_BASE_MIN_WORDS = 260
 MIN_WORDS_PER_BLUEPRINT_GROUP = 220
 MAX_BLUEPRINT_MIN_WORDS = 2400
 MIN_UNIQUE_SENTENCE_RATIO = 0.45
+OPERATIONAL_SIGNAL_TERMS = {
+    "acceptance",
+    "action",
+    "actions",
+    "approval",
+    "control",
+    "controls",
+    "coordination",
+    "corrective",
+    "document",
+    "documents",
+    "evidence",
+    "escalation",
+    "inspection",
+    "monitoring",
+    "owner",
+    "protocol",
+    "record",
+    "records",
+    "reporting",
+    "responsible",
+    "role",
+    "roles",
+    "sequence",
+    "timing",
+    "\u0434\u0435\u0439\u0441\u0442\u0432",
+    "\u0434\u043e\u043a\u0430\u0437\u0430\u0442",
+    "\u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442",
+    "\u0435\u0441\u043a\u0430\u043b\u0430\u0446",
+    "\u0437\u0430\u043f\u0438\u0441",
+    "\u043a\u043e\u043d\u0442\u0440\u043e\u043b",
+    "\u043a\u043e\u043e\u0440\u0434\u0438\u043d\u0430\u0446",
+    "\u043a\u043e\u0440\u0435\u043a\u0442",
+    "\u043c\u043e\u043d\u0438\u0442\u043e\u0440",
+    "\u043e\u0434\u043e\u0431\u0440",
+    "\u043e\u0442\u0433\u043e\u0432\u043e\u0440",
+    "\u043e\u0442\u0447\u0435\u0442",
+    "\u043f\u043e\u0441\u043b\u0435\u0434\u043e\u0432",
+    "\u043f\u0440\u0438\u0435\u043c",
+    "\u043f\u0440\u043e\u0432\u0435\u0440",
+    "\u043f\u0440\u043e\u0442\u043e\u043a\u043e\u043b",
+    "\u0440\u043e\u043b",
+}
 STRUCTURE_ANCHOR_STOP_WORDS = {
     "category",
     "group",
@@ -47,6 +90,13 @@ def _tokens(text: str) -> list[str]:
         for token in re.findall(r"[0-9A-Za-z\u0400-\u04FF]+", str(text or "").lower())
         if len(token) >= 4 and token not in STRUCTURE_ANCHOR_STOP_WORDS
     ]
+
+
+def _operational_signal_matches(text: str) -> list[str]:
+    normalized = str(text or "").lower()
+    return sorted(
+        signal for signal in OPERATIONAL_SIGNAL_TERMS if signal in normalized
+    )
 
 
 def _sentence_count(text: str) -> int:
@@ -360,6 +410,39 @@ def assess_generation_depth(
                 "blueprint_anchor_count": structure_coverage["anchor_count"],
                 "missing_structure_labels": [
                     item["label"] for item in structure_coverage["missing"]
+                ],
+            }
+        )
+
+    min_operational_signals = min(
+        6,
+        max(3, ceil(max(requirement_count, blueprint_structure_count) * 0.7)),
+    )
+    operational_signals = _operational_signal_matches(text)
+    if (
+        (requirement_count > 1 or blueprint_structure_count > 1)
+        and word_count >= min_words
+        and sentence_count >= min_sentences
+        and len(operational_signals) < min_operational_signals
+    ):
+        issues.append(
+            {
+                "code": "weak_operational_detail",
+                "message": (
+                    "Generated text reaches the length target but lacks enough "
+                    "concrete operational detail such as roles, controls, records, "
+                    "monitoring, acceptance evidence, sequence, or corrective actions."
+                ),
+                "operational_signal_count": len(operational_signals),
+                "min_operational_signal_count": min_operational_signals,
+                "matched_operational_signals": operational_signals,
+                "expected_operational_signal_examples": [
+                    "responsible role",
+                    "control record",
+                    "monitoring evidence",
+                    "acceptance criterion",
+                    "reporting sequence",
+                    "corrective action",
                 ],
             }
         )
