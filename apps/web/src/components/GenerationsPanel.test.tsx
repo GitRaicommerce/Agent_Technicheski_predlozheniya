@@ -235,6 +235,12 @@ describe("GenerationsPanel", () => {
 
     render(<GenerationsPanel projectId="project-1" />);
 
+    expect(
+      await screen.findByTestId(
+        "generation-duplicate-selected-badge-sec-duplicate",
+      ),
+    ).toHaveTextContent("2 избрани");
+
     await userEvent.click(
       await screen.findByRole("button", { name: /Duplicate Section/i }),
     );
@@ -243,7 +249,7 @@ describe("GenerationsPanel", () => {
       await screen.findByTestId(
         "generation-duplicate-selected-warning-sec-duplicate",
       ),
-    ).toHaveTextContent("2 selected variants");
+    ).toHaveTextContent("2 избрани варианта");
 
     await userEvent.click(await screen.findByTestId("generation-select-gen-2"));
 

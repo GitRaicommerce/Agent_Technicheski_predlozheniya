@@ -205,7 +205,7 @@ export default function GenerationsPanel({
       setError(
         e instanceof Error
           ? e.message
-          : "Duplicate generation selection failed.",
+          : "Неуспешно разрешаване на дублираните избрани генерации.",
       );
     } finally {
       setResolvingDuplicateSelections(false);
@@ -369,9 +369,9 @@ export default function GenerationsPanel({
                   <span
                     data-testid={`generation-duplicate-selected-badge-${section.section_uid}`}
                     className="rounded bg-red-100 px-1.5 py-0.5 text-[11px] font-medium text-red-700"
-                    title="Multiple selected variants"
+                    title="Няколко избрани варианта"
                   >
-                    {selectedVariants.length} selected
+                    {selectedVariants.length} избрани
                   </span>
                 )}
                 {attention.hasStaleSelected && (
@@ -674,8 +674,8 @@ function GenerationVariantSelector({
           data-testid={`generation-duplicate-selected-warning-${sectionUid}`}
           className="rounded border border-red-200 bg-red-50 px-2.5 py-2 text-xs text-red-700"
         >
-          This section has {selectedCount} selected variants. Choose one to make
-          DOCX export unambiguous.
+          Тази секция има {selectedCount} избрани варианта. Изберете един, за
+          да бъде DOCX export-ът еднозначен.
         </div>
       )}
       <div className="space-y-1">

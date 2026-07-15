@@ -193,6 +193,7 @@
 - Localized the Generations panel missing-requirements remediation UI, including the coverage-regeneration action and per-requirement repair label, so export blocker resolution stays Bulgarian-first.
 - Localized the remaining Generations panel remediation actions for stale selected sections and shallow/depth-blocked sections, keeping the export-blocker repair flow consistently Bulgarian-first.
 - Fixed mojibake quality/depth issue labels in the Generations panel and added regression coverage for all exported depth-blocker reason labels, so remediation diagnostics remain readable in Bulgarian.
+- Localized duplicate-selected remediation warnings, badges, and fallback errors in the Generations panel, so ambiguous selected variants are explained consistently in Bulgarian before DOCX export.
 
 ## Active Goals
 
