@@ -255,6 +255,10 @@ def summarize_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
             action_execution_summary,
             "section_label_counts",
         ),
+        "action_execution_operational_signal_counts": _summary_count_map(
+            action_execution_summary,
+            "operational_detail_missing_signal_counts",
+        ),
         "executed_action_count": _int_value(
             _executed_action_count(action_execution_summary)
             if isinstance(action_execution_summary, dict)
@@ -624,6 +628,36 @@ def render_comparison(before_manifest: dict[str, Any], after_manifest: dict[str,
             f"{_format_delta(before_count, after_count)} |"
         )
     if not label_rows_added:
+        lines.append("| n/a | 0 | 0 | +0 |")
+
+    lines.extend(
+        [
+            "",
+            "## Action execution operational signal deltas",
+            "",
+            "| Signal | Before | After | Delta |",
+            "| --- | ---: | ---: | ---: |",
+        ]
+    )
+    action_signal_rows_added = False
+    for signal in _sorted_keys(
+        before["action_execution_operational_signal_counts"],
+        after["action_execution_operational_signal_counts"],
+    ):
+        before_count = before["action_execution_operational_signal_counts"].get(
+            signal,
+            0,
+        )
+        after_count = after["action_execution_operational_signal_counts"].get(
+            signal,
+            0,
+        )
+        action_signal_rows_added = True
+        lines.append(
+            f"| {_escape_md_cell(signal)} | {before_count} | {after_count} | "
+            f"{_format_delta(before_count, after_count)} |"
+        )
+    if not action_signal_rows_added:
         lines.append("| n/a | 0 | 0 | +0 |")
 
     lines.extend(

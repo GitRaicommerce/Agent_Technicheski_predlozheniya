@@ -330,6 +330,36 @@ class CompareCalibrationManifestsTests(unittest.TestCase):
             text,
         )
 
+    def test_render_comparison_shows_action_execution_operational_signal_deltas(self):
+        before = manifest(
+            action_execution_summary={
+                "operational_detail_missing_signal_counts": {
+                    "record": 2,
+                    "monitoring": 1,
+                },
+            },
+        )
+        after = manifest(
+            action_execution_summary={
+                "operational_detail_missing_signal_counts": {
+                    "record": 1,
+                    "corrective": 1,
+                },
+            },
+        )
+
+        summary = summarize_manifest(before)
+        text = render_comparison(before, after)
+
+        self.assertEqual(
+            summary["action_execution_operational_signal_counts"],
+            {"record": 2, "monitoring": 1},
+        )
+        self.assertIn("## Action execution operational signal deltas", text)
+        self.assertIn("| corrective | 0 | 1 | +1 |", text)
+        self.assertIn("| monitoring | 1 | 0 | -1 |", text)
+        self.assertIn("| record | 2 | 1 | -1 |", text)
+
     def test_render_comparison_shows_action_target_deltas(self):
         before = manifest(
             readiness_actions=[
