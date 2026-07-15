@@ -195,6 +195,7 @@
 - Fixed mojibake quality/depth issue labels in the Generations panel and added regression coverage for all exported depth-blocker reason labels, so remediation diagnostics remain readable in Bulgarian.
 - Localized duplicate-selected remediation warnings, badges, and fallback errors in the Generations panel, so ambiguous selected variants are explained consistently in Bulgarian before DOCX export.
 - Localized DOCX readiness Markdown diagnostics for missing-requirement reasons and quality/depth issue labels while preserving the original machine codes in backticks, making calibration reports readable for Bulgarian review without breaking automation.
+- Localized calibration manifest remediation UI labels and Markdown action guidance for stale, missing-requirement, quality/depth, and outline-mapping actions while preserving stable action keys for automation.
 
 ## Active Goals
 

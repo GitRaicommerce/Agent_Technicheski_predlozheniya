@@ -204,7 +204,7 @@ class RunProposalCalibrationTests(unittest.TestCase):
             manifest,
         )
         self.assertIn(
-            "Gap `outline mapping` ui_action=`Review outline mapping`: "
+            "Gap `outline mapping` ui_action=`Прегледай outline mapping`: "
             "regenerate/reference-align",
             manifest,
         )
@@ -401,7 +401,7 @@ class RunProposalCalibrationTests(unittest.TestCase):
         )
 
         self.assertEqual(rows[0]["action_key"], "regenerate_quality_depth")
-        self.assertEqual(rows[0]["ui_action"], "Regenerate detailed")
+        self.assertEqual(rows[0]["ui_action"], "Регенерирай подробно")
         self.assertEqual(
             rows[0]["api_path"],
             "/api/v1/agents/project-1/remediation-actions/regenerate_quality_depth",
@@ -417,7 +417,7 @@ class RunProposalCalibrationTests(unittest.TestCase):
             rows[1]["action_key"],
             "regenerate_missing_requirements",
         )
-        self.assertEqual(rows[1]["ui_action"], "Regenerate coverage")
+        self.assertEqual(rows[1]["ui_action"], "Регенерирай покритието")
         self.assertEqual(
             rows[1]["api_path"],
             "/api/v1/agents/project-1/remediation-actions/regenerate_missing_requirements",
@@ -428,7 +428,7 @@ class RunProposalCalibrationTests(unittest.TestCase):
         )
         self.assertNotIn("action_key", rows[2])
         self.assertNotIn("api_path", rows[2])
-        self.assertEqual(rows[2]["ui_action"], "Review outline mapping")
+        self.assertEqual(rows[2]["ui_action"], "Прегледай outline mapping")
 
     def test_generated_section_uid_map_reads_snapshot_metadata(self):
         mapping = generated_section_uid_map(
@@ -515,10 +515,10 @@ class RunProposalCalibrationTests(unittest.TestCase):
         self.assertIn("`Остави най-новите`", actions[0])
         self.assertIn("Organization", actions[0])
         self.assertIn("action_key=`regenerate_stale`", actions[1])
-        self.assertIn("bulk `Regenerate`", actions[1])
+        self.assertIn("bulk `Регенерирай`", actions[1])
         self.assertIn("Schedule", actions[1])
         self.assertIn("action_key=`regenerate_missing_requirements`", actions[2])
-        self.assertIn("bulk `Regenerate coverage`", actions[2])
+        self.assertIn("bulk `Регенерирай покритието`", actions[2])
         self.assertIn(
             (
                 "Quality (3 missing; missing distinctive requirement detail, "
@@ -527,7 +527,7 @@ class RunProposalCalibrationTests(unittest.TestCase):
             actions[2],
         )
         self.assertIn("action_key=`regenerate_quality_depth`", actions[3])
-        self.assertIn("bulk `Regenerate detailed`", actions[3])
+        self.assertIn("bulk `Регенерирай подробно`", actions[3])
         self.assertIn("Environment (120/420 words)", actions[3])
 
     def test_render_manifest_json_exposes_structured_gates_and_actions(self):
@@ -655,7 +655,7 @@ class RunProposalCalibrationTests(unittest.TestCase):
         )
         self.assertEqual(
             manifest["readiness_actions"][2]["ui_action"],
-            "Regenerate coverage",
+            "Регенерирай покритието",
         )
         self.assertEqual(manifest["readiness_actions"][0]["api_method"], "POST")
         self.assertEqual(

@@ -46,9 +46,9 @@ GAP_FOCUS_ACTION_KEYS = {
     ],
 }
 GAP_FOCUS_UI_ACTIONS = {
-    "drafting depth": "Regenerate detailed",
-    "grounding and checklist coverage": "Regenerate coverage",
-    "outline mapping": "Review outline mapping",
+    "drafting depth": "Регенерирай подробно",
+    "grounding and checklist coverage": "Регенерирай покритието",
+    "outline mapping": "Прегледай outline mapping",
 }
 
 
@@ -527,8 +527,8 @@ def readiness_priority_actions(readiness: dict[str, Any] | None) -> list[str]:
     if stale_sections:
         labels = [_section_label(item) for item in stale_sections]
         actions.append(
-            "`stale_evidence` action_key=`regenerate_stale`: use Generations bulk `Regenerate` for selected "
-            "stale sections with fresh evidence - "
+            "`stale_evidence` action_key=`regenerate_stale`: използвайте Generations bulk `Регенерирай` за избраните "
+            "stale секции с обновени доказателства - "
             + _summarize_labels(labels)
         )
 
@@ -544,8 +544,8 @@ def readiness_priority_actions(readiness: dict[str, Any] | None) -> list[str]:
         )
         labels = [_missing_requirement_label(item) for item in missing_sections]
         actions.append(
-            "`missing_requirements` action_key=`regenerate_missing_requirements`: use Generations bulk `Regenerate coverage` "
-            "to rewrite selected sections with explicit checklist coverage - "
+            "`missing_requirements` action_key=`regenerate_missing_requirements`: използвайте Generations bulk `Регенерирай покритието` "
+            "за пренаписване на избраните секции с явно checklist покритие - "
             + _summarize_labels(labels)
         )
 
@@ -571,8 +571,8 @@ def readiness_priority_actions(readiness: dict[str, Any] | None) -> list[str]:
             for item in quality_sections
         ]
         actions.append(
-            "`shallow_sections` action_key=`regenerate_quality_depth`: use Generations bulk `Regenerate detailed` "
-            "for deeper narrative, controls, records, roles, and sequencing - "
+            "`shallow_sections` action_key=`regenerate_quality_depth`: използвайте Generations bulk `Регенерирай подробно` "
+            "за по-развит разказ, контроли, записи, роли и последователност - "
             + _summarize_labels(labels)
         )
 
@@ -641,7 +641,7 @@ def structured_readiness_priority_actions(
                     project_id,
                     READINESS_ACTION_KEYS["stale_evidence"],
                 ),
-                "ui_action": "Regenerate",
+                "ui_action": "Регенерирай",
                 "section_count": stale_count,
                 "section_labels": labels,
                 "summary": _summarize_labels(labels),
@@ -673,7 +673,7 @@ def structured_readiness_priority_actions(
                 project_id,
                 READINESS_ACTION_KEYS["missing_requirements"],
             ),
-            "ui_action": "Regenerate coverage",
+            "ui_action": "Регенерирай покритието",
             "section_count": missing_count,
             "section_labels": labels,
             "summary": _summarize_labels(labels),
@@ -719,7 +719,7 @@ def structured_readiness_priority_actions(
                 project_id,
                 READINESS_ACTION_KEYS["shallow_sections"],
             ),
-            "ui_action": "Regenerate detailed",
+            "ui_action": "Регенерирай подробно",
             "section_count": quality_count,
             "section_labels": labels,
             "summary": _summarize_labels(labels),
