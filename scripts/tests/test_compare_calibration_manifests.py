@@ -251,6 +251,39 @@ class CompareCalibrationManifestsTests(unittest.TestCase):
             text,
         )
 
+    def test_render_comparison_shows_action_execution_section_label_deltas(self):
+        before = manifest(
+            action_execution_summary={
+                "section_label_counts": {
+                    "Quality (120/420 words, 3 groups)": 1,
+                },
+            },
+        )
+        after = manifest(
+            action_execution_summary={
+                "section_label_counts": {
+                    "Quality (420/420 words, 3 groups)": 1,
+                    "Environment (360/360 words, 2 groups)": 1,
+                },
+            },
+        )
+
+        text = render_comparison(before, after)
+
+        self.assertIn("## Action execution section label deltas", text)
+        self.assertIn(
+            "| Quality (120/420 words, 3 groups) | 1 | 0 | -1 |",
+            text,
+        )
+        self.assertIn(
+            "| Quality (420/420 words, 3 groups) | 0 | 1 | +1 |",
+            text,
+        )
+        self.assertIn(
+            "| Environment (360/360 words, 2 groups) | 0 | 1 | +1 |",
+            text,
+        )
+
     def test_render_comparison_shows_action_target_deltas(self):
         before = manifest(
             readiness_actions=[

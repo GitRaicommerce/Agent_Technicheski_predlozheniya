@@ -1101,6 +1101,32 @@ class RunProposalCalibrationTests(unittest.TestCase):
                             "gap_priority_rows": [
                                 {"action_key": "regenerate_quality_depth"}
                             ],
+                            "action_execution_summary": {
+                                "section_label_counts": {
+                                    "Quality (120/420 words, 3 groups)": 1,
+                                },
+                            },
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+                action_report = Path(tmp) / "calibration_action_execution.json"
+                action_report.write_text(
+                    json.dumps(
+                        {
+                            "schema_version": "calibration_action_execution.v1",
+                            "total_actions": 1,
+                            "executed_actions": 1,
+                            "status_counts": {"done": 1},
+                            "ready_for_bundle": True,
+                            "actions": [
+                                {
+                                    "action_key": "regenerate_quality_depth",
+                                    "section_labels": [
+                                        "Quality (420/420 words, 3 groups)",
+                                    ],
+                                }
+                            ],
                         }
                     ),
                     encoding="utf-8",
@@ -1113,11 +1139,21 @@ class RunProposalCalibrationTests(unittest.TestCase):
                         out_dir=Path(tmp) / "bundle",
                         tenders=[],
                         previous_manifest=previous_manifest,
+                        action_reports=[action_report],
                     )
                 )
 
                 comparison = paths["comparison"].read_text(encoding="utf-8")
                 self.assertIn("Calibration manifest comparison", comparison)
+                self.assertIn("## Action execution section label deltas", comparison)
+                self.assertIn(
+                    "| Quality (120/420 words, 3 groups) | 1 | 0 | -1 |",
+                    comparison,
+                )
+                self.assertIn(
+                    "| Quality (420/420 words, 3 groups) | 0 | 1 | +1 |",
+                    comparison,
+                )
                 self.assertIn(
                     "| readiness blockers | 3 | 0 | -3 | improved |",
                     comparison,

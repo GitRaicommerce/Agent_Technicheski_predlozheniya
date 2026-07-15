@@ -126,6 +126,19 @@ def _missing_reason_counts(rows: list[Any]) -> dict[str, int]:
     return counts
 
 
+def _summary_count_map(summary: Any, key: str) -> dict[str, int]:
+    if not isinstance(summary, dict):
+        return {}
+    raw_counts = summary.get(key) or {}
+    if not isinstance(raw_counts, dict):
+        return {}
+    return {
+        str(label): _int_value(count)
+        for label, count in raw_counts.items()
+        if str(label).strip()
+    }
+
+
 def _status_counts(value: Any) -> dict[str, int]:
     if not isinstance(value, dict):
         return {}
@@ -215,6 +228,10 @@ def summarize_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
         "gap_action_target_counts": _action_target_counts(gap_rows),
         "missing_requirement_reason_counts": _missing_reason_counts(
             readiness_actions
+        ),
+        "action_execution_section_label_counts": _summary_count_map(
+            action_execution_summary,
+            "section_label_counts",
         ),
         "executed_action_count": _int_value(
             _executed_action_count(action_execution_summary)
@@ -493,6 +510,30 @@ def render_comparison(before_manifest: dict[str, Any], after_manifest: dict[str,
             f"{_format_delta(before_count, after_count)} |"
         )
     if not reason_rows_added:
+        lines.append("| n/a | 0 | 0 | +0 |")
+
+    lines.extend(
+        [
+            "",
+            "## Action execution section label deltas",
+            "",
+            "| Section label | Before | After | Delta |",
+            "| --- | ---: | ---: | ---: |",
+        ]
+    )
+    label_rows_added = False
+    for label in _sorted_keys(
+        before["action_execution_section_label_counts"],
+        after["action_execution_section_label_counts"],
+    ):
+        before_count = before["action_execution_section_label_counts"].get(label, 0)
+        after_count = after["action_execution_section_label_counts"].get(label, 0)
+        label_rows_added = True
+        lines.append(
+            f"| {_escape_md_cell(label)} | {before_count} | {after_count} | "
+            f"{_format_delta(before_count, after_count)} |"
+        )
+    if not label_rows_added:
         lines.append("| n/a | 0 | 0 | +0 |")
 
     lines.extend(
