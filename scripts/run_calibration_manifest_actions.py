@@ -372,6 +372,38 @@ def action_target_summary(action: ManifestAction) -> str:
     return ""
 
 
+def guidance_summary(request_json: dict[str, Any] | None) -> str:
+    if not isinstance(request_json, dict) or not request_json:
+        return ""
+
+    parts: list[str] = []
+    gap_reasons = [
+        str(item).strip()
+        for item in request_json.get("gap_reasons") or []
+        if str(item).strip()
+    ]
+    if gap_reasons:
+        parts.append("reasons=" + ", ".join(gap_reasons[:6]))
+        if len(gap_reasons) > 6:
+            parts.append(f"+{len(gap_reasons) - 6} more reasons")
+    reference_section = str(request_json.get("reference_section") or "").strip()
+    if reference_section:
+        parts.append(f"reference={reference_section}")
+    generated_section = str(request_json.get("generated_section") or "").strip()
+    if generated_section:
+        parts.append(f"generated={generated_section}")
+    operational_signals = [
+        str(item).strip()
+        for item in request_json.get("operational_detail_missing_signals") or []
+        if str(item).strip()
+    ]
+    if operational_signals:
+        parts.append("signals=" + ", ".join(operational_signals[:8]))
+        if len(operational_signals) > 8:
+            parts.append(f"+{len(operational_signals) - 8} more signals")
+    return "; ".join(parts)
+
+
 def missing_reason_summary(action: ManifestAction) -> str:
     if not action.missing_reason_counts:
         return ""
@@ -440,6 +472,7 @@ def action_execution_record(
         ),
         "request_json": action.request_json or {},
         "target_summary": action_target_summary(action),
+        "guidance_summary": guidance_summary(action.request_json),
         "executed": executed,
         "final_status": final_status,
         "action_result": action_result,
@@ -525,8 +558,8 @@ def render_execution_report_markdown(records: list[dict[str, Any]]) -> str:
         f"- Has unexecuted actions: `{'yes' if summary['has_unexecuted_actions'] else 'no'}`",
         f"- Recommendation: {summary['recommendation']}",
         "",
-        "| Action key | Source | Executed | Final status | Sections | Targets | Section labels | Missing reasons | Operational signals | Summary |",
-        "| --- | --- | --- | --- | ---: | --- | --- | --- | --- | --- |",
+        "| Action key | Source | Executed | Final status | Sections | Targets | Guidance | Section labels | Missing reasons | Operational signals | Summary |",
+        "| --- | --- | --- | --- | ---: | --- | --- | --- | --- | --- | --- |",
     ]
     for record in records:
         lines.append(
@@ -539,6 +572,7 @@ def render_execution_report_markdown(records: list[dict[str, Any]]) -> str:
                     str(record.get("final_status") or "unknown"),
                     str(record.get("section_count") or 0),
                     str(record.get("target_summary") or "").replace("|", "\\|"),
+                    str(record.get("guidance_summary") or "").replace("|", "\\|"),
                     str(record.get("section_label_summary") or "").replace(
                         "|",
                         "\\|",

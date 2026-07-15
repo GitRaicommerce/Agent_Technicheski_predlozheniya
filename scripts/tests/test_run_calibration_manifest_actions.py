@@ -25,6 +25,7 @@ action_url = manifest_actions_module.action_url
 execute_action = manifest_actions_module.execute_action
 job_result_from_action_response = manifest_actions_module.job_result_from_action_response
 job_status_url = manifest_actions_module.job_status_url
+guidance_summary = manifest_actions_module.guidance_summary
 load_manifest = manifest_actions_module.load_manifest
 main = manifest_actions_module.main
 manifest_actions = manifest_actions_module.manifest_actions
@@ -454,6 +455,27 @@ class CalibrationManifestActionTests(unittest.TestCase):
             ),
         )
 
+    def test_guidance_summary_lists_calibration_gap_context(self):
+        self.assertEqual(
+            guidance_summary(
+                {
+                    "gap_reasons": ["too short", "weak operational detail"],
+                    "reference_section": "Quality reference",
+                    "generated_section": "Quality generated",
+                    "operational_detail_missing_signals": [
+                        "record",
+                        "monitoring",
+                    ],
+                }
+            ),
+            (
+                "reasons=too short, weak operational detail; "
+                "reference=Quality reference; "
+                "generated=Quality generated; "
+                "signals=record, monitoring"
+            ),
+        )
+
     def test_action_target_summary_falls_back_to_legacy_section_summary(self):
         action = ManifestAction(
             action_key="regenerate_stale",
@@ -561,6 +583,13 @@ class CalibrationManifestActionTests(unittest.TestCase):
             request_json={
                 "section_uids": ["sec-a"],
                 "section_title_hints": ["Section A"],
+                "gap_reasons": ["too short", "weak operational detail"],
+                "reference_section": "Quality reference",
+                "generated_section": "Section A",
+                "operational_detail_missing_signals": [
+                    "record",
+                    "monitoring",
+                ],
             },
         )
         planned = action_execution_record(
@@ -593,6 +622,14 @@ class CalibrationManifestActionTests(unittest.TestCase):
         self.assertEqual(
             payload["actions"][0]["target_summary"],
             "uids=sec-a; titles=Section A",
+        )
+        self.assertEqual(
+            payload["actions"][0]["guidance_summary"],
+            (
+                "reasons=too short, weak operational detail; "
+                "reference=Quality reference; generated=Section A; "
+                "signals=record, monitoring"
+            ),
         )
         self.assertEqual(
             payload["actions"][0]["section_labels"],
@@ -638,6 +675,9 @@ class CalibrationManifestActionTests(unittest.TestCase):
         self.assertIn(
             "| regenerate_stale | readiness_actions | no | planned | 2 | "
             "uids=sec-a; titles=Section A | "
+            "reasons=too short, weak operational detail; "
+            "reference=Quality reference; generated=Section A; "
+            "signals=record, monitoring | "
             "Section A (120/420 words, 3 groups, 7 topics); "
             "Section B (95/360 words, 2 groups, 4 topics) | "
             "missing distinctive requirement detail=2; needs execution action=1; "
