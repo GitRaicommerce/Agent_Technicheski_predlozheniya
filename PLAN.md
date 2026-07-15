@@ -185,6 +185,7 @@
 - Tightened operational requirement coverage with an active execution-action check, so text that merely repeats terms such as protocol, record, evidence, or corrective action no longer passes unless it also says who performs/keeps/documents/monitors/applies the work; the diagnostic now flows through export readiness reports, targeted regeneration guidance, drafting repair prompts, and common-scenario regressions.
 - Surfaced active execution-action diagnostics in the web UI, so DOCX export warnings and the Generations remediation panel show when a missing requirement needs concrete execution verbs in addition to operational evidence.
 - Added script-level calibration regressions proving `needs execution action` reason counts are preserved through calibration manifests, Markdown summaries, and action execution reports.
+- Added calibration-manifest comparison regression coverage for `needs execution action` before/after deltas, so remediation cycles can prove whether this specific blocker type decreases after regeneration.
 
 ## Active Goals
 

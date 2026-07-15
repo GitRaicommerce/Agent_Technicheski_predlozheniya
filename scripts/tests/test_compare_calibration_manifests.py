@@ -155,6 +155,7 @@ class CompareCalibrationManifestsTests(unittest.TestCase):
                         "action_key": "regenerate_missing_requirements",
                         "missing_reason_counts": {
                             "missing distinctive requirement detail": 2,
+                            "needs execution action": 1,
                             "needs operational evidence": 1,
                         },
                         "request_json": {
@@ -187,6 +188,7 @@ class CompareCalibrationManifestsTests(unittest.TestCase):
             summary["missing_requirement_reason_counts"],
             {
                 "missing distinctive requirement detail": 2,
+                "needs execution action": 1,
                 "needs operational evidence": 1,
             },
         )
@@ -207,6 +209,7 @@ class CompareCalibrationManifestsTests(unittest.TestCase):
                     "action_key": "regenerate_missing_requirements",
                     "missing_reason_counts": {
                         "missing distinctive requirement detail": 2,
+                        "needs execution action": 1,
                         "needs operational evidence": 1,
                     },
                     "request_json": {
@@ -229,6 +232,7 @@ class CompareCalibrationManifestsTests(unittest.TestCase):
                     "missing_reason_counts": {
                         "missing distinctive requirement detail": 1,
                         "needs coherent passage": 1,
+                        "needs execution action": 0,
                     },
                     "request_json": {
                         "section_uids": ["sec-environment"],
@@ -276,6 +280,7 @@ class CompareCalibrationManifestsTests(unittest.TestCase):
             text,
         )
         self.assertIn("| needs coherent passage | 0 | 1 | +1 |", text)
+        self.assertIn("| needs execution action | 1 | 0 | -1 |", text)
         self.assertIn("| needs operational evidence | 1 | 0 | -1 |", text)
 
     def test_render_comparison_shows_legacy_summary_action_targets(self):
