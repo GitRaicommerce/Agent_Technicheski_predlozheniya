@@ -218,6 +218,7 @@
 - Passed calibration gap reasons and missing operational-detail signals from gap-priority quality/depth actions into targeted drafting guidance, so reference-comparison findings become concrete regeneration instructions instead of report-only diagnostics.
 - Surfaced calibration gap guidance in action execution JSON/Markdown reports, so dry-run and executed remediation evidence shows gap reasons plus reference/generated section context without requiring manual payload inspection.
 - Structured calibration gap context now flows through targeted quality regeneration into the drafting prompt, including gap reasons, reference/generated section context, missing operational-detail signals, and expected regeneration outcomes for any calibrated project.
+- Re-ran the Pernik calibration remediation cycle in non-mutating `--actions-only --all` dry-run mode against the stored manifest; it planned `resolve_duplicate_selected` and `regenerate_stale` for 14 sections each, produced planned-level action reports under `local_analysis/`, and correctly kept `ready_for_bundle=false` until real `--execute --wait` proof exists.
 
 ## Active Goals
 
@@ -228,8 +229,8 @@
 
 ## Next Recommended Steps
 
-1. Use `scripts/run_calibration_remediation_cycle.py --actions-only` against the Pernik manifest to validate the planned remediation actions and reports without rebuilding the bundle; then use `--execute --wait --require-action-ready` or the Generations bulk duplicate resolver to clear Pernik's legacy duplicate selected generations.
-2. Use the calibration remediation cycle script with `--execute --wait` or Generations panel bulk stale-regeneration action for Pernik after duplicate selections are resolved; then use the bulk missing-requirements and quality/depth regeneration actions for any remaining requirement-coverage or blueprint-aware shallow sections reported by export preflight or gap-priority diagnostics.
+1. Use `scripts/run_calibration_remediation_cycle.py --execute --wait --require-action-ready` with explicit `--action-key resolve_duplicate_selected` or the Generations bulk duplicate resolver to clear Pernik's legacy duplicate selected generations; the latest dry-run already confirms the planned action path and target counts.
+2. Use the calibration remediation cycle script with `--execute --wait --action-key regenerate_stale` or Generations panel bulk stale-regeneration action for Pernik after duplicate selections are resolved; then use the bulk missing-requirements and quality/depth regeneration actions for any remaining requirement-coverage or blueprint-aware shallow sections reported by export preflight or gap-priority diagnostics.
 3. After resolving Pernik's duplicate selected variants and stale selected sections, regenerate affected sections so the section structure plan and iterative drafting quality-repair pass can improve subtopic coverage, checklist coverage, and depth before export readiness is checked again.
 4. Re-run the Pernik calibration bundle after remediation with `--action-report` and compare the regenerated output against the winning proposal, focusing on the manifest word-volume scorecard, section-level drafting-depth diagnostics, executed remediation evidence, execution-status deltas, and action target deltas in the before/after calibration manifest comparison report.
 5. Expand generated documentation with more precise backend endpoint and workflow coverage.
