@@ -186,6 +186,7 @@
 - Surfaced active execution-action diagnostics in the web UI, so DOCX export warnings and the Generations remediation panel show when a missing requirement needs concrete execution verbs in addition to operational evidence.
 - Added script-level calibration regressions proving `needs execution action` reason counts are preserved through calibration manifests, Markdown summaries, and action execution reports.
 - Added calibration-manifest comparison regression coverage for `needs execution action` before/after deltas, so remediation cycles can prove whether this specific blocker type decreases after regeneration.
+- Added Bulgarian operational-coverage regression for active execution verbs such as assigning, executing, keeping records, and documenting corrective actions, so Bulgarian technical proposal text is not penalized by the stricter execution-action gate.
 
 ## Active Goals
 

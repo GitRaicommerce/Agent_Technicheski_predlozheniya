@@ -209,6 +209,76 @@ def test_requirement_coverage_requires_active_execution_for_operational_details(
     assert len(active_execution["items"][0]["operational_execution_signals"]) >= 1
 
 
+def test_requirement_coverage_accepts_bulgarian_active_execution_verbs():
+    requirement_text = (
+        "\u041e\u043f\u0438\u0448\u0435\u0442\u0435 "
+        "\u043a\u043e\u043d\u0442\u0440\u043e\u043b \u043d\u0430 "
+        "\u043a\u0430\u0447\u0435\u0441\u0442\u0432\u043e\u0442\u043e, "
+        "\u043f\u0440\u043e\u0442\u043e\u043a\u043e\u043b "
+        "\u0437\u0430 \u043f\u0440\u0438\u0435\u043c\u0430\u043d\u0435, "
+        "\u043e\u0442\u0433\u043e\u0432\u043e\u0440\u043d\u0430 "
+        "\u0440\u043e\u043b\u044f \u0438 "
+        "\u043a\u043e\u0440\u0438\u0433\u0438\u0440\u0430\u0449\u0438 "
+        "\u0434\u0435\u0439\u0441\u0442\u0432\u0438\u044f."
+    )
+    items = normalize_requirement_items(
+        [
+            {
+                "id": "req-bg-quality-actions",
+                "text": requirement_text,
+                "importance": "mandatory",
+                "category": "quality",
+                "category_label": "\u041a\u043e\u043d\u0442\u0440\u043e\u043b "
+                "\u043d\u0430 \u043a\u0430\u0447\u0435\u0441\u0442\u0432\u043e\u0442\u043e",
+            }
+        ]
+    )
+
+    keyword_only = assess_requirement_coverage(
+        (
+            "\u041f\u0440\u0435\u0434\u043b\u043e\u0436\u0435\u043d\u0438\u0435\u0442\u043e "
+            "\u043e\u043f\u0438\u0441\u0432\u0430 "
+            "\u043a\u043e\u043d\u0442\u0440\u043e\u043b \u043d\u0430 "
+            "\u043a\u0430\u0447\u0435\u0441\u0442\u0432\u043e\u0442\u043e, "
+            "\u043f\u0440\u043e\u0442\u043e\u043a\u043e\u043b "
+            "\u0437\u0430 \u043f\u0440\u0438\u0435\u043c\u0430\u043d\u0435, "
+            "\u043e\u0442\u0433\u043e\u0432\u043e\u0440\u043d\u0430 "
+            "\u0440\u043e\u043b\u044f \u0438 "
+            "\u043a\u043e\u0440\u0438\u0433\u0438\u0440\u0430\u0449\u0438 "
+            "\u0434\u0435\u0439\u0441\u0442\u0432\u0438\u044f."
+        ),
+        items,
+    )
+    active_execution = assess_requirement_coverage(
+        (
+            "\u0418\u0437\u043f\u044a\u043b\u043d\u0438\u0442\u0435\u043b\u044f\u0442 "
+            "\u0432\u044a\u0437\u043b\u0430\u0433\u0430 "
+            "\u043e\u0442\u0433\u043e\u0432\u043e\u0440\u043d\u0430 "
+            "\u0440\u043e\u043b\u044f, "
+            "\u0438\u0437\u043f\u044a\u043b\u043d\u044f\u0432\u0430 "
+            "\u043a\u043e\u043d\u0442\u0440\u043e\u043b \u043d\u0430 "
+            "\u043a\u0430\u0447\u0435\u0441\u0442\u0432\u043e\u0442\u043e, "
+            "\u0432\u043e\u0434\u0438 "
+            "\u043f\u0440\u043e\u0442\u043e\u043a\u043e\u043b "
+            "\u0437\u0430 \u043f\u0440\u0438\u0435\u043c\u0430\u043d\u0435 "
+            "\u0438 \u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442\u0438\u0440\u0430 "
+            "\u043a\u043e\u0440\u0438\u0433\u0438\u0440\u0430\u0449\u0438\u0442\u0435 "
+            "\u0434\u0435\u0439\u0441\u0442\u0432\u0438\u044f."
+        ),
+        items,
+    )
+
+    assert keyword_only["missing_ids"] == ["req-bg-quality-actions"]
+    assert len(keyword_only["items"][0]["operational_signals"]) >= 2
+    assert keyword_only["items"][0]["operational_execution_signals"] == []
+    assert active_execution["covered_ids"] == ["req-bg-quality-actions"]
+    assert {
+        "\u0432\u044a\u0437\u043b\u0430\u0433",
+        "\u0432\u043e\u0434\u0438",
+        "\u0438\u0437\u043f\u044a\u043b\u043d",
+    } & set(active_execution["items"][0]["operational_execution_signals"])
+
+
 def test_requirement_coverage_keeps_similar_operational_requirements_separate():
     items = normalize_requirement_items(
         [
