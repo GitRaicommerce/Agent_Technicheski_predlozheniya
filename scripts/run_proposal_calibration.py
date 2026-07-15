@@ -4,6 +4,7 @@ import argparse
 import asyncio
 import json
 import re
+import shutil
 import sys
 from pathlib import Path
 from typing import Any
@@ -614,8 +615,14 @@ def readiness_priority_actions(readiness: dict[str, Any] | None) -> list[str]:
         for item in readiness.get("duplicate_selected_sections") or []
         if isinstance(item, dict)
     ]
-    if duplicate_sections:
-        labels = [_section_label(item) for item in duplicate_sections]
+    duplicate_count = len(duplicate_sections) or _blocker_count(
+        readiness,
+        "duplicate_selected",
+    )
+    if duplicate_count:
+        labels = [_section_label(item) for item in duplicate_sections] or [
+            f"{duplicate_count} duplicate selected sections"
+        ]
         actions.append(
             "`duplicate_selected` action_key=`resolve_duplicate_selected`: use Generations attention action "
             "`Остави най-новите` or manually keep one selected variant before "
@@ -634,8 +641,11 @@ def readiness_priority_actions(readiness: dict[str, Any] | None) -> list[str]:
             for item in readiness.get("stale_sections") or []
             if item is not None
         ]
-    if stale_sections:
-        labels = [_section_label(item) for item in stale_sections]
+    stale_count = len(stale_sections) or _blocker_count(readiness, "stale_evidence")
+    if stale_count:
+        labels = [_section_label(item) for item in stale_sections] or [
+            f"{stale_count} stale selected sections"
+        ]
         actions.append(
             "`stale_evidence` action_key=`regenerate_stale`: използвайте Generations bulk `Регенерирай` за избраните "
             "stale секции с обновени доказателства - "
@@ -647,12 +657,18 @@ def readiness_priority_actions(readiness: dict[str, Any] | None) -> list[str]:
         for item in readiness.get("missing_requirement_sections") or []
         if isinstance(item, dict)
     ]
-    if missing_sections:
+    missing_count = len(missing_sections) or _blocker_count(
+        readiness,
+        "missing_requirements",
+    )
+    if missing_count:
         missing_sections.sort(
             key=lambda item: int(item.get("missing_count") or 0),
             reverse=True,
         )
-        labels = [_missing_requirement_label(item) for item in missing_sections]
+        labels = [_missing_requirement_label(item) for item in missing_sections] or [
+            f"{missing_count} sections with missing requirements"
+        ]
         actions.append(
             "`missing_requirements` action_key=`regenerate_missing_requirements`: използвайте Generations bulk `Регенерирай покритието` "
             "за пренаписване на избраните секции с явно checklist покритие - "
@@ -664,7 +680,11 @@ def readiness_priority_actions(readiness: dict[str, Any] | None) -> list[str]:
         for item in readiness.get("quality_sections") or []
         if isinstance(item, dict)
     ]
-    if quality_sections:
+    quality_count = len(quality_sections) or _blocker_count(
+        readiness,
+        "shallow_sections",
+    )
+    if quality_count:
         quality_sections.sort(
             key=lambda item: (
                 int(item.get("requirement_count") or 0),
@@ -672,7 +692,9 @@ def readiness_priority_actions(readiness: dict[str, Any] | None) -> list[str]:
             ),
             reverse=True,
         )
-        labels = [_quality_section_label(item) for item in quality_sections]
+        labels = [_quality_section_label(item) for item in quality_sections] or [
+            f"{quality_count} shallow/quality sections"
+        ]
         actions.append(
             "`shallow_sections` action_key=`regenerate_quality_depth`: използвайте Generations bulk `Регенерирай подробно` "
             "за по-развит разказ, контроли, записи, роли и последователност - "
@@ -1210,6 +1232,35 @@ async def export_readiness_report_markdown(
         return readiness
 
 
+def load_offline_readiness(manifest_path: Path | None) -> dict[str, Any]:
+    if not manifest_path:
+        return {
+            "status": "unknown",
+            "blockers": [],
+            "offline_source": "snapshot_inputs_without_readiness_manifest",
+        }
+
+    manifest = load_comparison_manifest(manifest_path)
+    gates = manifest.get("calibration_gates")
+    if not isinstance(gates, dict):
+        return {
+            "status": "unknown",
+            "blockers": [],
+            "offline_source": str(manifest_path),
+        }
+
+    blockers = [
+        item
+        for item in gates.get("blockers") or []
+        if isinstance(item, dict)
+    ]
+    return {
+        "status": str(gates.get("docx_readiness_status") or "unknown"),
+        "blockers": blockers,
+        "offline_source": str(manifest_path),
+    }
+
+
 async def run_calibration_bundle(
     *,
     project_id: str,
@@ -1218,35 +1269,56 @@ async def run_calibration_bundle(
     tenders: list[Path],
     previous_manifest: Path | None = None,
     action_reports: list[Path] | None = None,
+    selected_snapshot: Path | None = None,
+    effective_snapshot: Path | None = None,
+    readiness_report: Path | None = None,
+    offline_readiness_manifest: Path | None = None,
 ) -> dict[str, Path]:
     paths = calibration_output_paths(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    project_name, outline_sections, selected_generations = await load_snapshot(project_id)
-    paths["selected_snapshot"].write_text(
-        render_selected_proposal_markdown(
-            project_name=project_name,
-            project_id=project_id,
-            outline_sections=outline_sections,
-            selected_generations=selected_generations,
-        ),
-        encoding="utf-8",
-    )
-    effective_generations = newest_generation_per_section(selected_generations)
-    paths["effective_snapshot"].write_text(
-        render_selected_proposal_markdown(
-            project_name=project_name,
-            project_id=project_id,
-            outline_sections=outline_sections,
-            selected_generations=effective_generations,
-            snapshot_mode="effective-newest-selected-per-section",
-        ),
-        encoding="utf-8",
-    )
-    readiness = await export_readiness_report_markdown(
-        project_id,
-        paths["readiness_report"],
-    )
+    offline_inputs = [selected_snapshot, effective_snapshot, readiness_report]
+    if any(offline_inputs) and not all(offline_inputs):
+        raise ValueError(
+            "Offline calibration requires --selected-snapshot, "
+            "--effective-snapshot, and --readiness-report together."
+        )
+
+    if selected_snapshot and effective_snapshot and readiness_report:
+        shutil.copyfile(selected_snapshot, paths["selected_snapshot"])
+        shutil.copyfile(effective_snapshot, paths["effective_snapshot"])
+        shutil.copyfile(readiness_report, paths["readiness_report"])
+        readiness = load_offline_readiness(
+            offline_readiness_manifest or previous_manifest
+        )
+    else:
+        project_name, outline_sections, selected_generations = await load_snapshot(
+            project_id
+        )
+        paths["selected_snapshot"].write_text(
+            render_selected_proposal_markdown(
+                project_name=project_name,
+                project_id=project_id,
+                outline_sections=outline_sections,
+                selected_generations=selected_generations,
+            ),
+            encoding="utf-8",
+        )
+        effective_generations = newest_generation_per_section(selected_generations)
+        paths["effective_snapshot"].write_text(
+            render_selected_proposal_markdown(
+                project_name=project_name,
+                project_id=project_id,
+                outline_sections=outline_sections,
+                selected_generations=effective_generations,
+                snapshot_mode="effective-newest-selected-per-section",
+            ),
+            encoding="utf-8",
+        )
+        readiness = await export_readiness_report_markdown(
+            project_id,
+            paths["readiness_report"],
+        )
 
     reference_text = extract_text(reference)
     selected_text = extract_text(paths["selected_snapshot"])
@@ -1365,6 +1437,38 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
             "Can be passed multiple times."
         ),
     )
+    parser.add_argument(
+        "--selected-snapshot",
+        type=Path,
+        help=(
+            "Existing selected_proposal_snapshot.md to reuse in offline mode. "
+            "Requires --effective-snapshot and --readiness-report."
+        ),
+    )
+    parser.add_argument(
+        "--effective-snapshot",
+        type=Path,
+        help=(
+            "Existing effective_proposal_snapshot.md to reuse in offline mode. "
+            "Requires --selected-snapshot and --readiness-report."
+        ),
+    )
+    parser.add_argument(
+        "--readiness-report",
+        type=Path,
+        help=(
+            "Existing docx_readiness_report.md to reuse in offline mode. "
+            "Requires --selected-snapshot and --effective-snapshot."
+        ),
+    )
+    parser.add_argument(
+        "--offline-readiness-manifest",
+        type=Path,
+        help=(
+            "Optional calibration_manifest.json whose readiness gates should be "
+            "used when running with offline snapshot inputs."
+        ),
+    )
     return parser.parse_args(argv)
 
 
@@ -1378,6 +1482,10 @@ def main(argv: list[str]) -> int:
             tenders=args.tender,
             previous_manifest=args.previous_manifest,
             action_reports=args.action_report,
+            selected_snapshot=args.selected_snapshot,
+            effective_snapshot=args.effective_snapshot,
+            readiness_report=args.readiness_report,
+            offline_readiness_manifest=args.offline_readiness_manifest,
         )
     )
     print(f"Wrote {paths['manifest']}")

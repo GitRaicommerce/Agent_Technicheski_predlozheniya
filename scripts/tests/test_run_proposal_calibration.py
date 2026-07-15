@@ -27,6 +27,7 @@ generated_section_uid_map = calibration.generated_section_uid_map
 action_execution_summary = calibration.action_execution_summary
 enrich_gap_priority_rows = calibration.enrich_gap_priority_rows
 load_action_execution_reports = calibration.load_action_execution_reports
+load_offline_readiness = calibration.load_offline_readiness
 readiness_priority_actions = calibration.readiness_priority_actions
 render_manifest = calibration.render_manifest
 render_manifest_json = calibration.render_manifest_json
@@ -67,6 +68,126 @@ class RunProposalCalibrationTests(unittest.TestCase):
         self.assertEqual(
             paths["comparison"],
             Path("analysis/pernik/calibration_manifest_comparison.md"),
+        )
+
+    def test_load_offline_readiness_reads_manifest_gates(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            manifest_path = Path(tmp) / "calibration_manifest.json"
+            manifest_path.write_text(
+                json.dumps(
+                    {
+                        "calibration_gates": {
+                            "docx_readiness_status": "blocked",
+                            "blockers": [
+                                {
+                                    "code": "stale_evidence",
+                                    "count": 2,
+                                    "message": "stale",
+                                }
+                            ],
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            readiness = load_offline_readiness(manifest_path)
+
+        self.assertEqual(readiness["status"], "blocked")
+        self.assertEqual(readiness["blockers"][0]["code"], "stale_evidence")
+
+    def test_run_calibration_bundle_uses_offline_snapshots_without_api(self):
+        original_load_snapshot = calibration.load_snapshot
+        original_export_readiness = calibration.export_readiness_report_markdown
+
+        async def fail_load_snapshot(project_id):
+            raise AssertionError("offline mode must not load the database snapshot")
+
+        async def fail_export_readiness(project_id, out_path):
+            raise AssertionError("offline mode must not call export readiness API")
+
+        calibration.load_snapshot = fail_load_snapshot
+        calibration.export_readiness_report_markdown = fail_export_readiness
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                reference = root / "reference.md"
+                selected_snapshot = root / "selected.md"
+                effective_snapshot = root / "effective.md"
+                readiness_report = root / "readiness.md"
+                readiness_manifest = root / "readiness_manifest.json"
+                out_dir = root / "bundle"
+
+                reference.write_text(
+                    "# Quality\n\nThe reference explains quality control, "
+                    "protocol records, responsible role, acceptance, and "
+                    "sequence.",
+                    encoding="utf-8",
+                )
+                selected_snapshot.write_text(
+                    "# Selected\n\n<!-- Snapshot Warnings: duplicate selected -->",
+                    encoding="utf-8",
+                )
+                effective_snapshot.write_text(
+                    "# Quality\n\n<!-- generation_id=gen-1; section_uid=sec-quality; variant=1 -->\n\n"
+                    "The generated proposal mentions quality control.",
+                    encoding="utf-8",
+                )
+                readiness_report.write_text(
+                    "# DOCX export readiness report\n\nBlocked.",
+                    encoding="utf-8",
+                )
+                readiness_manifest.write_text(
+                    json.dumps(
+                        {
+                            "schema_version": "calibration_manifest.v1",
+                            "calibration_gates": {
+                                "docx_readiness_status": "blocked",
+                                "blockers": [
+                                    {
+                                        "code": "shallow_sections",
+                                        "count": 1,
+                                        "message": "quality depth",
+                                    }
+                                ],
+                            },
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+
+                paths = asyncio.run(
+                    run_calibration_bundle(
+                        project_id="project-1",
+                        reference=reference,
+                        out_dir=out_dir,
+                        tenders=[],
+                        selected_snapshot=selected_snapshot,
+                        effective_snapshot=effective_snapshot,
+                        readiness_report=readiness_report,
+                        offline_readiness_manifest=readiness_manifest,
+                    )
+                )
+
+                manifest = json.loads(
+                    paths["manifest_json"].read_text(encoding="utf-8")
+                )
+
+        finally:
+            calibration.load_snapshot = original_load_snapshot
+            calibration.export_readiness_report_markdown = original_export_readiness
+
+        self.assertEqual(
+            manifest["calibration_gates"]["docx_readiness_status"],
+            "blocked",
+        )
+        self.assertEqual(
+            manifest["calibration_gates"]["blockers"][0]["code"],
+            "shallow_sections",
+        )
+        self.assertEqual(
+            manifest["readiness_actions"][0]["action_key"],
+            "regenerate_quality_depth",
         )
 
     def test_render_manifest_lists_bundle_files_and_review_order(self):
@@ -628,6 +749,24 @@ class RunProposalCalibrationTests(unittest.TestCase):
             "issues: weak_operational_detail, uneven_blueprint_distribution)",
             actions[3],
         )
+
+    def test_readiness_priority_actions_use_blocker_counts_without_section_details(self):
+        actions = readiness_priority_actions(
+            {
+                "blockers": [
+                    {"code": "duplicate_selected", "count": 3},
+                    {"code": "stale_evidence", "count": 2},
+                    {"code": "missing_requirements", "count": 1},
+                    {"code": "shallow_sections", "count": 4},
+                ]
+            }
+        )
+
+        self.assertEqual(len(actions), 4)
+        self.assertIn("3 duplicate selected sections", actions[0])
+        self.assertIn("2 stale selected sections", actions[1])
+        self.assertIn("1 sections with missing requirements", actions[2])
+        self.assertIn("4 shallow/quality sections", actions[3])
 
     def test_render_manifest_json_exposes_structured_gates_and_actions(self):
         readiness = {
