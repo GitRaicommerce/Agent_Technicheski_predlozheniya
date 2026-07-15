@@ -584,8 +584,10 @@ function MissingRequirementsRegenerationAction({
     >
       <div className="flex items-center justify-between gap-2">
         <span>
-          {missingRequirementSectionCount} missing-requirement{" "}
-          {missingRequirementSectionCount === 1 ? "section" : "sections"}
+          {missingRequirementSectionCount}{" "}
+          {missingRequirementSectionCount === 1
+            ? "секция с непокрити изисквания"
+            : "секции с непокрити изисквания"}
         </span>
         <button
           type="button"
@@ -594,7 +596,7 @@ function MissingRequirementsRegenerationAction({
           data-testid="generation-missing-requirements-regenerate-button"
           className="shrink-0 rounded border border-amber-300 bg-white px-2 py-1 font-medium text-amber-800 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {regenerating ? "..." : "Regenerate coverage"}
+          {regenerating ? "..." : "Регенерирай покритието"}
         </button>
       </div>
     </div>
@@ -1299,7 +1301,7 @@ function RequirementCoverageDetails({
               ) : null}
               {item.remediation_guidance ? (
                 <p className="mt-0.5 text-[11px] font-medium text-amber-800">
-                  Repair: {repairLikelyMojibake(item.remediation_guidance)}
+                  Поправка: {repairLikelyMojibake(item.remediation_guidance)}
                 </p>
               ) : null}
             </li>

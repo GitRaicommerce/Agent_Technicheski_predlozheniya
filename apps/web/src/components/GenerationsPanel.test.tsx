@@ -169,7 +169,7 @@ describe("GenerationsPanel", () => {
     ).toBeInTheDocument();
     expect(
       screen.getByText(
-        "Repair: Regenerate or edit this section with final acceptance and handover details.",
+        "Поправка: Regenerate or edit this section with final acceptance and handover details.",
       ),
     ).toBeInTheDocument();
   });
@@ -978,7 +978,9 @@ describe("GenerationsPanel", () => {
     render(<GenerationsPanel projectId="project-1" />);
 
     expect(await screen.findByTestId("generation-missing-requirements-action"))
-      .toHaveTextContent("1 missing-requirement section");
+      .toHaveTextContent("1 секция с непокрити изисквания");
+    expect(screen.getByTestId("generation-missing-requirements-regenerate-button"))
+      .toHaveTextContent("Регенерирай покритието");
 
     await userEvent.click(
       screen.getByTestId("generation-missing-requirements-regenerate-button"),
