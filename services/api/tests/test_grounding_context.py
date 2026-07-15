@@ -64,6 +64,45 @@ def test_quality_repair_feedback_names_missing_distinctive_requirement_details()
     assert "make it distinct from similar checklist items" in feedback
 
 
+def test_quality_repair_feedback_names_weak_operational_detail_diagnostics():
+    feedback = _quality_repair_feedback(
+        requirement_coverage={"items": []},
+        depth_assessment={
+            "word_count": 1800,
+            "min_words": 1400,
+            "sentence_count": 18,
+            "min_sentences": 8,
+            "suggested_words_per_structure": 350,
+            "issues": [
+                {
+                    "code": "weak_operational_detail",
+                    "message": (
+                        "Generated text reaches the length target but lacks "
+                        "enough concrete operational detail."
+                    ),
+                    "operational_signal_count": 2,
+                    "min_operational_signal_count": 5,
+                    "matched_operational_signals": ["control", "record"],
+                    "expected_operational_signal_examples": [
+                        "responsible role",
+                        "monitoring evidence",
+                        "acceptance criterion",
+                        "reporting sequence",
+                        "corrective action",
+                    ],
+                }
+            ],
+        },
+    )
+
+    assert "weak_operational_detail" in feedback
+    assert "Operational detail signals: 2/5 matched" in feedback
+    assert "Already present signals: control, record" in feedback
+    assert "responsible role" in feedback
+    assert "monitoring evidence" in feedback
+    assert "corrective action" in feedback
+
+
 def test_section_drafting_guidance_names_distinctive_requirement_diagnostics():
     guidance = _format_section_drafting_guidance(
         {

@@ -242,6 +242,33 @@ def _quality_repair_feedback(
         lines.append("Depth diagnostics:")
         for issue in depth_issues:
             lines.append(f"- {issue.get('code')}: {issue.get('message')}")
+            if issue.get("code") == "weak_operational_detail":
+                matched_signals = [
+                    str(signal)
+                    for signal in issue.get("matched_operational_signals") or []
+                    if signal
+                ]
+                examples = [
+                    str(example)
+                    for example in issue.get("expected_operational_signal_examples")
+                    or []
+                    if example
+                ]
+                lines.append(
+                    "  Operational detail signals: "
+                    f"{issue.get('operational_signal_count', 0)}/"
+                    f"{issue.get('min_operational_signal_count', 0)} matched"
+                )
+                if matched_signals:
+                    lines.append(
+                        "  Already present signals: "
+                        + ", ".join(matched_signals[:12])
+                    )
+                if examples:
+                    lines.append(
+                        "  Add concrete operational evidence such as: "
+                        + ", ".join(examples[:8])
+                    )
         lines.append(
             "- Current/minimum words: "
             f"{depth_assessment.get('word_count')}/"
