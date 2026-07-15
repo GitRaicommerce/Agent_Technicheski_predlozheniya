@@ -1240,3 +1240,78 @@ def test_common_uncategorized_operational_requirement_still_needs_evidence():
     assert keyword_only["items"][0]["operational_execution_signals"] == []
     assert developed["covered_ids"] == ["req-legacy-quality-record"]
     assert len(developed["items"][0]["operational_execution_signals"]) >= 1
+
+
+def test_common_operational_categories_require_active_execution_evidence():
+    category_cases = [
+        (
+            "quality",
+            "Quality control",
+            "Describe quality control protocol, inspection record, corrective action, and responsible role.",
+            "For quality control protocol and inspection record, the contractor assigns a responsible role, keeps evidence, monitors defects, and documents corrective action.",
+        ),
+        (
+            "risk",
+            "Risk management",
+            "Describe risk register, escalation trigger, mitigation action, and responsible role.",
+            "For risk register and escalation trigger, the coordinator assigns a responsible role, monitors exposure, records mitigation action, and updates the risk evidence.",
+        ),
+        (
+            "environment",
+            "Environmental protection",
+            "Describe environmental monitoring, waste record, dust control, and responsible role.",
+            "For environmental monitoring, waste record, and dust control, the site team assigns a responsible role, monitors emissions, keeps evidence, and documents corrective action.",
+        ),
+        (
+            "safety",
+            "Health and safety",
+            "Describe safety inspection, incident record, corrective action, and responsible role.",
+            "For safety inspection and incident record, the safety officer assigns a responsible role, performs checks, keeps evidence, and documents corrective action.",
+        ),
+        (
+            "communication",
+            "Communication and coordination",
+            "Describe communication channel, reporting record, escalation path, and responsible role.",
+            "For communication channel, reporting record, and escalation path, the project manager assigns a responsible role, keeps minutes, monitors responses, and documents decisions.",
+        ),
+        (
+            "documentation",
+            "Documentation management",
+            "Describe documentation register, approval record, archive control, and responsible role.",
+            "For documentation register, approval record, and archive control, the document controller assigns a responsible role, keeps evidence, updates revisions, and documents approvals.",
+        ),
+    ]
+
+    for category, label, requirement_text, developed_text in category_cases:
+        requirement_items = [
+            {
+                "id": f"req-{category}",
+                "text": requirement_text,
+                "importance": "mandatory",
+                "category": category,
+                "category_label": label,
+            }
+        ]
+        keyword_only = assess_requirement_coverage(
+            f"The proposal describes {requirement_text.removeprefix('Describe ')}",
+            requirement_items,
+        )
+        developed = assess_requirement_coverage(developed_text, requirement_items)
+
+        readiness_section = _missing_requirement_coverage(
+            SimpleNamespace(
+                id=f"gen-{category}",
+                section_uid=f"sec-{category}",
+                flags_json={"requirement_coverage": keyword_only},
+            )
+        )
+
+        assert keyword_only["missing_ids"] == [f"req-{category}"]
+        assert keyword_only["items"][0]["requires_operational_detail"] is True
+        assert keyword_only["items"][0]["operational_execution_signals"] == []
+        assert readiness_section is not None
+        assert "needs execution action" in readiness_section["missing_items"][0][
+            "reasons"
+        ]
+        assert developed["covered_ids"] == [f"req-{category}"]
+        assert len(developed["items"][0]["operational_execution_signals"]) >= 1
