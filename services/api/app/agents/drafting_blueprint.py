@@ -67,6 +67,15 @@ DEFAULT_GUIDANCE = [
     "State action, responsible role, control, evidence record, and link to sequence or deliverable when possible.",
 ]
 
+RESPONSE_COVERAGE_CONTRACT = [
+    "action: what will be done in concrete operational terms",
+    "responsible role: who prepares, performs, checks, approves, or reports it",
+    "control point: how compliance or quality is checked during execution",
+    "evidence record: what protocol, report, log, schedule entry, approval, or deliverable proves execution",
+    "sequence link: where the response sits in the work phases, dependencies, handover, or acceptance flow",
+    "source-specific detail: which tender phrase, project part, risk, measure, institution, or deliverable makes this requirement unique",
+]
+
 BLUEPRINT_GLOBAL_INSTRUCTIONS = [
     "Use the groups below as the section's internal structure.",
     "Write Bulgarian subheadings for each relevant group unless the section title already provides a stronger tender-specific structure.",
@@ -115,6 +124,7 @@ def _response_plan_for_item(item: dict[str, Any]) -> dict[str, Any]:
             "responsible role, control point, evidence record, and link to the "
             "work sequence or deliverable when the sources support it."
         ),
+        "coverage_contract": RESPONSE_COVERAGE_CONTRACT,
     }
     if category in CATEGORY_GUIDANCE:
         plan["category_focus"] = category
@@ -293,6 +303,15 @@ def format_drafting_blueprint_for_prompt(blueprint: dict[str, Any]) -> str:
                 expected_response = _clean(response_plan.get("expected_response"))
                 if expected_response:
                     lines.append(f"     response plan: {expected_response}")
+                coverage_contract = [
+                    _clean(item)
+                    for item in response_plan.get("coverage_contract") or []
+                    if _clean(item)
+                ]
+                if coverage_contract:
+                    lines.append("     coverage contract:")
+                    for contract_item in coverage_contract:
+                        lines.append(f"       - {contract_item}")
                 category_focus = _clean(response_plan.get("category_focus"))
                 if category_focus:
                     lines.append(f"     category focus: {category_focus}")
