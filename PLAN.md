@@ -82,6 +82,7 @@
 - Added a per-requirement drafting coverage contract to the universal blueprint prompt so every checklist item asks for concrete action, responsible role, control point, evidence record, sequence link, and source-specific detail.
 - Added a pre-export quality gate for incomplete operational response contracts, blocking long but one-sided generated sections that do not visibly cover action, responsible role, control point, evidence record, and sequence link.
 - Surfaced incomplete operational response blockers in the Generations attention details with a human-readable label and typed readiness diagnostics.
+- Connected incomplete operational response blockers to targeted quality regeneration guidance so remediation jobs ask for the missing response components explicitly.
 - Expanded the local proposal gap analysis script with universal topic coverage diagnostics for organization, schedule, quality, risk, environment, communication, safety, and documentation, with a runnable script-level regression test for calibration reports.
 - Added actionable calibration recommendations to the proposal gap analysis report so missing or partial topic coverage points back to outline extraction, drafting blueprint grouping, grounding chunks, prompt specificity, and rerunning readiness plus gap analysis after regeneration.
 - Updated generated engineering documentation to include script-level regression test inventory so calibration tooling tests are visible alongside backend coverage.

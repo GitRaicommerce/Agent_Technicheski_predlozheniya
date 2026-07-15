@@ -396,27 +396,62 @@ def _quality_target_guidance(
         for issue in section.get("issues") or []:
             if not isinstance(issue, dict):
                 continue
-            if issue.get("code") != "weak_operational_detail":
-                continue
-            instructions.append(
-                "Add concrete operational detail: responsible roles, controls, "
-                "records, monitoring evidence, acceptance criteria, reporting "
-                "sequence, escalation, and corrective actions."
-            )
-            instructions.append(
-                "Operational signal diagnostics: "
-                f"{issue.get('operational_signal_count', 0)}/"
-                f"{issue.get('min_operational_signal_count', 0)} matched."
-            )
-            examples = [
-                str(example)
-                for example in issue.get("expected_operational_signal_examples") or []
-                if example
-            ]
-            if examples:
+            code = issue.get("code")
+            if code == "weak_operational_detail":
                 instructions.append(
-                    "Use examples such as: " + ", ".join(examples[:8]) + "."
+                    "Add concrete operational detail: responsible roles, controls, "
+                    "records, monitoring evidence, acceptance criteria, reporting "
+                    "sequence, escalation, and corrective actions."
                 )
+                instructions.append(
+                    "Operational signal diagnostics: "
+                    f"{issue.get('operational_signal_count', 0)}/"
+                    f"{issue.get('min_operational_signal_count', 0)} matched."
+                )
+                examples = [
+                    str(example)
+                    for example in issue.get("expected_operational_signal_examples")
+                    or []
+                    if example
+                ]
+                if examples:
+                    instructions.append(
+                        "Use examples such as: " + ", ".join(examples[:8]) + "."
+                    )
+            elif code == "incomplete_operational_contract":
+                missing_groups = [
+                    str(group)
+                    for group in issue.get("missing_contract_groups") or []
+                    if group
+                ]
+                covered_groups = [
+                    str(group)
+                    for group in issue.get("covered_contract_groups") or []
+                    if group
+                ]
+                instructions.append(
+                    "Complete the operational response contract by covering action, "
+                    "responsible role, control point, evidence record, and sequence "
+                    "link."
+                )
+                instructions.append(
+                    "Operational response contract diagnostics: "
+                    f"{issue.get('covered_contract_group_count', 0)}/"
+                    f"{issue.get('required_contract_group_count', 0)} components "
+                    "covered."
+                )
+                if covered_groups:
+                    instructions.append(
+                        "Already covered components: "
+                        + ", ".join(covered_groups[:8])
+                        + "."
+                    )
+                if missing_groups:
+                    instructions.append(
+                        "Add missing components: "
+                        + ", ".join(missing_groups[:8])
+                        + "."
+                    )
 
         if instructions:
             guidance_by_section[section_uid] = {

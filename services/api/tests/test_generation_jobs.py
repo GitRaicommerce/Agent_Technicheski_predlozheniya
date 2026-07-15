@@ -558,6 +558,20 @@ async def test_create_drafting_quality_job_targets_quality_sections(mock_db):
                                         "responsible role",
                                         "control record",
                                     ],
+                                },
+                                {
+                                    "code": "incomplete_operational_contract",
+                                    "covered_contract_group_count": 2,
+                                    "required_contract_group_count": 4,
+                                    "covered_contract_groups": [
+                                        "control_point",
+                                        "evidence_record",
+                                    ],
+                                    "missing_contract_groups": [
+                                        "action",
+                                        "responsible_role",
+                                        "sequence_link",
+                                    ],
                                 }
                             ],
                             "structure_coverage": {
@@ -584,7 +598,7 @@ async def test_create_drafting_quality_job_targets_quality_sections(mock_db):
                 "instructions": [
                     (
                         "Regenerate this section to resolve quality/depth issues: "
-                        "weak_operational_detail."
+                        "weak_operational_detail, incomplete_operational_contract."
                     ),
                     (
                         "Expand the section from 900 to at least 1400 words when "
@@ -607,6 +621,23 @@ async def test_create_drafting_quality_job_targets_quality_sections(mock_db):
                     ),
                     "Operational signal diagnostics: 2/5 matched.",
                     "Use examples such as: responsible role, control record.",
+                    (
+                        "Complete the operational response contract by covering "
+                        "action, responsible role, control point, evidence record, "
+                        "and sequence link."
+                    ),
+                    (
+                        "Operational response contract diagnostics: 2/4 components "
+                        "covered."
+                    ),
+                    (
+                        "Already covered components: control_point, "
+                        "evidence_record."
+                    ),
+                    (
+                        "Add missing components: action, responsible_role, "
+                        "sequence_link."
+                    ),
                 ]
             }
         },
