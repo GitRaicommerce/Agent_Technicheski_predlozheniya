@@ -154,6 +154,7 @@ describe("ExportButton", () => {
               id: "req-1",
               reasons: [
                 "needs operational evidence",
+                "needs execution action",
                 "needs coherent passage",
                 "missing distinctive requirement detail",
               ],
@@ -181,7 +182,7 @@ describe("ExportButton", () => {
       .toHaveTextContent("Regenerate section s1 with operational evidence.");
     expect(screen.getByTestId("export-requirement-warning"))
       .toHaveTextContent(
-        "operational evidence, coherent passage, distinctive detail",
+        "operational evidence, execution action, coherent passage, distinctive detail",
       );
 
     await userEvent.click(screen.getByRole("button", { name: "Отвори Генерации" }));

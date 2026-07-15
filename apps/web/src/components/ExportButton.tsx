@@ -425,6 +425,8 @@ function requirementReasonLabel(reason: string): string {
   switch (reason) {
     case "needs operational evidence":
       return "operational evidence";
+    case "needs execution action":
+      return "execution action";
     case "needs coherent passage":
       return "coherent passage";
     case "missing distinctive requirement detail":

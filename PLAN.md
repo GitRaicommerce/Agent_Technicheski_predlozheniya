@@ -183,6 +183,7 @@
 - Aggregated missing-requirement reason evidence from attached calibration action reports back into calibration bundle Markdown and JSON summaries, so follow-up bundles show which blocker types were actually targeted by remediation evidence.
 - Made generated-text requirement coverage infer operational-detail expectations from uncategorized requirement text and topics, so legacy or fallback checklist items about risk, quality, communication, safety, environment, or documentation cannot pass with keyword-only wording.
 - Tightened operational requirement coverage with an active execution-action check, so text that merely repeats terms such as protocol, record, evidence, or corrective action no longer passes unless it also says who performs/keeps/documents/monitors/applies the work; the diagnostic now flows through export readiness reports, targeted regeneration guidance, drafting repair prompts, and common-scenario regressions.
+- Surfaced active execution-action diagnostics in the web UI, so DOCX export warnings and the Generations remediation panel show when a missing requirement needs concrete execution verbs in addition to operational evidence.
 
 ## Active Goals
 

@@ -1158,6 +1158,9 @@ function requirementCoverageReasonLabel(item: RequirementCoverageItem): string |
   if (reason === "needs operational evidence") {
     return "липсват оперативни доказателства";
   }
+  if (reason === "needs execution action") {
+    return "липсва изпълнителско действие";
+  }
   if (reason === "needs coherent passage") {
     return "липсва свързан пасаж";
   }
@@ -1202,6 +1205,14 @@ function requirementCoverageDiagnostics(item: RequirementCoverageItem): string |
   ) {
     diagnostics.push(
       `оперативни сигнали ${(item.operational_signals ?? []).length}/${item.required_operational_signal_count}`,
+    );
+  }
+  if (
+    typeof item.required_operational_execution_signal_count === "number" &&
+    item.required_operational_execution_signal_count > 0
+  ) {
+    diagnostics.push(
+      `изпълнителски действия ${(item.operational_execution_signals ?? []).length}/${item.required_operational_execution_signal_count}`,
     );
   }
   if (

@@ -278,8 +278,10 @@ export interface RequirementCoverageItem {
   required_distinctive_count?: number;
   required_coherent_match_count?: number;
   operational_signals?: string[];
+  operational_execution_signals?: string[];
   requires_operational_detail?: boolean;
   required_operational_signal_count?: number;
+  required_operational_execution_signal_count?: number;
   reason?: string;
   reasons?: string[];
   remediation_guidance?: string;

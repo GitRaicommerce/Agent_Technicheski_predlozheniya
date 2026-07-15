@@ -121,12 +121,15 @@ describe("GenerationsPanel", () => {
                     reason: "missing distinctive requirement detail",
                     reasons: [
                       "missing distinctive requirement detail",
+                      "needs execution action",
                       "needs coherent passage",
                     ],
                     matched_ratio: 0.8,
                     coherent_matched_ratio: 0.75,
                     operational_signals: ["record"],
+                    operational_execution_signals: [],
                     required_operational_signal_count: 2,
+                    required_operational_execution_signal_count: 1,
                     distinctive_terms: ["final", "acceptance", "handover"],
                     distinctive_matches: [],
                     required_distinctive_count: 1,
@@ -157,9 +160,11 @@ describe("GenerationsPanel", () => {
     expect(screen.getByText(/Missing requirement/)).toBeInTheDocument();
     expect(screen.getByText("липсва отличителен детайл"))
       .toBeInTheDocument();
+    expect(screen.getByText("липсва изпълнителско действие"))
+      .toBeInTheDocument();
     expect(
       screen.getByText(
-        "термини 80% · свързаност 75% · оперативни сигнали 1/2 · отличителни детайли 0/1 · отличаващи: final, acceptance, handover",
+        "термини 80% · свързаност 75% · оперативни сигнали 1/2 · изпълнителски действия 0/1 · отличителни детайли 0/1 · отличаващи: final, acceptance, handover",
       ),
     ).toBeInTheDocument();
     expect(
