@@ -279,6 +279,71 @@ def test_requirement_coverage_accepts_bulgarian_active_execution_verbs():
     } & set(active_execution["items"][0]["operational_execution_signals"])
 
 
+def test_requirement_coverage_accepts_common_bulgarian_execution_stems():
+    requirement_text = (
+        "\u041e\u043f\u0438\u0448\u0435\u0442\u0435 "
+        "\u043f\u0440\u043e\u0432\u0435\u0440\u043a\u0430, "
+        "\u043a\u043e\u043d\u0442\u0440\u043e\u043b, "
+        "\u043f\u0440\u043e\u0442\u043e\u043a\u043e\u043b, "
+        "\u043c\u0435\u0440\u043a\u0438 \u0437\u0430 "
+        "\u0431\u0435\u0437\u043e\u043f\u0430\u0441\u043d\u043e\u0441\u0442 "
+        "\u0438 \u0434\u043e\u043a\u0430\u0437\u0430\u0442\u0435\u043b\u0441\u0442\u0432\u0430."
+    )
+    items = normalize_requirement_items(
+        [
+            {
+                "id": "req-bg-safety-checks",
+                "text": requirement_text,
+                "importance": "mandatory",
+                "category": "safety",
+                "category_label": "\u0411\u0435\u0437\u043e\u043f\u0430\u0441\u043d\u043e\u0441\u0442",
+            }
+        ]
+    )
+
+    keyword_only = assess_requirement_coverage(
+        (
+            "\u0422\u0435\u043a\u0441\u0442\u044a\u0442 "
+            "\u0441\u044a\u0434\u044a\u0440\u0436\u0430 "
+            "\u043f\u0440\u043e\u0432\u0435\u0440\u043a\u0430, "
+            "\u043a\u043e\u043d\u0442\u0440\u043e\u043b, "
+            "\u043f\u0440\u043e\u0442\u043e\u043a\u043e\u043b, "
+            "\u043c\u0435\u0440\u043a\u0438 \u0437\u0430 "
+            "\u0431\u0435\u0437\u043e\u043f\u0430\u0441\u043d\u043e\u0441\u0442 "
+            "\u0438 \u0434\u043e\u043a\u0430\u0437\u0430\u0442\u0435\u043b\u0441\u0442\u0432\u0430."
+        ),
+        items,
+    )
+    active_execution = assess_requirement_coverage(
+        (
+            "\u0415\u043a\u0438\u043f\u044a\u0442 "
+            "\u0438\u0437\u0432\u044a\u0440\u0448\u0432\u0430 "
+            "\u043f\u0440\u043e\u0432\u0435\u0440\u043a\u0430, "
+            "\u043e\u0441\u0438\u0433\u0443\u0440\u044f\u0432\u0430 "
+            "\u043c\u0435\u0440\u043a\u0438 \u0437\u0430 "
+            "\u0431\u0435\u0437\u043e\u043f\u0430\u0441\u043d\u043e\u0441\u0442, "
+            "\u043e\u0440\u0433\u0430\u043d\u0438\u0437\u0438\u0440\u0430 "
+            "\u043a\u043e\u043d\u0442\u0440\u043e\u043b, "
+            "\u043f\u0440\u043e\u0432\u0435\u0440\u044f\u0432\u0430 "
+            "\u0434\u043e\u043a\u0430\u0437\u0430\u0442\u0435\u043b\u0441\u0442\u0432\u0430 "
+            "\u0438 \u0441\u044a\u0441\u0442\u0430\u0432\u044f "
+            "\u043f\u0440\u043e\u0442\u043e\u043a\u043e\u043b."
+        ),
+        items,
+    )
+
+    assert keyword_only["missing_ids"] == ["req-bg-safety-checks"]
+    assert keyword_only["items"][0]["operational_execution_signals"] == []
+    assert active_execution["covered_ids"] == ["req-bg-safety-checks"]
+    assert {
+        "\u0438\u0437\u0432\u044a\u0440\u0448",
+        "\u043e\u0441\u0438\u0433\u0443\u0440",
+        "\u043e\u0440\u0433\u0430\u043d\u0438\u0437\u0438\u0440",
+        "\u043f\u0440\u043e\u0432\u0435\u0440\u044f\u0432",
+        "\u0441\u044a\u0441\u0442\u0430\u0432",
+    } & set(active_execution["items"][0]["operational_execution_signals"])
+
+
 def test_requirement_coverage_keeps_similar_operational_requirements_separate():
     items = normalize_requirement_items(
         [

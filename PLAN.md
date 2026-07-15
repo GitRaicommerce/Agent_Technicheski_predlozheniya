@@ -187,6 +187,7 @@
 - Added script-level calibration regressions proving `needs execution action` reason counts are preserved through calibration manifests, Markdown summaries, and action execution reports.
 - Added calibration-manifest comparison regression coverage for `needs execution action` before/after deltas, so remediation cycles can prove whether this specific blocker type decreases after regeneration.
 - Added Bulgarian operational-coverage regression for active execution verbs such as assigning, executing, keeping records, and documenting corrective actions, so Bulgarian technical proposal text is not penalized by the stricter execution-action gate.
+- Expanded the Bulgarian active-execution detector with common technical-proposal verbs such as performs, ensures, organizes, checks, controls, and prepares protocol documents, while keeping noun-only checklist wording from passing the execution-action gate.
 
 ## Active Goals
 
