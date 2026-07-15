@@ -162,6 +162,9 @@ class CompareCalibrationManifestsTests(unittest.TestCase):
                             "section_uids": ["sec-quality"],
                             "section_title_hints": ["Quality controls"],
                         },
+                        "section_labels": [
+                            "Quality controls (120/420 words, 3 groups)",
+                        ],
                     }
                 ],
                 gap_rows=[
@@ -180,7 +183,10 @@ class CompareCalibrationManifestsTests(unittest.TestCase):
             {
                 (
                     "regenerate_missing_requirements",
-                    "uids=sec-quality; titles=Quality controls",
+                    (
+                        "uids=sec-quality; titles=Quality controls; "
+                        "labels=Quality controls (120/420 words, 3 groups)"
+                    ),
                 ): 1,
             },
         )
@@ -200,6 +206,49 @@ class CompareCalibrationManifestsTests(unittest.TestCase):
                     "titles=Environmental measures",
                 ): 1,
             },
+        )
+
+    def test_render_comparison_shows_section_label_target_context(self):
+        before = manifest(
+            readiness_actions=[
+                {
+                    "action_key": "regenerate_quality_depth",
+                    "request_json": {
+                        "section_uids": ["sec-quality"],
+                        "section_title_hints": ["Quality"],
+                    },
+                    "section_labels": [
+                        "Quality (120/420 words, 3 groups, 7 topics)",
+                    ],
+                }
+            ],
+        )
+        after = manifest(
+            readiness_actions=[
+                {
+                    "action_key": "regenerate_quality_depth",
+                    "request_json": {
+                        "section_uids": ["sec-quality"],
+                        "section_title_hints": ["Quality"],
+                    },
+                    "section_labels": [
+                        "Quality (390/420 words, 3 groups, 7 topics)",
+                    ],
+                }
+            ],
+        )
+
+        text = render_comparison(before, after)
+
+        self.assertIn(
+            "uids=sec-quality; titles=Quality; "
+            "labels=Quality (120/420 words, 3 groups, 7 topics)",
+            text,
+        )
+        self.assertIn(
+            "uids=sec-quality; titles=Quality; "
+            "labels=Quality (390/420 words, 3 groups, 7 topics)",
+            text,
         )
 
     def test_render_comparison_shows_action_target_deltas(self):

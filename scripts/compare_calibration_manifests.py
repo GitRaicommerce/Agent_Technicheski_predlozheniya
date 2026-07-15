@@ -73,13 +73,27 @@ def _request_target_summary(request_json: Any) -> str:
 
 
 def _action_target_summary(row: dict[str, Any]) -> str:
+    parts: list[str] = []
     target_summary = _request_target_summary(row.get("request_json"))
     if target_summary:
-        return target_summary
+        parts.append(target_summary)
     summary = str(row.get("summary") or "").strip()
-    if summary and _int_value(row.get("section_count")):
-        return "sections=" + summary
-    return ""
+    if not parts and summary and _int_value(row.get("section_count")):
+        parts.append("sections=" + summary)
+    section_labels = _section_label_summary(row.get("section_labels"))
+    if section_labels:
+        parts.append("labels=" + section_labels)
+    return "; ".join(parts)
+
+
+def _section_label_summary(value: Any) -> str:
+    section_labels = _string_items(value)
+    if not section_labels:
+        return ""
+    parts = section_labels[:4]
+    if len(section_labels) > 4:
+        parts.append(f"+{len(section_labels) - 4} more")
+    return "; ".join(parts)
 
 
 def _action_target_counts(rows: list[Any]) -> dict[tuple[str, str], int]:

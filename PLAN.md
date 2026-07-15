@@ -201,6 +201,7 @@
 - Added export-readiness regression coverage proving compact additional blueprint groups are counted in DOCX pre-export depth diagnostics.
 - Enriched calibration manifest quality/depth remediation labels with word targets, blueprint group/topic counts, checklist id counts, and suggested words per group/topic so reviewers can see structural depth pressure before running remediation.
 - Preserved calibration remediation section labels in action execution JSON and Markdown reports, so dry-run and executed remediation evidence keeps the same structural depth diagnostics reviewers saw in the manifest.
+- Preserved remediation section-label context in before/after calibration manifest target comparisons, making structural depth changes visible alongside action target deltas.
 
 ## Active Goals
 
