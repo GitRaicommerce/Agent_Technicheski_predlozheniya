@@ -818,7 +818,20 @@ async def test_run_remediation_action_passes_calibration_gap_guidance(client, mo
                         "Calibration missing operational signals to cover where "
                         "source support exists: record, monitoring."
                     ),
-                ]
+                ],
+                "calibration_context": {
+                    "gap_reasons": ["too short", "weak operational detail"],
+                    "reference_section": "Quality reference",
+                    "generated_section": "Quality generated",
+                    "operational_detail_missing_signals": [
+                        "record",
+                        "monitoring",
+                    ],
+                    "expected_outcome": [
+                        "developed narrative depth",
+                        "concrete operational evidence",
+                    ],
+                },
             }
         },
         job_type="drafting_quality",

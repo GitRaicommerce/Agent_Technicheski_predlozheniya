@@ -149,6 +149,10 @@ def _merge_section_drafting_guidance(
     if missing_ids:
         merged["missing_requirement_ids"] = missing_ids
 
+    calibration_context = targeted_guidance.get("calibration_context")
+    if isinstance(calibration_context, dict):
+        merged["calibration_context"] = calibration_context
+
     return merged or None
 
 

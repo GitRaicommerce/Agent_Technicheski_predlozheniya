@@ -1021,6 +1021,58 @@ def test_common_quality_depth_remediation_flows_into_targeted_drafting_guidance(
     assert "corrective action" in guidance_prompt
 
 
+def test_common_calibration_gap_context_flows_into_targeted_drafting_guidance():
+    section_guidance = _merge_section_drafting_guidance(
+        {
+            "requirement_count": 3,
+            "required_subtopics": ["quality records", "monitoring"],
+            "instructions": ["Keep the quality-control evidence traceable."],
+        },
+        {
+            "instructions": [
+                (
+                    "Address calibration gap reasons from the reference comparison: "
+                    "too short, weak operational detail."
+                ),
+                (
+                    "Add concrete operational detail: responsible roles, controls, "
+                    "records, monitoring evidence, acceptance criteria, reporting "
+                    "sequence, escalation, and corrective actions."
+                ),
+            ],
+            "calibration_context": {
+                "gap_reasons": ["too short", "weak operational detail"],
+                "reference_section": "Reference quality methodology",
+                "generated_section": "Current quality section",
+                "operational_detail_missing_signals": ["record", "monitoring"],
+                "expected_outcome": [
+                    "developed narrative depth",
+                    "concrete operational evidence",
+                ],
+            },
+        },
+    )
+
+    guidance_prompt = _format_section_drafting_guidance(section_guidance)
+
+    assert "SECTION STRUCTURE PLAN" in guidance_prompt
+    assert "Calibration comparison context" in guidance_prompt
+    assert "Gap reasons: too short, weak operational detail" in guidance_prompt
+    assert "Reference section to learn from: Reference quality methodology" in (
+        guidance_prompt
+    )
+    assert "Current generated base section: Current quality section" in (
+        guidance_prompt
+    )
+    assert "Missing operational signals to add where supported: record, monitoring" in (
+        guidance_prompt
+    )
+    assert (
+        "Expected regeneration outcome: developed narrative depth, "
+        "concrete operational evidence"
+    ) in guidance_prompt
+
+
 def test_common_similar_operational_requirements_need_distinctive_remediation():
     requirement_items = [
         {

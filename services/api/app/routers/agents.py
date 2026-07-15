@@ -761,7 +761,10 @@ def _calibration_quality_target_guidance(
             "Expand the section into developed tender-specific narrative depth "
             "instead of a short generic summary."
         )
-    if any(reason in {"missing key terms", "weak lexical coverage"} for reason in reasons):
+    if any(
+        reason in {"missing key terms", "weak lexical coverage"}
+        for reason in reasons
+    ):
         instructions.append(
             "Recover missing tender concepts and source-grounded terminology from "
             "the project documents while keeping the text coherent."
@@ -787,8 +790,30 @@ def _calibration_quality_target_guidance(
     if not unique_instructions:
         return None
 
+    expected_outcome: list[str] = []
+    if any(reason in {"too short", "thin detail"} for reason in reasons):
+        expected_outcome.append("developed narrative depth")
+    if any(reason in {"missing key terms", "weak lexical coverage"} for reason in reasons):
+        expected_outcome.append("source-grounded tender concepts")
+    if operational_signals or any(
+        reason in {"weak operational detail", "partial operational detail"}
+        for reason in reasons
+    ):
+        expected_outcome.append("concrete operational evidence")
+
+    calibration_context: dict[str, Any] = {
+        "gap_reasons": reasons,
+        "reference_section": reference_section or None,
+        "generated_section": generated_section or None,
+        "operational_detail_missing_signals": operational_signals,
+        "expected_outcome": expected_outcome,
+    }
+
     return {
-        section_uid: {"instructions": unique_instructions}
+        section_uid: {
+            "instructions": unique_instructions,
+            "calibration_context": calibration_context,
+        }
         for section_uid in section_uids
     }
 

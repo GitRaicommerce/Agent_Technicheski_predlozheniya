@@ -466,6 +466,50 @@ def _format_section_drafting_guidance(guidance: dict[str, Any] | None) -> str:
         lines.append("- Writing plan:")
         lines.extend(f"  - {instruction}" for instruction in instructions[:12])
 
+    calibration_context = guidance.get("calibration_context")
+    if isinstance(calibration_context, dict):
+        lines.append("- Calibration comparison context:")
+        gap_reasons = [
+            str(item).strip()
+            for item in calibration_context.get("gap_reasons") or []
+            if str(item).strip()
+        ]
+        if gap_reasons:
+            lines.append("  - Gap reasons: " + ", ".join(gap_reasons[:12]))
+        reference_section = str(
+            calibration_context.get("reference_section") or ""
+        ).strip()
+        if reference_section:
+            lines.append("  - Reference section to learn from: " + reference_section)
+        generated_section = str(
+            calibration_context.get("generated_section") or ""
+        ).strip()
+        if generated_section:
+            lines.append("  - Current generated base section: " + generated_section)
+        operational_signals = [
+            str(item).strip()
+            for item in calibration_context.get(
+                "operational_detail_missing_signals"
+            )
+            or []
+            if str(item).strip()
+        ]
+        if operational_signals:
+            lines.append(
+                "  - Missing operational signals to add where supported: "
+                + ", ".join(operational_signals[:12])
+            )
+        expected_outcome = [
+            str(item).strip()
+            for item in calibration_context.get("expected_outcome") or []
+            if str(item).strip()
+        ]
+        if expected_outcome:
+            lines.append(
+                "  - Expected regeneration outcome: "
+                + ", ".join(expected_outcome[:8])
+            )
+
     missing_items = [
         item
         for item in guidance.get("missing_requirement_items") or []

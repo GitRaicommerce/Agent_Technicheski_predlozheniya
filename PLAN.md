@@ -217,6 +217,7 @@
 - Added before/after comparison deltas for operational-detail signals targeted by attached action execution evidence, so calibration reviews can see whether remediation focus shifted or cleared across reruns.
 - Passed calibration gap reasons and missing operational-detail signals from gap-priority quality/depth actions into targeted drafting guidance, so reference-comparison findings become concrete regeneration instructions instead of report-only diagnostics.
 - Surfaced calibration gap guidance in action execution JSON/Markdown reports, so dry-run and executed remediation evidence shows gap reasons plus reference/generated section context without requiring manual payload inspection.
+- Structured calibration gap context now flows through targeted quality regeneration into the drafting prompt, including gap reasons, reference/generated section context, missing operational-detail signals, and expected regeneration outcomes for any calibrated project.
 
 ## Active Goals
 
