@@ -762,7 +762,11 @@ async def run_drafting(
                 used_sources["section_requirement_items"] = normalized_requirement_items
             if section_drafting_guidance:
                 used_sources["section_drafting_guidance"] = section_drafting_guidance
-            if drafting_blueprint.get("groups") or drafting_blueprint.get("context_cues"):
+            if (
+                drafting_blueprint.get("groups")
+                or drafting_blueprint.get("additional_groups")
+                or drafting_blueprint.get("context_cues")
+            ):
                 used_sources["drafting_blueprint"] = drafting_blueprint
             gen = Generation(
                 id=str(uuid.uuid4()),
