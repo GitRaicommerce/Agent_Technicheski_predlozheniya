@@ -10,6 +10,7 @@ from app.agents.drafting import _format_section_drafting_guidance
 from app.agents.generation_jobs import (
     _merge_section_drafting_guidance,
     _missing_requirement_target_guidance,
+    _quality_target_guidance,
 )
 from app.agents.proposal_quality import (
     assess_generation_depth,
@@ -965,6 +966,59 @@ def test_common_missing_requirement_remediation_flows_into_targeted_drafting_gui
     repaired_coverage = assess_requirement_coverage(repaired_text, requirement_items)
     assert repaired_coverage["missing_ids"] == []
     assert repaired_coverage["covered_ids"] == ["req-quality-acceptance"]
+
+
+def test_common_quality_depth_remediation_flows_into_targeted_drafting_guidance():
+    readiness_section = {
+        "section_uid": "sec-quality",
+        "section_title": "Quality control",
+        "word_count": 1100,
+        "min_words": 1500,
+        "suggested_words_per_structure": 375,
+        "issues": [
+            {
+                "code": "weak_operational_detail",
+                "operational_signal_count": 2,
+                "min_operational_signal_count": 5,
+                "matched_operational_signals": ["control", "record"],
+                "expected_operational_signal_examples": [
+                    "responsible role",
+                    "monitoring evidence",
+                    "acceptance criterion",
+                    "reporting sequence",
+                    "corrective action",
+                ],
+            }
+        ],
+        "structure_coverage": {
+            "missing": [
+                {"label": "input material control"},
+                {"label": "final acceptance handover"},
+            ]
+        },
+    }
+
+    target_guidance = _quality_target_guidance([readiness_section])
+    section_guidance = _merge_section_drafting_guidance(
+        {
+            "requirement_count": 2,
+            "required_subtopics": ["input material control", "final acceptance"],
+            "instructions": ["Keep each quality-control stage separate."],
+        },
+        target_guidance["sec-quality"],
+    )
+    guidance_prompt = _format_section_drafting_guidance(section_guidance)
+
+    assert "SECTION STRUCTURE PLAN" in guidance_prompt
+    assert "Keep each quality-control stage separate." in guidance_prompt
+    assert "weak_operational_detail" in guidance_prompt
+    assert "Expand the section from 1100 to at least 1500 words" in guidance_prompt
+    assert "roughly 375+ words per structure" in guidance_prompt
+    assert "input material control, final acceptance handover" in guidance_prompt
+    assert "Operational signal diagnostics: 2/5 matched" in guidance_prompt
+    assert "responsible role" in guidance_prompt
+    assert "monitoring evidence" in guidance_prompt
+    assert "corrective action" in guidance_prompt
 
 
 def test_common_similar_operational_requirements_need_distinctive_remediation():

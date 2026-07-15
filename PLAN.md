@@ -207,6 +207,7 @@
 - Added a universal weak-operational-detail depth gate, blocking long blueprint-aware sections that mention the right topics but lack concrete roles, controls, records, monitoring, acceptance evidence, sequence, or corrective actions, with backend report and web remediation labels.
 - Fed weak-operational-detail diagnostics into drafting quality-repair prompts, including matched/required operational signal counts and concrete examples to add during regeneration.
 - Passed quality/depth blocker diagnostics into targeted quality regeneration jobs, so reruns know the exact issue codes, word targets, missing blueprint topics, and weak-operational-detail examples before drafting starts.
+- Added a common-scenario regression proving quality/depth remediation diagnostics flow from export readiness into targeted drafting guidance prompts, alongside the existing missing-requirement remediation scenario.
 
 ## Active Goals
 
