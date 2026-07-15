@@ -424,17 +424,17 @@ function getMissingRequirementGuidance(err: unknown): string[] {
 function requirementReasonLabel(reason: string): string {
   switch (reason) {
     case "needs operational evidence":
-      return "operational evidence";
+      return "оперативни доказателства";
     case "needs execution action":
-      return "execution action";
+      return "изпълнителско действие";
     case "needs coherent passage":
-      return "coherent passage";
+      return "свързан пасаж";
     case "missing distinctive requirement detail":
-      return "distinctive detail";
+      return "отличителен детайл";
     case "missing key terms":
-      return "key terms";
+      return "ключови термини";
     case "missing requirement coverage":
-      return "requirement coverage";
+      return "покритие на изискване";
     default:
       return reason;
   }

@@ -189,6 +189,7 @@
 - Added Bulgarian operational-coverage regression for active execution verbs such as assigning, executing, keeping records, and documenting corrective actions, so Bulgarian technical proposal text is not penalized by the stricter execution-action gate.
 - Expanded the Bulgarian active-execution detector with common technical-proposal verbs such as performs, ensures, organizes, checks, controls, and prepares protocol documents, while keeping noun-only checklist wording from passing the execution-action gate.
 - Added Bulgarian active-execution verb examples to export remediation guidance and drafting repair prompts, so regeneration instructions point the model toward natural Bulgarian operational phrasing instead of only English verbs.
+- Localized missing-requirement reason labels in the DOCX export warning, so Bulgarian users see blocker causes such as operational evidence, execution action, coherent passage, and distinctive detail in Bulgarian.
 
 ## Active Goals
 

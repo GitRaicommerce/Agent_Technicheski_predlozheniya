@@ -182,7 +182,7 @@ describe("ExportButton", () => {
       .toHaveTextContent("Regenerate section s1 with operational evidence.");
     expect(screen.getByTestId("export-requirement-warning"))
       .toHaveTextContent(
-        "operational evidence, execution action, coherent passage, distinctive detail",
+        "оперативни доказателства, изпълнителско действие, свързан пасаж, отличителен детайл",
       );
 
     await userEvent.click(screen.getByRole("button", { name: "Отвори Генерации" }));
