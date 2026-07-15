@@ -24,12 +24,29 @@ def _table_cell(value: Any) -> str:
 
 def _issue_label(code: str) -> str:
     labels = {
-        "too_short_for_requirements": "too short for mapped requirements",
-        "too_few_developed_sentences": "too few developed sentences",
-        "uneven_blueprint_distribution": "missing blueprint groups/topics",
-        "repetitive_content": "repetitive padded content",
+        "too_short_for_requirements": "твърде кратко за свързаните изисквания",
+        "too_few_developed_sentences": "малко развити изречения",
+        "uneven_blueprint_distribution": "липсващо покритие на blueprint групи/теми",
+        "repetitive_content": "повтарящ се/паднат текст",
     }
     return labels.get(code, code)
+
+
+def _reason_label(reason: str) -> str:
+    labels = {
+        "needs operational evidence": "нужни са оперативни доказателства",
+        "needs execution action": "нужно е изпълнителско действие",
+        "needs coherent passage": "нужен е свързан пасаж",
+        "missing distinctive requirement detail": "липсва отличителен детайл от изискването",
+        "missing key terms": "липсват ключови термини",
+        "missing requirement coverage": "липсва покритие на изискването",
+    }
+    return labels.get(reason, reason)
+
+
+def _reason_with_code(reason: str) -> str:
+    label = _reason_label(reason)
+    return f"{label} (`{reason}`)" if label != reason else reason
 
 
 def _structure_missing_label(item: dict[str, Any]) -> str:
@@ -188,12 +205,15 @@ def render_export_readiness_report(readiness: dict[str, Any]) -> str:
             for item in section.get("missing_items") or []:
                 if isinstance(item, dict):
                     reasons = [
-                        _truncate(reason)
+                        _reason_with_code(_truncate(reason))
                         for reason in item.get("reasons") or []
                         if _truncate(reason)
                     ]
-                    reason = ", ".join(reasons) or _truncate(
-                        item.get("reason") or ""
+                    fallback_reason = _truncate(item.get("reason") or "")
+                    reason = ", ".join(reasons) or (
+                        _reason_with_code(fallback_reason)
+                        if fallback_reason
+                        else ""
                     )
                     suffix = f" [{reason}]" if reason else ""
                     lines.append(

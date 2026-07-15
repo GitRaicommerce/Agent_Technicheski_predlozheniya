@@ -773,7 +773,15 @@ def test_common_readiness_report_guides_mixed_blocker_remediation():
                     "missing_count": 1,
                     "missing_requirement_ids": [missing_item["id"]],
                     "missing_items": [
-                        {"id": missing_item["id"], "text": missing_item["text"]}
+                        {
+                            "id": missing_item["id"],
+                            "text": missing_item["text"],
+                            "reason": "needs operational evidence",
+                            "reasons": [
+                                "needs operational evidence",
+                                "needs execution action",
+                            ],
+                        }
                     ],
                 }
             ],
@@ -796,6 +804,15 @@ def test_common_readiness_report_guides_mixed_blocker_remediation():
     assert "stale секции" in action_lines[1]
     assert "непокрити checklist изисквания" in action_lines[2]
     assert "плитките секции" in action_lines[3]
+    assert (
+        "нужни са оперативни доказателства (`needs operational evidence`)"
+        in report
+    )
+    assert "нужно е изпълнителско действие (`needs execution action`)" in report
+    assert (
+        "твърде кратко за свързаните изисквания (`too_short_for_requirements`)"
+        in report
+    )
     assert "Организация на изпълнението (`sec-organization`)" in report
     assert "Работна програма за изпълнение (`sec-work-program`)" in report
 
