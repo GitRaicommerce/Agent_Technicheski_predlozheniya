@@ -236,12 +236,16 @@ async def test_delete_project(client, mock_db):
 
 
 @pytest.mark.asyncio
-async def test_delete_project_not_found(client, mock_db):
+async def test_delete_project_is_idempotent_when_project_is_already_missing(
+    client,
+    mock_db,
+):
     mock_db.get = AsyncMock(return_value=None)
 
     resp = await client.delete(f"/api/v1/projects/{uuid.uuid4()}")
 
-    assert resp.status_code == 404
+    assert resp.status_code == 204
+    mock_db.delete.assert_not_called()
 
 
 # ---------------------------------------------------------------------------

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import Link from "next/link";
 import { api, Project, ProjectStat } from "@/lib/api";
 
@@ -32,6 +32,7 @@ export default function ProjectsPage() {
   const [sort, setSort] = useState<SortKey>("newest");
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const deleteInFlightRef = useRef(false);
 
   useEffect(() => {
     Promise.all([api.projects.list(PAGE_SIZE, 0), api.projects.stats()])
@@ -60,12 +61,15 @@ export default function ProjectsPage() {
   }
 
   async function handleDelete(id: string) {
+    if (deleteInFlightRef.current) return;
+    deleteInFlightRef.current = true;
     setDeleting(true);
     try {
       await api.projects.delete(id);
       setProjects((prev) => prev.filter((p) => p.id !== id));
       setStats((prev) => { const s = { ...prev }; delete s[id]; return s; });
     } finally {
+      deleteInFlightRef.current = false;
       setDeleting(false);
       setConfirmDeleteId(null);
     }
@@ -238,6 +242,7 @@ export default function ProjectsPage() {
                       <span className="text-xs text-red-600 whitespace-nowrap">Изтрий?</span>
                       <button
                         onClick={(e) => { e.preventDefault(); handleDelete(p.id); }}
+                        data-testid={`project-delete-confirm-${p.id}`}
                         disabled={deleting}
                         className="text-xs font-medium text-white bg-red-500 hover:bg-red-600 px-2 py-0.5 rounded disabled:opacity-50"
                       >
@@ -253,6 +258,7 @@ export default function ProjectsPage() {
                   ) : (
                     <button
                       onClick={(e) => { e.preventDefault(); setConfirmDeleteId(p.id); }}
+                      data-testid={`project-delete-${p.id}`}
                       title="Изтрий проект"
                       className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity text-gray-300 hover:text-red-500 p-1 rounded"
                     >

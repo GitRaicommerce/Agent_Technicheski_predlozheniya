@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -36,6 +36,7 @@ vi.mock("@/lib/api", async () => {
 
 const listMock = vi.mocked(api.projects.list);
 const statsMock = vi.mocked(api.projects.stats);
+const deleteMock = vi.mocked(api.projects.delete);
 
 describe("ProjectsPage", () => {
   beforeEach(() => {
@@ -97,5 +98,29 @@ describe("ProjectsPage", () => {
 
     expect(screen.getByText("Road Repair")).toBeInTheDocument();
     expect(screen.queryByText("Water Upgrade")).not.toBeInTheDocument();
+  });
+
+  it("submits project deletion only once and removes the project", async () => {
+    listMock.mockResolvedValue([
+      {
+        id: "p1",
+        name: "Project Alpha",
+        created_at: "2026-04-20T10:00:00.000Z",
+      },
+    ]);
+    statsMock.mockResolvedValue({});
+    deleteMock.mockResolvedValue();
+
+    render(<ProjectsPage />);
+
+    expect(await screen.findByText("Project Alpha")).toBeInTheDocument();
+    await userEvent.click(screen.getByTestId("project-delete-p1"));
+    await userEvent.dblClick(screen.getByTestId("project-delete-confirm-p1"));
+
+    await waitFor(() => {
+      expect(deleteMock).toHaveBeenCalledWith("p1");
+    });
+    expect(deleteMock).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText("Project Alpha")).not.toBeInTheDocument();
   });
 });

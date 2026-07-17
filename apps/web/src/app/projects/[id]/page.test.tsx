@@ -222,12 +222,13 @@ describe("ProjectPage", () => {
     render(<ProjectPage />);
 
     expect(await screen.findByText("Project Alpha")).toBeInTheDocument();
-    await userEvent.click(screen.getAllByRole("button")[0]);
+    await userEvent.click(screen.getByTestId("project-delete-button"));
     await userEvent.click(screen.getByRole("button", { name: /Да, изтрий/i }));
 
     await waitFor(() => {
       expect(deleteMock).toHaveBeenCalledWith("project-1");
     });
+    expect(deleteMock).toHaveBeenCalledTimes(1);
     expect(pushMock).toHaveBeenCalledWith("/projects");
   });
 

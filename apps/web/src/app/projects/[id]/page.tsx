@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { api, type ExportQualitySection, type LegislationStatusResponse, type Project } from "@/lib/api";
@@ -64,6 +64,7 @@ export default function ProjectPage() {
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const deleteInFlightRef = useRef(false);
   const [legislationStatus, setLegislationStatus] =
     useState<LegislationStatusResponse | null>(null);
   const [legislationStatusLoading, setLegislationStatusLoading] = useState(false);
@@ -228,7 +229,8 @@ export default function ProjectPage() {
   }
 
   async function handleDelete() {
-    if (!project) return;
+    if (!project || deleteInFlightRef.current) return;
+    deleteInFlightRef.current = true;
     setDeleting(true);
     setDeleteError(null);
     try {
@@ -236,6 +238,7 @@ export default function ProjectPage() {
       toast("Проектът е изтрит.", "success");
       router.push("/projects");
     } catch (e: unknown) {
+      deleteInFlightRef.current = false;
       setDeleteError(e instanceof Error ? e.message : "Грешка при изтриване.");
       setDeleting(false);
     }

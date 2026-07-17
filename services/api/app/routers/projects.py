@@ -252,7 +252,7 @@ async def update_project(
 async def delete_project(project_id: str, db: AsyncSession = Depends(get_db)):
     project = await db.get(Project, project_id)
     if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+        return
 
     # Delete all files from MinIO before removing DB records
     files_result = await db.execute(

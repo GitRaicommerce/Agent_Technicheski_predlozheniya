@@ -411,6 +411,11 @@ test.describe("smoke", () => {
       const deleteResponse = await deleteResponsePromise;
       expect(deleteResponse.status()).toBe(204);
 
+      const repeatedDeleteResponse = await request.delete(
+        `/api/v1/projects/${projectId}`,
+      );
+      expect(repeatedDeleteResponse.status()).toBe(204);
+
       await page.goto("/projects");
       await expect(page.getByTestId("new-project-link")).toBeVisible();
       await expect(page.getByText(projectName)).toHaveCount(0);
