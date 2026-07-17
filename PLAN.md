@@ -237,6 +237,7 @@
 - Added common-scenario coverage across quality, risk, environment, safety, communication, and documentation requirements, proving keyword-only restatements stay blocked until the generated text includes active execution evidence.
 - Broke the endless export-readiness repair loop by keeping verifier `needs_review` as a quality flag instead of marking generations stale, and by adding an "export current draft" path for all readiness warnings; legacy duplicate selections are exported deterministically from the newest section revision while strict final export still reports them for remediation.
 - Added universal per-section revision history for generated text: each regeneration receives the next visible version number, stores a concise Bulgarian "change summary" against the previous text, and keeps warning-only DOCX export available with an explicit working-draft filename.
+- Fixed the warning-state export interaction so the primary DOCX button immediately downloads the current working draft after readiness checks, instead of stopping after warnings and requiring a second hidden/unclear action.
 
 ## Active Goals
 

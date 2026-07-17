@@ -127,7 +127,12 @@ export default function ExportButton({
     try {
       const readiness = await api.export.readiness(projectId);
       if (!readiness.ready) {
-        if (!applyReadinessWarnings(readiness)) {
+        const warningsHandled = applyReadinessWarnings(readiness);
+        if (readiness.can_export_current_draft) {
+          await downloadDocx(true);
+          return;
+        }
+        if (!warningsHandled) {
           setError(readiness.message ?? "Pre-export readiness check failed.");
         }
         return;
@@ -349,8 +354,11 @@ function downloadBlob(blob: Blob, filename: string): void {
   const a = document.createElement("a");
   a.href = url;
   a.download = filename;
+  a.style.display = "none";
+  document.body.appendChild(a);
   a.click();
-  URL.revokeObjectURL(url);
+  a.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 100);
 }
 
 function isStaleExportError(err: unknown, message: string): boolean {

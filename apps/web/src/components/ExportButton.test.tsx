@@ -73,7 +73,9 @@ describe("ExportButton", () => {
     });
     expect(createObjectURLMock).toHaveBeenCalled();
     expect(clickMock).toHaveBeenCalled();
-    expect(revokeObjectURLMock).toHaveBeenCalledWith("blob:test-url");
+    await waitFor(() => {
+      expect(revokeObjectURLMock).toHaveBeenCalledWith("blob:test-url");
+    });
     expect(toastMock).toHaveBeenCalled();
   });
 
@@ -225,7 +227,7 @@ describe("ExportButton", () => {
     expect(openGenerationsMock).toHaveBeenCalled();
   });
 
-  it("exports the current draft when only warning blockers remain", async () => {
+  it("exports the current draft immediately when warning blockers remain", async () => {
     readinessMock.mockResolvedValue({
       project_id: "project-1",
       ready: false,
@@ -239,10 +241,11 @@ describe("ExportButton", () => {
     render(<ExportButton projectId="project-1" projectName="Project Alpha" />);
 
     await userEvent.click(screen.getByTestId("export-docx-button"));
-    await userEvent.click(await screen.findByTestId("export-current-draft-button"));
 
-    expect(exportMock).toHaveBeenCalledWith("project-1", {
-      allowIncomplete: true,
+    await waitFor(() => {
+      expect(exportMock).toHaveBeenCalledWith("project-1", {
+        allowIncomplete: true,
+      });
     });
     expect(clickMock).toHaveBeenCalled();
   });
@@ -324,7 +327,9 @@ describe("ExportButton", () => {
     expect(readinessReportMock).toHaveBeenCalledWith("project-1");
     expect(createObjectURLMock).toHaveBeenCalledWith(expect.any(Blob));
     expect(clickMock).toHaveBeenCalled();
-    expect(revokeObjectURLMock).toHaveBeenCalledWith("blob:test-url");
+    await waitFor(() => {
+      expect(revokeObjectURLMock).toHaveBeenCalledWith("blob:test-url");
+    });
     expect(toastMock).toHaveBeenCalledWith(
       "Readiness отчетът е изтеглен.",
       "success",
@@ -357,7 +362,9 @@ describe("ExportButton", () => {
     expect(screen.getByTestId("export-stale-warning")).toBeInTheDocument();
     expect(screen.getByTestId("export-requirement-warning")).toBeInTheDocument();
     expect(screen.getByTestId("export-quality-warning")).toBeInTheDocument();
-    expect(exportMock).not.toHaveBeenCalled();
+    expect(exportMock).toHaveBeenCalledWith("project-1", {
+      allowIncomplete: true,
+    });
     expect(screen.getByTestId("export-current-draft-button")).toBeInTheDocument();
   });
 

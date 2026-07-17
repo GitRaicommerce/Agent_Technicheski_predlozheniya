@@ -220,9 +220,9 @@ async function seedProjectState(
     await client.query(
       `
         INSERT INTO generations (
-          id, project_id, section_uid, variant, text, evidence_status, selected, trace_id, flags_json
+          id, project_id, section_uid, variant, revision_number, text, evidence_status, selected, trace_id, flags_json
         )
-        VALUES ($1, $2, $3, '1', $4, $5, true, $6, $7::jsonb)
+        VALUES ($1, $2, $3, '1', 1, $4, $5, true, $6, $7::jsonb)
       `,
       [
         generationId,
@@ -239,9 +239,9 @@ async function seedProjectState(
       await client.query(
         `
           INSERT INTO generations (
-            id, project_id, section_uid, variant, text, evidence_status, selected, trace_id
+            id, project_id, section_uid, variant, revision_number, text, evidence_status, selected, trace_id
           )
-          VALUES ($1, $2, $3, '2', $4, 'ok', $5, $6)
+          VALUES ($1, $2, $3, '2', 2, $4, 'ok', $5, $6)
         `,
         [
           alternativeGenerationId,
@@ -331,9 +331,23 @@ async function seedGenerationVariant(
     await client.query(
       `
         INSERT INTO generations (
-          id, project_id, section_uid, variant, text, evidence_status, selected, trace_id
+          id, project_id, section_uid, variant, revision_number, text, evidence_status, selected, trace_id
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        VALUES (
+          $1,
+          $2,
+          $3,
+          $4,
+          (
+            SELECT COALESCE(MAX(revision_number), 0) + 1
+            FROM generations
+            WHERE project_id = $2 AND section_uid = $3
+          ),
+          $5,
+          $6,
+          $7,
+          $8
+        )
       `,
       [
         generationId,
@@ -509,12 +523,19 @@ test.describe("smoke", () => {
       await page.goto(`/projects/${projectId}`);
       await waitForProjectPage(page, projectName);
 
+      const draftDownloadPromise = page.waitForEvent("download");
       await page.getByTestId("export-docx-button").click();
+      const draftDownload = await draftDownloadPromise;
+
+      expect(draftDownload.suggestedFilename()).toContain("_working_draft.docx");
 
       await expect(page.getByTestId("export-stale-warning")).toContainText(
         "1 секция",
       );
-      await page.getByRole("button", { name: "Отвори Генерации" }).click();
+      await page
+        .getByTestId("export-stale-warning")
+        .getByRole("button", { name: "Отвори Генерации" })
+        .click();
       await expect(
         page.getByTestId(`generation-section-${sectionUid}`),
       ).toBeVisible();
