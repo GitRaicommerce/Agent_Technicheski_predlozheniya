@@ -235,6 +235,7 @@
 - Corrected proposal gap analysis tokenization and heading heuristics to use the full Unicode Cyrillic range, so real Bulgarian reference/generated comparisons do not lose tender-specific terms or section cues.
 - Reduced proposal gap analysis keyword noise by filtering generic Bulgarian procurement terms such as requirement, technical proposal, describe, participant, and execution, keeping calibration focus on substantive technical terms.
 - Added common-scenario coverage across quality, risk, environment, safety, communication, and documentation requirements, proving keyword-only restatements stay blocked until the generated text includes active execution evidence.
+- Broke the endless export-readiness repair loop by keeping verifier `needs_review` as a quality flag instead of marking generations stale, and by adding a guarded "export current draft" path for warning-only readiness issues while still blocking ambiguous duplicate selected variants.
 
 ## Active Goals
 

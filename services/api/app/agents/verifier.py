@@ -229,13 +229,14 @@ async def run_verifier(
         if llm_result.get("verdict") == "ok":
             llm_result["verdict"] = "needs_review"
 
-    # Update generation flags if issues are found
+    # Update generation flags if issues are found. A verifier needs_review verdict
+    # is a quality signal, not proof that the source evidence changed.
     if llm_result.get("verdict") in ("needs_review", "reject"):
-        generation.evidence_status = "stale"
         generation.flags_json = {
             **(generation.flags_json or {}),
             "verification": llm_result,
             "requirement_coverage": requirement_coverage,
+            "verification_status": llm_result.get("verdict"),
         }
         await db.flush()  # get_db dependency commits at request end
 

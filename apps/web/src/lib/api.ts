@@ -369,6 +369,9 @@ export interface ExportReadiness {
   missing_requirement_count?: number;
   quality_sections?: ExportQualitySection[];
   quality_section_count?: number;
+  hard_blocker_count?: number;
+  can_export_current_draft?: boolean;
+  export_current_draft_message?: string | null;
 }
 
 export interface ExportQualitySection {
@@ -554,8 +557,12 @@ export const api = {
       await ensureOk(response);
       return response.text();
     },
-    docx: async (projectId: string) => {
-      const response = await fetch(buildUrl(`/api/v1/export/${projectId}/docx`));
+    docx: async (
+      projectId: string,
+      options: { allowIncomplete?: boolean } = {},
+    ) => {
+      const qs = options.allowIncomplete ? "?allow_incomplete=true" : "";
+      const response = await fetch(buildUrl(`/api/v1/export/${projectId}/docx${qs}`));
       await ensureOk(response);
       return response.blob();
     },

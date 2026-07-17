@@ -10,6 +10,8 @@ from app.export.readiness_report import render_export_readiness_report
 
 router = APIRouter()
 
+HARD_EXPORT_BLOCKER_CODES = {"duplicate_selected"}
+
 
 def _missing_requirement_reason(item: dict) -> str:
     reasons = _missing_requirement_reasons(item)
@@ -444,6 +446,15 @@ def _readiness_message(readiness: dict) -> str:
     return "Pre-export check failed: proposal is not ready for DOCX export."
 
 
+def _hard_export_blockers(readiness: dict) -> list[dict]:
+    return [
+        blocker
+        for blocker in readiness.get("blockers") or []
+        if isinstance(blocker, dict)
+        and blocker.get("code") in HARD_EXPORT_BLOCKER_CODES
+    ]
+
+
 async def _build_export_readiness(
     project_id: str,
     selected_generations: list[Generation],
@@ -541,6 +552,14 @@ async def _build_export_readiness(
         "quality_sections": quality_sections,
         "quality_section_count": len(quality_sections),
     }
+    hard_blockers = _hard_export_blockers(readiness)
+    readiness["hard_blocker_count"] = len(hard_blockers)
+    readiness["can_export_current_draft"] = not hard_blockers
+    readiness["export_current_draft_message"] = (
+        "Current draft can be exported with warnings."
+        if blockers and not hard_blockers
+        else None
+    )
     readiness["message"] = (
         "Proposal is ready for DOCX export."
         if readiness["ready"]
@@ -562,10 +581,17 @@ async def _load_selected_generations(
     return list(selected_result.scalars().all())
 
 
-async def _require_export_ready(project_id: str, db: AsyncSession) -> dict:
+async def _require_export_ready(
+    project_id: str,
+    db: AsyncSession,
+    *,
+    allow_incomplete: bool = False,
+) -> dict:
     selected_generations = await _load_selected_generations(project_id, db)
     readiness = await _build_export_readiness(project_id, selected_generations, db)
     if readiness["ready"]:
+        return readiness
+    if allow_incomplete and readiness.get("can_export_current_draft"):
         return readiness
 
     raise HTTPException(
@@ -599,11 +625,19 @@ async def export_readiness_report(project_id: str, db: AsyncSession = Depends(ge
 
 
 @router.get("/{project_id}/docx")
-async def export_docx(project_id: str, db: AsyncSession = Depends(get_db)):
+async def export_docx(
+    project_id: str,
+    allow_incomplete: bool = False,
+    db: AsyncSession = Depends(get_db),
+):
     project = await db.get(Project, project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
-    await _require_export_ready(project_id, db)
+    await _require_export_ready(
+        project_id,
+        db,
+        allow_incomplete=allow_incomplete,
+    )
 
     from urllib.parse import quote
     from app.export.docx_generator import generate_docx

@@ -67,7 +67,9 @@ describe("ExportButton", () => {
     await userEvent.click(screen.getByRole("button"));
 
     await waitFor(() => {
-      expect(exportMock).toHaveBeenCalledWith("project-1");
+      expect(exportMock).toHaveBeenCalledWith("project-1", {
+        allowIncomplete: false,
+      });
     });
     expect(createObjectURLMock).toHaveBeenCalled();
     expect(clickMock).toHaveBeenCalled();
@@ -223,6 +225,28 @@ describe("ExportButton", () => {
     expect(openGenerationsMock).toHaveBeenCalled();
   });
 
+  it("exports the current draft when only warning blockers remain", async () => {
+    readinessMock.mockResolvedValue({
+      project_id: "project-1",
+      ready: false,
+      status: "blocked",
+      can_export_current_draft: true,
+      missing_requirement_count: 1,
+      missing_requirement_sections: [{ section_uid: "s1", missing_count: 1 }],
+    });
+    exportMock.mockResolvedValue(new Blob(["docx"]));
+
+    render(<ExportButton projectId="project-1" projectName="Project Alpha" />);
+
+    await userEvent.click(screen.getByTestId("export-docx-button"));
+    await userEvent.click(await screen.findByTestId("export-current-draft-button"));
+
+    expect(exportMock).toHaveBeenCalledWith("project-1", {
+      allowIncomplete: true,
+    });
+    expect(clickMock).toHaveBeenCalled();
+  });
+
   it("shows quality warning for shallow generated sections", async () => {
     const openGenerationsMock = vi.fn();
     const qualitySectionsBlockedMock = vi.fn();
@@ -333,6 +357,7 @@ describe("ExportButton", () => {
     expect(screen.getByTestId("export-requirement-warning")).toBeInTheDocument();
     expect(screen.getByTestId("export-quality-warning")).toBeInTheDocument();
     expect(exportMock).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("export-current-draft-button")).not.toBeInTheDocument();
   });
 
   it("shows generic export errors", async () => {

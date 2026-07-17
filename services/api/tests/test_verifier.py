@@ -31,6 +31,7 @@ async def test_verifier_marks_missing_requirement_coverage_as_needs_review(mock_
             "grounding_context": {"tender_chunks": [], "schedule": {"tasks": []}}
         },
         flags_json={},
+        evidence_status="ok",
         selected=True,
     )
     outline = TpOutline(
@@ -77,10 +78,11 @@ async def test_verifier_marks_missing_requirement_coverage_as_needs_review(mock_
 
     assert result["verdict"] == "needs_review"
     assert result["requirement_coverage"]["missing_ids"] == ["req-schedule"]
-    assert generation.evidence_status == "stale"
+    assert generation.evidence_status == "ok"
     assert generation.flags_json["requirement_coverage"]["missing_ids"] == [
         "req-schedule"
     ]
+    assert generation.flags_json["verification_status"] == "needs_review"
     assert (
         "req-schedule"
         in generation.flags_json["verification"]["gaps"][0]["description"]

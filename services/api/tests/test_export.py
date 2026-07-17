@@ -339,6 +339,81 @@ async def test_export_docx_missing_requirement_coverage_returns_409(client, mock
 
 
 @pytest.mark.asyncio
+async def test_export_docx_allows_current_draft_with_warning_blockers(
+    client,
+    mock_db,
+):
+    project = _make_project()
+    mock_db.get = AsyncMock(return_value=project)
+
+    generation = MagicMock()
+    generation.id = "gen-1"
+    generation.section_uid = "sec-1"
+    generation.evidence_status = "ok"
+    generation.text = "Current draft text with incomplete coverage."
+    generation.flags_json = {
+        "requirement_coverage": {
+            "missing_ids": ["req-1"],
+            "items": [
+                {
+                    "id": "req-1",
+                    "text": "Describe one requirement.",
+                    "importance": "mandatory",
+                    "status": "missing",
+                }
+            ],
+        }
+    }
+
+    selected_result = MagicMock()
+    selected_result.scalars.return_value.all.return_value = [generation]
+    outline_result = MagicMock()
+    outline_result.scalar_one_or_none.return_value = None
+    mock_db.execute = AsyncMock(side_effect=[selected_result, outline_result])
+    fake_docx = b"PK\x03\x04current-draft"
+
+    with patch(
+        "app.export.docx_generator.generate_docx",
+        new=AsyncMock(return_value=fake_docx),
+    ):
+        resp = await client.get(
+            f"/api/v1/export/{project.id}/docx?allow_incomplete=true"
+        )
+
+    assert resp.status_code == 200
+    assert resp.content == fake_docx
+
+
+@pytest.mark.asyncio
+async def test_export_docx_still_blocks_duplicate_selected_when_allowing_current_draft(
+    client,
+    mock_db,
+):
+    project = _make_project()
+    mock_db.get = AsyncMock(return_value=project)
+
+    first = MagicMock()
+    first.id = "gen-1"
+    first.section_uid = "sec-duplicate"
+    first.evidence_status = "ok"
+    second = MagicMock()
+    second.id = "gen-2"
+    second.section_uid = "sec-duplicate"
+    second.evidence_status = "ok"
+
+    selected_result = MagicMock()
+    selected_result.scalars.return_value.all.return_value = [first, second]
+    mock_db.execute = AsyncMock(return_value=selected_result)
+
+    resp = await client.get(
+        f"/api/v1/export/{project.id}/docx?allow_incomplete=true"
+    )
+
+    assert resp.status_code == 409
+    assert resp.json()["detail"]["duplicate_selected_count"] == 1
+
+
+@pytest.mark.asyncio
 async def test_export_docx_shallow_requirement_text_returns_409(client, mock_db):
     project = _make_project()
     mock_db.get = AsyncMock(return_value=project)

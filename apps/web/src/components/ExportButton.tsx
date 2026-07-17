@@ -48,6 +48,7 @@ export default function ExportButton({
   const [qualitySectionCount, setQualitySectionCount] = useState<number | null>(null);
   const [qualityWarningSummary, setQualityWarningSummary] =
     useState<QualityWarningSummary | null>(null);
+  const [canExportCurrentDraft, setCanExportCurrentDraft] = useState(false);
   const { toast } = useToast();
   const qualityWarningDetail = formatQualityWarningSummary(qualityWarningSummary);
   const hasReadinessWarnings =
@@ -58,6 +59,7 @@ export default function ExportButton({
 
   const applyReadinessWarnings = (source: unknown, message = "") => {
     let handled = false;
+    setCanExportCurrentDraft(canExportCurrentDraftFromReadiness(source));
 
     if (isDuplicateSelectedExportError(source)) {
       setDuplicateSelectedWarning(true);
@@ -90,6 +92,20 @@ export default function ExportButton({
     return handled;
   };
 
+  const downloadDocx = async (allowIncomplete = false) => {
+    const blob = await api.export.docx(projectId, { allowIncomplete });
+    downloadBlob(
+      blob,
+      `TP_${projectName.slice(0, 50).replace(/\s+/g, "_")}.docx`,
+    );
+    toast(
+      allowIncomplete
+        ? "DOCX С„Р°Р№Р»СЉС‚ Рµ РёР·С‚РµРіР»РµРЅ СЃ readiness РїСЂРµРґСѓРїСЂРµР¶РґРµРЅРёСЏ."
+        : "DOCX С„Р°Р№Р»СЉС‚ Рµ РёР·С‚РµРіР»РµРЅ.",
+      "success",
+    );
+  };
+
   const handleExport = async () => {
     setLoading(true);
     setError(null);
@@ -104,6 +120,7 @@ export default function ExportButton({
     setQualityWarning(false);
     setQualitySectionCount(null);
     setQualityWarningSummary(null);
+    setCanExportCurrentDraft(false);
     onQualitySectionsBlocked?.([], []);
 
     try {
@@ -115,6 +132,9 @@ export default function ExportButton({
         return;
       }
 
+      await downloadDocx();
+      return;
+
       const blob = await api.export.docx(projectId);
       downloadBlob(
         blob,
@@ -123,6 +143,22 @@ export default function ExportButton({
       toast("DOCX файлът е изтеглен.", "success");
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Грешка при експорт";
+      if (!applyReadinessWarnings(err, msg)) {
+        setError(msg);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleExportCurrentDraft = async () => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      await downloadDocx(true);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Р“СЂРµС€РєР° РїСЂРё РµРєСЃРїРѕСЂС‚";
       if (!applyReadinessWarnings(err, msg)) {
         setError(msg);
       }
@@ -278,6 +314,18 @@ export default function ExportButton({
       )}
 
       {hasReadinessWarnings && (
+        <>
+          {canExportCurrentDraft && (
+            <button
+              type="button"
+              onClick={handleExportCurrentDraft}
+              disabled={loading}
+              data-testid="export-current-draft-button"
+              className="mt-2 mr-2 rounded border border-green-300 bg-green-50 px-2.5 py-1.5 text-xs font-medium text-green-800 transition hover:bg-green-100 disabled:opacity-50"
+            >
+              {loading ? "Р“РµРЅРµСЂРёСЂР° СЃРµ..." : "Р•РєСЃРїРѕСЂС‚ РЅР° С‚РµРєСѓС‰Р°С‚Р° РІРµСЂСЃРёСЏ"}
+            </button>
+          )}
         <button
           type="button"
           onClick={handleDownloadReadinessReport}
@@ -287,6 +335,7 @@ export default function ExportButton({
         >
           {reportLoading ? "Изтегля се..." : "Свали readiness report"}
         </button>
+        </>
       )}
 
       {error && <p className="text-red-500 text-xs mt-1">{error}</p>}
@@ -604,6 +653,17 @@ function getReadinessPayload(source: unknown): unknown {
     return getApiErrorPayload(source);
   }
   return source;
+}
+
+function canExportCurrentDraftFromReadiness(source: unknown): boolean {
+  const payload = getReadinessPayload(source);
+  if (!payload || typeof payload !== "object") return false;
+
+  const explicit = (payload as { can_export_current_draft?: unknown })
+    .can_export_current_draft;
+  if (typeof explicit === "boolean") return explicit;
+
+  return !isDuplicateSelectedExportError(payload);
 }
 
 function positiveNumber(value: unknown): boolean {
