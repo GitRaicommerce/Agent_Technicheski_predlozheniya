@@ -662,8 +662,6 @@ function GenerationVariantSelector({
   selectingGeneration: string | null;
   onSelect: (generationId: string) => void;
 }) {
-  if (variants.length <= 1 && selectedCount <= 1) return null;
-
   return (
     <div
       data-testid={`generation-variants-${sectionUid}`}
@@ -697,22 +695,33 @@ function GenerationVariantSelector({
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-1.5">
                   <span className="font-medium text-gray-700">
-                    Variant {variant.variant}
+                    Версия {variant.revision_number ?? variant.variant}
                   </span>
                   {variant.selected && (
                     <span className="rounded bg-green-100 px-1.5 py-0.5 text-[11px] font-medium text-green-700">
-                      Selected
+                      Избрана
                     </span>
                   )}
                   {variant.evidence_status === "stale" && (
                     <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium text-amber-700">
-                      Stale
+                      Нуждае се от актуализация
                     </span>
                   )}
                 </div>
                 <p className="mt-1 truncate text-[11px] text-gray-500">
                   {new Date(variant.created_at).toLocaleString()}
                 </p>
+                {variant.change_summary && (
+                  <p
+                    data-testid={`generation-change-summary-${variant.id}`}
+                    className="mt-1.5 text-[11px] leading-4 text-gray-600"
+                  >
+                    <span className="font-medium text-gray-700">
+                      Относно промените: {" "}
+                    </span>
+                    {variant.change_summary}
+                  </p>
+                )}
               </div>
               <button
                 type="button"
@@ -724,10 +733,10 @@ function GenerationVariantSelector({
                 {isSelecting
                   ? "..."
                   : isSoleSelected
-                    ? "Selected"
+                    ? "Избрана"
                     : selectedCount > 1
-                      ? "Keep this"
-                      : "Select"}
+                      ? "Запази тази"
+                      : "Избери"}
               </button>
             </div>
           );

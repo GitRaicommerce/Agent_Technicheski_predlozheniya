@@ -71,6 +71,8 @@ describe("GenerationsPanel", () => {
             id: "gen-1",
             section_uid: "sec-1",
             variant: 1,
+            revision_number: 1,
+            change_summary: "Първоначална редакция на раздела.",
             text: "Selected generation text",
             evidence_status: "ok",
             selected: true,
@@ -86,6 +88,12 @@ describe("GenerationsPanel", () => {
     await userEvent.click(sectionButton);
 
     expect(await screen.findByText("Selected generation text")).toBeInTheDocument();
+    expect(screen.getByText("Версия 1")).toBeInTheDocument();
+    expect(
+      screen.getByTestId("generation-change-summary-gen-1"),
+    ).toHaveTextContent(
+      "Относно промените: Първоначална редакция на раздела.",
+    );
   });
 
   it("shows requirement coverage for the selected generation", async () => {

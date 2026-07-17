@@ -94,9 +94,10 @@ export default function ExportButton({
 
   const downloadDocx = async (allowIncomplete = false) => {
     const blob = await api.export.docx(projectId, { allowIncomplete });
+    const draftSuffix = allowIncomplete ? "_working_draft" : "";
     downloadBlob(
       blob,
-      `TP_${projectName.slice(0, 50).replace(/\s+/g, "_")}.docx`,
+      `TP_${projectName.slice(0, 50).replace(/\s+/g, "_")}${draftSuffix}.docx`,
     );
     toast(
       allowIncomplete

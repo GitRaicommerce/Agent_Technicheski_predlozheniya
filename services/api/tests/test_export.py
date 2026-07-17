@@ -382,10 +382,11 @@ async def test_export_docx_allows_current_draft_with_warning_blockers(
 
     assert resp.status_code == 200
     assert resp.content == fake_docx
+    assert "_working_draft.docx" in resp.headers["content-disposition"]
 
 
 @pytest.mark.asyncio
-async def test_export_docx_still_blocks_duplicate_selected_when_allowing_current_draft(
+async def test_export_docx_allows_duplicate_selected_in_current_draft(
     client,
     mock_db,
 ):
@@ -404,13 +405,18 @@ async def test_export_docx_still_blocks_duplicate_selected_when_allowing_current
     selected_result = MagicMock()
     selected_result.scalars.return_value.all.return_value = [first, second]
     mock_db.execute = AsyncMock(return_value=selected_result)
+    fake_docx = b"PK\x03\x04duplicate-current-draft"
 
-    resp = await client.get(
-        f"/api/v1/export/{project.id}/docx?allow_incomplete=true"
-    )
+    with patch(
+        "app.export.docx_generator.generate_docx",
+        new=AsyncMock(return_value=fake_docx),
+    ):
+        resp = await client.get(
+            f"/api/v1/export/{project.id}/docx?allow_incomplete=true"
+        )
 
-    assert resp.status_code == 409
-    assert resp.json()["detail"]["duplicate_selected_count"] == 1
+    assert resp.status_code == 200
+    assert resp.content == fake_docx
 
 
 @pytest.mark.asyncio

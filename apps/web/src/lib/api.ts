@@ -301,6 +301,8 @@ export interface Generation {
   id: string;
   section_uid: string;
   variant: number | string;
+  revision_number?: number;
+  change_summary?: string | null;
   text: string;
   evidence_map_json?: Record<string, unknown> | null;
   used_sources_json?: Record<string, unknown> | null;

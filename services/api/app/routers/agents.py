@@ -424,6 +424,8 @@ class GenerationResponse(BaseModel):
     id: str
     section_uid: str
     variant: int
+    revision_number: int
+    change_summary: str | None = None
     text: str
     evidence_map_json: dict | None = None
     used_sources_json: dict | None = None
@@ -528,6 +530,8 @@ async def list_generations(project_id: str, db: AsyncSession = Depends(get_db)):
                         id=v.id,
                         section_uid=v.section_uid,
                         variant=v.variant,
+                        revision_number=v.revision_number or 1,
+                        change_summary=v.change_summary,
                         text=v.text,
                         evidence_map_json=v.evidence_map_json,
                         used_sources_json=v.used_sources_json,

@@ -225,6 +225,8 @@ async def test_get_generations_grouped(client, mock_db):
         project_id=pid,
         section_uid=sec_uid,
         variant=1,
+        revision_number=2,
+        change_summary="Допълнени са мерките за контрол.",
         text="Текст вариант 1",
         evidence_status="ok",
         selected=True,
@@ -257,6 +259,8 @@ async def test_get_generations_grouped(client, mock_db):
     assert len(section["variants"]) == 2
     # selected comes first
     assert section["variants"][0]["selected"] is True
+    assert section["variants"][0]["revision_number"] == 2
+    assert section["variants"][0]["change_summary"] == "Допълнени са мерките за контрол."
 
 
 @pytest.mark.asyncio

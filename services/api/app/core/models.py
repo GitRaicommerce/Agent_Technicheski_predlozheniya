@@ -327,6 +327,8 @@ class Generation(Base):
     )
     section_uid: Mapped[str] = mapped_column(UUID(as_uuid=False))
     variant: Mapped[str] = mapped_column(String(16))  # 1|2
+    revision_number: Mapped[int] = mapped_column(Integer, default=1)
+    change_summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     text: Mapped[str] = mapped_column(Text)
     evidence_map_json: Mapped[Optional[dict]] = mapped_column(JSONB)
     used_sources_json: Mapped[Optional[dict]] = mapped_column(JSONB)

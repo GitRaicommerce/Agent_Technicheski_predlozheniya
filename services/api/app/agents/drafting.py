@@ -5,11 +5,12 @@ It persists the result in the Generation table.
 
 from __future__ import annotations
 
+import inspect
 import uuid
 from typing import Any, TYPE_CHECKING
 
 import structlog
-from sqlalchemy import update
+from sqlalchemy import select, update
 
 from app.agents.context import format_grounding_context
 from app.agents.drafting_blueprint import (
@@ -98,6 +99,7 @@ Return only valid JSON:
 {
   "variant_1": {
     "text": "<detailed Bulgarian text>",
+    "change_summary": "<brief Bulgarian summary of what changed compared with the previous version, or that this is the initial version>",
     "evidence_map": {"<key claim>": "<uuid from EXAMPLE/LEX or null>"},
     "requirement_coverage": [
       {"id": "<requirement id>", "status": "covered|missing", "evidence": "<short excerpt or explanation>"}
@@ -106,6 +108,18 @@ Return only valid JSON:
   "flags": []
 }
 """
+
+
+def _change_summary(variant_data: dict[str, Any], revision_number: int) -> str:
+    supplied = str(variant_data.get("change_summary") or "").strip()
+    if supplied:
+        return supplied[:2000]
+    if revision_number == 1:
+        return "Първоначална редакция на раздела."
+    return (
+        "Разделът е регенериран спрямо актуалните изисквания, източници "
+        "и резултати от проверките за пълнота."
+    )
 
 
 def _safe_section_uuid(raw: str) -> str:
@@ -678,6 +692,29 @@ async def run_drafting(
         trace_id=trace_id,
     )
 
+    previous_result = await db.execute(
+        select(Generation)
+        .where(
+            Generation.project_id == project_id,
+            Generation.section_uid == section_uid,
+        )
+        .order_by(
+            Generation.revision_number.desc(),
+            Generation.created_at.desc(),
+        )
+        .limit(1)
+    )
+    previous_generation = previous_result.scalar_one_or_none()
+    if inspect.isawaitable(previous_generation):
+        previous_generation = await previous_generation
+    if not isinstance(previous_generation, Generation):
+        previous_generation = None
+    revision_number = (
+        (previous_generation.revision_number or 1) + 1
+        if previous_generation
+        else 1
+    )
+
     snippets_block = "\n".join(
         f"[EXAMPLE id={s.get('snippet_id', '?')}]\n"
         f"[UNTRUSTED CONTENT START]\n{s.get('text', '')[:3000]}\n[UNTRUSTED CONTENT END]"
@@ -724,6 +761,23 @@ async def run_drafting(
         part
         for part in [
             f"SECTION: {section_title}\nREQUIREMENTS:\n{requirements_text}",
+            (
+                "REVISION CONTEXT:\n"
+                f"This will be version {revision_number} of the section. Compare the new "
+                "text with the previous version below. In variant_1.change_summary, "
+                "summarize in 1-3 concise Bulgarian sentences the substantive additions, "
+                "corrections and clarifications. Do not describe stylistic rewrites as "
+                "substantive changes.\n"
+                "[PREVIOUS VERSION START]\n"
+                f"{previous_generation.text[:8000]}\n"
+                "[PREVIOUS VERSION END]"
+                if previous_generation
+                else (
+                    "REVISION CONTEXT:\n"
+                    "This is version 1 of the section. Set variant_1.change_summary "
+                    "to a concise Bulgarian statement that this is the initial draft."
+                )
+            ),
             requirement_checklist_text,
             section_guidance_text,
             drafting_blueprint_text,
@@ -871,6 +925,8 @@ async def run_drafting(
                 project_id=project_id,
                 section_uid=section_uid,
                 variant=variant_key.replace("variant_", ""),
+                revision_number=revision_number,
+                change_summary=_change_summary(variant_data, revision_number),
                 text=variant_text,
                 evidence_map_json=variant_data.get("evidence_map"),
                 used_sources_json=used_sources or None,

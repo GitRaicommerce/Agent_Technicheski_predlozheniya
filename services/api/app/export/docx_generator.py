@@ -239,8 +239,10 @@ async def _write_sections(
             .where(
                 Generation.project_id == project_id,
                 Generation.section_uid == section_uid,
+                Generation.selected.is_(True),
             )
             .order_by(
+                Generation.revision_number.desc(),
                 Generation.selected.desc(),   # закрепен от потребителя
                 Generation.variant.asc(),     # вариант 1 преди 2
                 Generation.created_at.desc(),

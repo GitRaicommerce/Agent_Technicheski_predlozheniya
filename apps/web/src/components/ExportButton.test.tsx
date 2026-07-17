@@ -336,6 +336,7 @@ describe("ExportButton", () => {
       project_id: "project-1",
       ready: false,
       status: "blocked",
+      can_export_current_draft: true,
       duplicate_selected_count: 1,
       duplicate_selected_sections: [{ section_uid: "s1" }],
       stale_section_count: 2,
@@ -357,7 +358,7 @@ describe("ExportButton", () => {
     expect(screen.getByTestId("export-requirement-warning")).toBeInTheDocument();
     expect(screen.getByTestId("export-quality-warning")).toBeInTheDocument();
     expect(exportMock).not.toHaveBeenCalled();
-    expect(screen.queryByTestId("export-current-draft-button")).not.toBeInTheDocument();
+    expect(screen.getByTestId("export-current-draft-button")).toBeInTheDocument();
   });
 
   it("shows generic export errors", async () => {

@@ -243,6 +243,9 @@ async def test_drafting_prompt_and_saved_generation_include_grounding_context(mo
     assert "ПУСО" in prompt
     assert saved_generation.used_sources_json["grounding_context"] == grounding_context
     assert "drafting_blueprint" in saved_generation.used_sources_json
+    assert saved_generation.revision_number == 1
+    assert saved_generation.change_summary == "Първоначална редакция на раздела."
+    assert "This is version 1" in prompt
     assert result["generation_ids"]["variant_1"] == saved_generation.id
 
 
@@ -283,6 +286,66 @@ async def test_drafting_unselects_existing_section_generations_before_saving(moc
     assert "UPDATE generations" in compiled
     assert "selected=false" in compiled.replace(" ", "").lower()
     assert saved_generation.selected is True
+
+
+@pytest.mark.asyncio
+async def test_drafting_numbers_revision_and_saves_change_summary(mock_db):
+    from datetime import datetime, timezone
+    from app.core.models import Generation
+
+    project_id = str(uuid.uuid4())
+    section_uid = str(uuid.uuid4())
+    previous = Generation(
+        id=str(uuid.uuid4()),
+        project_id=project_id,
+        section_uid=section_uid,
+        variant=1,
+        revision_number=3,
+        change_summary="Предходна редакция.",
+        text="Предходен текст на раздела.",
+        evidence_status="ok",
+        selected=True,
+        created_at=datetime.now(timezone.utc),
+    )
+    previous_result = MagicMock()
+    previous_result.scalar_one_or_none.return_value = previous
+    mock_db.execute = AsyncMock(side_effect=[previous_result, MagicMock()])
+
+    with patch(
+        "app.agents.drafting.llm_gateway.call",
+        new=AsyncMock(
+            return_value={
+                "variant_1": {
+                    "text": "Нова подробна редакция на раздела.",
+                    "change_summary": (
+                        "Добавени са контролни действия и отговорни роли."
+                    ),
+                    "evidence_map": {},
+                },
+                "flags": [],
+            }
+        ),
+    ) as llm_call:
+        await run_drafting(
+            project_id=project_id,
+            section_uid=section_uid,
+            section_title="Организация и контрол",
+            section_requirements=[],
+            evidence_snippets=[],
+            schedule_summary=None,
+            lex_citations=[],
+            db=mock_db,
+            trace_id=str(uuid.uuid4()),
+        )
+
+    saved_generation = mock_db.add.call_args.args[0]
+    prompt = llm_call.await_args.kwargs["user_message"]
+    assert saved_generation.revision_number == 4
+    assert saved_generation.change_summary == (
+        "Добавени са контролни действия и отговорни роли."
+    )
+    assert "This will be version 4" in prompt
+    assert "Предходен текст на раздела." in prompt
 
 
 @pytest.mark.asyncio

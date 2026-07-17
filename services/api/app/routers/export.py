@@ -10,7 +10,7 @@ from app.export.readiness_report import render_export_readiness_report
 
 router = APIRouter()
 
-HARD_EXPORT_BLOCKER_CODES = {"duplicate_selected"}
+HARD_EXPORT_BLOCKER_CODES: set[str] = set()
 
 
 def _missing_requirement_reason(item: dict) -> str:
@@ -647,8 +647,9 @@ async def export_docx(
     safe_name = project.name[:50].replace(" ", "_")
     ascii_name = safe_name.encode("ascii", "replace").decode("ascii")
     utf8_encoded = quote(safe_name, safe="")
-    filename = f"TP_{ascii_name}.docx"
-    filename_star = f"UTF-8''{utf8_encoded}.docx"
+    draft_suffix = "_working_draft" if allow_incomplete else ""
+    filename = f"TP_{ascii_name}{draft_suffix}.docx"
+    filename_star = f"UTF-8''{utf8_encoded}{draft_suffix}.docx"
     return StreamingResponse(
         iter([docx_bytes]),
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
