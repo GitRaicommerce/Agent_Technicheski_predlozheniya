@@ -111,6 +111,8 @@ TP AI is a monorepo for an AI-assisted workflow that prepares technical proposal
   - `apps/web/src/components/ToastProvider.tsx`
 - `apps/web/src/lib/`
   - `apps/web/src/lib/api.ts`
+  - `apps/web/src/lib/serverApiProxy.test.ts`
+  - `apps/web/src/lib/serverApiProxy.ts`
   - `apps/web/src/lib/text.ts`
 - `apps/web/src/test/`
   - `apps/web/src/test/setup.ts`
