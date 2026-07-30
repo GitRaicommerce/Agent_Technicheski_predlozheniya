@@ -36,6 +36,8 @@ export default function GenerationsPanel({
     null,
   );
   const [retryingJob, setRetryingJob] = useState(false);
+  const [pausingJob, setPausingJob] = useState(false);
+  const [resumingJob, setResumingJob] = useState(false);
   const [regeneratingStaleJob, setRegeneratingStaleJob] = useState(false);
   const [regeneratingRequirementsJob, setRegeneratingRequirementsJob] =
     useState(false);
@@ -83,7 +85,8 @@ export default function GenerationsPanel({
   useEffect(() => {
     if (
       generationJob?.status !== "queued" &&
-      generationJob?.status !== "processing"
+      generationJob?.status !== "processing" &&
+      generationJob?.status !== "pause_requested"
     ) {
       return;
     }
@@ -139,6 +142,41 @@ export default function GenerationsPanel({
       await load();
     } finally {
       setRetryingJob(false);
+    }
+  };
+
+  const handlePauseGenerationJob = async () => {
+    if (!generationJob) return;
+    setPausingJob(true);
+    setError(null);
+    try {
+      const nextJob = await api.agents.pauseGenerationJob(
+        projectId,
+        generationJob.id,
+      );
+      setGenerationJob(nextJob);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Неуспешно поставяне на пауза.");
+    } finally {
+      setPausingJob(false);
+    }
+  };
+
+  const handleResumeGenerationJob = async () => {
+    if (!generationJob) return;
+    setResumingJob(true);
+    setError(null);
+    try {
+      const nextJob = await api.agents.resumeGenerationJob(
+        projectId,
+        generationJob.id,
+      );
+      setGenerationJob(nextJob);
+      await load();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Неуспешно продължаване.");
+    } finally {
+      setResumingJob(false);
     }
   };
 
@@ -242,6 +280,10 @@ export default function GenerationsPanel({
             job={generationJob}
             onRetry={handleRetryGenerationJob}
             retrying={retryingJob}
+            onPause={handlePauseGenerationJob}
+            pausing={pausingJob}
+            onResume={handleResumeGenerationJob}
+            resuming={resumingJob}
           />
         )}
         <p className="text-xs leading-relaxed text-gray-400">
@@ -283,6 +325,10 @@ export default function GenerationsPanel({
           job={generationJob}
           onRetry={handleRetryGenerationJob}
           retrying={retryingJob}
+          onPause={handlePauseGenerationJob}
+          pausing={pausingJob}
+          onResume={handleResumeGenerationJob}
+          resuming={resumingJob}
         />
       )}
       <StaleRegenerationAction
@@ -533,7 +579,9 @@ function StaleRegenerationAction({
   onRegenerate: () => void;
 }) {
   const isActive =
-    generationJob?.status === "queued" || generationJob?.status === "processing";
+    generationJob?.status === "queued" ||
+    generationJob?.status === "processing" ||
+    generationJob?.status === "pause_requested";
 
   if (staleSectionCount <= 0) return null;
 
@@ -575,7 +623,9 @@ function MissingRequirementsRegenerationAction({
   onRegenerate: () => void;
 }) {
   const isActive =
-    generationJob?.status === "queued" || generationJob?.status === "processing";
+    generationJob?.status === "queued" ||
+    generationJob?.status === "processing" ||
+    generationJob?.status === "pause_requested";
 
   if (missingRequirementSectionCount <= 0) return null;
 
@@ -617,7 +667,9 @@ function QualityRegenerationAction({
   onRegenerate: () => void;
 }) {
   const isActive =
-    generationJob?.status === "queued" || generationJob?.status === "processing";
+    generationJob?.status === "queued" ||
+    generationJob?.status === "processing" ||
+    generationJob?.status === "pause_requested";
 
   if (qualitySectionCount <= 0) return null;
 
@@ -894,10 +946,18 @@ function GenerationJobProgress({
   job,
   onRetry,
   retrying = false,
+  onPause,
+  pausing = false,
+  onResume,
+  resuming = false,
 }: {
   job: GenerationJob;
   onRetry?: () => void;
   retrying?: boolean;
+  onPause?: () => void;
+  pausing?: boolean;
+  onResume?: () => void;
+  resuming?: boolean;
 }) {
   const doneCount = job.completed_sections + job.skipped_sections;
   const percent =
@@ -908,24 +968,34 @@ function GenerationJobProgress({
         : 0;
   const currentTitle = repairLikelyMojibake(job.current_section_title ?? "");
   const error = repairLikelyMojibake(job.error ?? "");
-  const isActive = job.status === "queued" || job.status === "processing";
+  const isActive =
+    job.status === "queued" ||
+    job.status === "processing" ||
+    job.status === "pause_requested";
+  const isPaused = job.status === "paused";
   const statusLabel =
-    job.status === "done"
-      ? "Готово"
-      : job.status === "error"
-        ? "Грешка"
-        : job.status === "queued"
-          ? "В опашка"
-          : "Генерира се";
+    job.status === "paused"
+      ? "На пауза"
+      : job.status === "pause_requested"
+        ? "Изчаква пауза"
+        : job.status === "done"
+          ? "Готово"
+          : job.status === "error"
+            ? "Грешка"
+            : job.status === "queued"
+              ? "В опашка"
+              : "Генерира се";
 
   return (
     <div
       className={`mb-2 rounded-lg border px-3 py-2 text-xs ${
         job.status === "error"
           ? "border-red-200 bg-red-50 text-red-700"
-          : isActive
-            ? "border-blue-200 bg-blue-50 text-blue-800"
-            : "border-green-200 bg-green-50 text-green-700"
+          : isPaused || job.status === "pause_requested"
+            ? "border-amber-200 bg-amber-50 text-amber-800"
+            : isActive
+              ? "border-blue-200 bg-blue-50 text-blue-800"
+              : "border-green-200 bg-green-50 text-green-700"
       }`}
       data-testid="generation-job-progress"
     >
@@ -946,6 +1016,16 @@ function GenerationJobProgress({
       {currentTitle && isActive && (
         <p className="mt-1 truncate text-[11px] opacity-80">{currentTitle}</p>
       )}
+      {job.status === "pause_requested" && (
+        <p className="mt-1 text-[11px] opacity-90">
+          Текущата секция ще бъде записана преди спирането.
+        </p>
+      )}
+      {isPaused && (
+        <p className="mt-1 text-[11px] opacity-90">
+          Генерираният дотук текст може да бъде експортиран като работен DOCX.
+        </p>
+      )}
       {error && job.status === "error" && (
         <p className="mt-1 text-[11px] opacity-90">{error}</p>
       )}
@@ -958,6 +1038,28 @@ function GenerationJobProgress({
           className="mt-2 rounded border border-red-200 bg-white px-2 py-1 text-[11px] font-medium text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {retrying ? "..." : "Продължи"}
+        </button>
+      )}
+      {(job.status === "queued" || job.status === "processing") && onPause && (
+        <button
+          type="button"
+          onClick={onPause}
+          disabled={pausing}
+          data-testid="generation-job-pause-button"
+          className="mt-2 rounded border border-blue-200 bg-white px-2 py-1 text-[11px] font-medium text-blue-700 transition hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {pausing ? "Изчаква..." : "Пауза"}
+        </button>
+      )}
+      {isPaused && onResume && (
+        <button
+          type="button"
+          onClick={onResume}
+          disabled={resuming}
+          data-testid="generation-job-resume-button"
+          className="mt-2 rounded border border-amber-300 bg-white px-2 py-1 text-[11px] font-medium text-amber-800 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {resuming ? "Продължава..." : "Продължи"}
         </button>
       )}
     </div>

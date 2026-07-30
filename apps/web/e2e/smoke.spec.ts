@@ -766,7 +766,7 @@ test.describe("smoke", () => {
     }
   });
 
-  test("shows latest all-section background generation progress", async ({
+  test("shows progress and requests a safe generation pause", async ({
     page,
     request,
   }) => {
@@ -802,6 +802,12 @@ test.describe("smoke", () => {
       await expect(progress).toBeVisible();
       await expect(progress).toContainText("2 / 3");
       await expect(progress).toContainText("Execution Plan");
+
+      await page.getByTestId("generation-job-pause-button").click();
+      await expect(progress).toContainText("Изчаква пауза");
+      await expect(progress).toContainText(
+        "Текущата секция ще бъде записана преди спирането.",
+      );
     } finally {
       await request.delete(`/api/v1/projects/${projectId}`);
     }

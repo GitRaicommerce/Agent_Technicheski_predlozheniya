@@ -7,12 +7,15 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from app.agents.generation_jobs import (
+    _pause_job_if_requested,
     _run_drafting_all_job,
     _set_job_result,
     _sections_pending_generation,
     create_drafting_quality_job,
     create_drafting_requirements_job,
     create_drafting_stale_job,
+    request_generation_job_pause,
+    resume_generation_job,
 )
 from app.core.models import TpOutline
 from tests.conftest import _make_project
@@ -52,6 +55,76 @@ def test_set_job_result_snapshots_progress_lists():
     results.append({"section_uid": "section-2"})
 
     assert job.result_json["sections"] == [{"section_uid": "section-1"}]
+
+
+@pytest.mark.asyncio
+async def test_pause_request_transitions_worker_to_paused_state(mock_db):
+    job = SimpleNamespace(
+        status="pause_requested",
+        current_section_uid="section-1",
+        current_section_title="Section 1",
+        updated_at=None,
+    )
+
+    paused = await _pause_job_if_requested(job, mock_db)
+
+    assert paused is True
+    assert job.status == "paused"
+    assert job.current_section_uid is None
+    assert job.current_section_title is None
+    mock_db.commit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_pause_request_marks_processing_job_without_losing_progress(mock_db):
+    job = SimpleNamespace(
+        status="processing",
+        completed_sections=3,
+        skipped_sections=2,
+        updated_at=None,
+    )
+
+    result = await request_generation_job_pause(job, mock_db)
+
+    assert result.status == "pause_requested"
+    assert result.completed_sections == 3
+    assert result.skipped_sections == 2
+    mock_db.commit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_resume_targeted_job_only_enqueues_remaining_sections(mock_db):
+    project = _make_project()
+    job = SimpleNamespace(
+        status="paused",
+        job_type="drafting_quality",
+        result_json={
+            "target_section_uids": ["section-1", "section-2"],
+            "target_reason": "quality_review",
+            "target_guidance": {
+                "section-1": {"instructions": ["done"]},
+                "section-2": {"instructions": ["expand"]},
+            },
+            "sections": [{"section_uid": "section-1"}],
+        },
+    )
+    next_job = SimpleNamespace(id="next-job")
+
+    with patch(
+        "app.agents.generation_jobs.create_drafting_job",
+        new=AsyncMock(return_value=next_job),
+    ) as create_job:
+        result = await resume_generation_job(job, project, mock_db)
+
+    assert result is next_job
+    create_job.assert_awaited_once_with(
+        project=project,
+        db=mock_db,
+        target_section_uids=["section-2"],
+        target_reason="quality_review",
+        target_guidance={"section-2": {"instructions": ["expand"]}},
+        job_type="drafting_quality",
+    )
 
 
 @pytest.mark.asyncio

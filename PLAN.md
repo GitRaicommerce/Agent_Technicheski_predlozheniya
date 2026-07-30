@@ -243,6 +243,7 @@
 - Fixed bulk generation falsely reporting empty model results as completed sections: drafting now requires persisted non-empty text, truncated provider responses fail explicitly, progress snapshots update reliably, and the worker timeout is four hours for large approved outlines.
 - Raised the default and local Docker LLM output budget from 4,096 to 16,384 tokens so detailed Bulgarian sections are not routinely cut off before valid JSON is completed.
 - Added approved-outline completeness to DOCX readiness, including exact missing-section counts and titles in the API, Markdown report, and export UI while preserving working-draft export.
+- Added safe pause and resume controls for background generation: pause requests finish and persist the current section before stopping, paused jobs keep all completed text exportable as a working DOCX, and resume starts only the remaining section scope.
 
 ## Active Goals
 

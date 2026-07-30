@@ -586,6 +586,53 @@ async def retry_generation_job(
 
 
 @router.post(
+    "/{project_id}/generation-jobs/{job_id}/pause",
+    response_model=GenerationJobResponse,
+)
+async def pause_generation_job(
+    project_id: str,
+    job_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    from app.agents.generation_jobs import request_generation_job_pause
+    from app.core.models import GenerationJob
+
+    job = await db.get(GenerationJob, job_id)
+    if not job or job.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Generation job not found")
+    try:
+        job = await request_generation_job_pause(job, db)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return _generation_job_response(job)
+
+
+@router.post(
+    "/{project_id}/generation-jobs/{job_id}/resume",
+    response_model=GenerationJobResponse,
+)
+async def resume_paused_generation_job(
+    project_id: str,
+    job_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    from app.agents.generation_jobs import resume_generation_job
+    from app.core.models import GenerationJob
+
+    project = await db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    job = await db.get(GenerationJob, job_id)
+    if not job or job.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Generation job not found")
+    try:
+        next_job = await resume_generation_job(job, project, db)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return _generation_job_response(next_job)
+
+
+@router.post(
     "/{project_id}/generation-jobs/stale",
     response_model=GenerationJobResponse,
 )

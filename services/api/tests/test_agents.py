@@ -415,6 +415,85 @@ async def test_retry_generation_job_creates_background_job(client, mock_db):
     create_job.assert_awaited_once_with(project=project, db=mock_db)
 
 
+@pytest.mark.asyncio
+async def test_pause_generation_job_requests_safe_worker_pause(client, mock_db):
+    from datetime import datetime, timezone
+    from app.core.models import GenerationJob
+
+    now = datetime.now(timezone.utc)
+    project_id = str(uuid.uuid4())
+    job = GenerationJob(
+        id=str(uuid.uuid4()),
+        project_id=project_id,
+        job_type="drafting_all",
+        status="processing",
+        total_sections=5,
+        completed_sections=2,
+        skipped_sections=1,
+        trace_id=str(uuid.uuid4()),
+        created_at=now,
+        updated_at=now,
+    )
+    mock_db.get = AsyncMock(return_value=job)
+
+    resp = await client.post(
+        f"/api/v1/agents/{project_id}/generation-jobs/{job.id}/pause"
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "pause_requested"
+    assert job.completed_sections == 2
+    mock_db.commit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_resume_paused_generation_job_returns_new_queued_job(client, mock_db):
+    from datetime import datetime, timezone
+    from app.core.models import GenerationJob
+
+    project = _make_project()
+    now = datetime.now(timezone.utc)
+    paused_job = GenerationJob(
+        id=str(uuid.uuid4()),
+        project_id=project.id,
+        job_type="drafting_all",
+        status="paused",
+        total_sections=5,
+        completed_sections=2,
+        skipped_sections=1,
+        trace_id=str(uuid.uuid4()),
+        created_at=now,
+        updated_at=now,
+    )
+    next_job = GenerationJob(
+        id=str(uuid.uuid4()),
+        project_id=project.id,
+        job_type="drafting_all",
+        status="queued",
+        total_sections=0,
+        completed_sections=0,
+        skipped_sections=0,
+        trace_id=str(uuid.uuid4()),
+        created_at=now,
+        updated_at=now,
+    )
+    mock_db.get = AsyncMock(side_effect=[project, paused_job])
+
+    with patch(
+        "app.agents.generation_jobs.resume_generation_job",
+        new=AsyncMock(return_value=next_job),
+    ) as resume_job:
+        resp = await client.post(
+            f"/api/v1/agents/{project.id}/generation-jobs/"
+            f"{paused_job.id}/resume"
+        )
+
+    assert resp.status_code == 200
+    assert resp.json()["id"] == next_job.id
+    assert resp.json()["status"] == "queued"
+    resume_job.assert_awaited_once_with(paused_job, project, mock_db)
+
+
 # ---------------------------------------------------------------------------
 # POST /api/v1/agents/{project_id}/sections/{section_uid}/regenerate
 # ---------------------------------------------------------------------------

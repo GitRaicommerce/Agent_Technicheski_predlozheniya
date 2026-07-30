@@ -17,6 +17,8 @@ vi.mock("@/lib/api", async () => {
         listGenerations: vi.fn(),
         latestGenerationJob: vi.fn(),
         retryGenerationJob: vi.fn(),
+        pauseGenerationJob: vi.fn(),
+        resumeGenerationJob: vi.fn(),
         regenerateStaleGenerationJob: vi.fn(),
         regenerateQualityGenerationJob: vi.fn(),
         regenerateMissingRequirementsGenerationJob: vi.fn(),
@@ -31,6 +33,8 @@ vi.mock("@/lib/api", async () => {
 const listGenerationsMock = vi.mocked(api.agents.listGenerations);
 const latestGenerationJobMock = vi.mocked(api.agents.latestGenerationJob);
 const retryGenerationJobMock = vi.mocked(api.agents.retryGenerationJob);
+const pauseGenerationJobMock = vi.mocked(api.agents.pauseGenerationJob);
+const resumeGenerationJobMock = vi.mocked(api.agents.resumeGenerationJob);
 const regenerateStaleGenerationJobMock = vi.mocked(
   api.agents.regenerateStaleGenerationJob,
 );
@@ -478,6 +482,94 @@ describe("GenerationsPanel", () => {
       "2 / 4",
     );
     expect(screen.getByText("Section 2")).toBeInTheDocument();
+  });
+
+  it("requests a safe pause for an active generation job", async () => {
+    listGenerationsMock.mockResolvedValue([]);
+    const processingJob = {
+      id: "job-1",
+      project_id: "project-1",
+      job_type: "drafting_all",
+      status: "processing",
+      total_sections: 4,
+      completed_sections: 1,
+      skipped_sections: 1,
+      current_section_uid: "sec-2",
+      current_section_title: "Section 2",
+      error: null,
+      result_json: null,
+      trace_id: "trace-1",
+      created_at: "2026-04-20T10:00:00.000Z",
+      updated_at: "2026-04-20T10:01:00.000Z",
+      completed_at: null,
+    };
+    latestGenerationJobMock.mockResolvedValue(processingJob);
+    pauseGenerationJobMock.mockResolvedValue({
+      ...processingJob,
+      status: "pause_requested",
+    });
+
+    render(<GenerationsPanel projectId="project-1" />);
+    await userEvent.click(
+      await screen.findByTestId("generation-job-pause-button"),
+    );
+
+    expect(pauseGenerationJobMock).toHaveBeenCalledWith("project-1", "job-1");
+    expect(await screen.findByText("Изчаква пауза")).toBeInTheDocument();
+    expect(
+      screen.getByText("Текущата секция ще бъде записана преди спирането."),
+    ).toBeInTheDocument();
+  });
+
+  it("resumes a paused generation job", async () => {
+    listGenerationsMock.mockResolvedValue([]);
+    const pausedJob = {
+      id: "job-1",
+      project_id: "project-1",
+      job_type: "drafting_all",
+      status: "paused",
+      total_sections: 4,
+      completed_sections: 2,
+      skipped_sections: 1,
+      current_section_uid: null,
+      current_section_title: null,
+      error: null,
+      result_json: { sections: [{ section_uid: "sec-1" }] },
+      trace_id: "trace-1",
+      created_at: "2026-04-20T10:00:00.000Z",
+      updated_at: "2026-04-20T10:01:00.000Z",
+      completed_at: null,
+    };
+    const queuedJob = {
+      ...pausedJob,
+      id: "job-2",
+      status: "queued",
+      completed_sections: 0,
+      skipped_sections: 0,
+      result_json: null,
+      trace_id: "trace-2",
+    };
+    latestGenerationJobMock
+      .mockResolvedValueOnce(pausedJob)
+      .mockResolvedValue(queuedJob);
+    resumeGenerationJobMock.mockResolvedValue(queuedJob);
+
+    render(<GenerationsPanel projectId="project-1" />);
+
+    expect(
+      await screen.findByText(
+        "Генерираният дотук текст може да бъде експортиран като работен DOCX.",
+      ),
+    ).toBeInTheDocument();
+    await userEvent.click(screen.getByTestId("generation-job-resume-button"));
+
+    await waitFor(() => {
+      expect(resumeGenerationJobMock).toHaveBeenCalledWith(
+        "project-1",
+        "job-1",
+      );
+    });
+    expect(await screen.findByText("0 / 4")).toBeInTheDocument();
   });
 
   it("retries a failed all-sections generation job", async () => {

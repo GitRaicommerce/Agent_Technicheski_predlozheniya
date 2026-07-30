@@ -330,7 +330,7 @@ export interface GenerationJob {
   id: string;
   project_id: string;
   job_type: string;
-  status: "queued" | "processing" | "done" | "error" | string;
+  status: "queued" | "processing" | "pause_requested" | "paused" | "done" | "error" | string;
   total_sections: number;
   completed_sections: number;
   skipped_sections: number;
@@ -521,6 +521,16 @@ export const api = {
     retryGenerationJob: (projectId: string) =>
       apiFetch<GenerationJob>(
         `/api/v1/agents/${projectId}/generation-jobs/retry`,
+        { method: "POST" },
+      ),
+    pauseGenerationJob: (projectId: string, jobId: string) =>
+      apiFetch<GenerationJob>(
+        `/api/v1/agents/${projectId}/generation-jobs/${jobId}/pause`,
+        { method: "POST" },
+      ),
+    resumeGenerationJob: (projectId: string, jobId: string) =>
+      apiFetch<GenerationJob>(
+        `/api/v1/agents/${projectId}/generation-jobs/${jobId}/resume`,
         { method: "POST" },
       ),
     regenerateStaleGenerationJob: (projectId: string) =>

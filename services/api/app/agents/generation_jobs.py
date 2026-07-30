@@ -18,6 +18,7 @@ GENERATION_JOB_TIMEOUT_SECONDS = 4 * 60 * 60
 
 
 TERMINAL_JOB_STATUSES = {"done", "error"}
+PAUSABLE_JOB_STATUSES = {"queued", "processing", "pause_requested"}
 
 
 def _section_result(
@@ -174,6 +175,66 @@ def _targeted_sections(
 
 async def create_drafting_all_job(project: Project, db) -> GenerationJob:
     return await create_drafting_job(project=project, db=db)
+
+
+async def request_generation_job_pause(job: GenerationJob, db) -> GenerationJob:
+    if job.status == "paused" or job.status == "pause_requested":
+        return job
+    if job.status not in PAUSABLE_JOB_STATUSES:
+        raise ValueError("Only queued or processing generation jobs can be paused.")
+
+    job.status = "pause_requested"
+    job.updated_at = datetime.now(timezone.utc)
+    await db.commit()
+    return job
+
+
+async def resume_generation_job(
+    job: GenerationJob,
+    project: Project,
+    db,
+) -> GenerationJob:
+    if job.status != "paused":
+        raise ValueError("Only paused generation jobs can be resumed.")
+
+    previous_result = job.result_json if isinstance(job.result_json, dict) else {}
+    if job.job_type == "drafting_all":
+        return await create_drafting_all_job(project=project, db=db)
+
+    original_targets = [
+        str(uid)
+        for uid in previous_result.get("target_section_uids") or []
+        if str(uid).strip()
+    ]
+    completed_targets = {
+        str(item.get("section_uid"))
+        for item in previous_result.get("sections") or []
+        if isinstance(item, dict) and item.get("section_uid")
+    }
+    remaining_targets = [
+        uid for uid in original_targets if uid not in completed_targets
+    ]
+    if not remaining_targets:
+        raise ValueError("The paused generation job has no remaining sections.")
+
+    target_guidance = previous_result.get("target_guidance")
+    if isinstance(target_guidance, dict):
+        target_guidance = {
+            uid: guidance
+            for uid, guidance in target_guidance.items()
+            if uid in remaining_targets and isinstance(guidance, dict)
+        }
+    else:
+        target_guidance = None
+
+    return await create_drafting_job(
+        project=project,
+        db=db,
+        target_section_uids=remaining_targets,
+        target_reason=previous_result.get("target_reason"),
+        target_guidance=target_guidance,
+        job_type=job.job_type,
+    )
 
 
 async def create_drafting_stale_job(project: Project, db) -> GenerationJob:
@@ -587,6 +648,9 @@ async def _run_drafting_all_job(job: GenerationJob, db) -> None:
         pending_sections = _sections_pending_generation(all_sections, generation_statuses)
         section_scope_count = len(all_sections)
 
+    if await _pause_job_if_requested(job, db):
+        return
+
     job.status = "processing"
     job.total_sections = section_scope_count
     job.skipped_sections = max(0, section_scope_count - len(pending_sections))
@@ -622,6 +686,9 @@ async def _run_drafting_all_job(job: GenerationJob, db) -> None:
     results: list[dict[str, Any]] = []
     failed_sections: list[dict[str, Any]] = []
     for section in pending_sections:
+        if await _pause_job_if_requested(job, db, refresh=True):
+            return
+
         uid = section.get("uid")
         title = section.get("title", "")
         requirements = section.get("requirements", [])
@@ -760,6 +827,25 @@ async def _run_drafting_all_job(job: GenerationJob, db) -> None:
     job.completed_at = datetime.now(timezone.utc)
     job.updated_at = datetime.now(timezone.utc)
     await db.commit()
+
+
+async def _pause_job_if_requested(
+    job: GenerationJob,
+    db,
+    *,
+    refresh: bool = False,
+) -> bool:
+    if refresh:
+        await db.refresh(job, attribute_names=["status"])
+    if job.status != "pause_requested":
+        return False
+
+    job.status = "paused"
+    job.current_section_uid = None
+    job.current_section_title = None
+    job.updated_at = datetime.now(timezone.utc)
+    await db.commit()
+    return True
 
 
 def _collect_sections(sections: list[dict[str, Any]], result: list[dict[str, Any]]) -> None:
