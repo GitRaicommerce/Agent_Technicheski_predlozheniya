@@ -36,6 +36,7 @@ export default function GenerationsPanel({
     null,
   );
   const [retryingJob, setRetryingJob] = useState(false);
+  const [regeneratingAllJob, setRegeneratingAllJob] = useState(false);
   const [pausingJob, setPausingJob] = useState(false);
   const [resumingJob, setResumingJob] = useState(false);
   const [regeneratingStaleJob, setRegeneratingStaleJob] = useState(false);
@@ -162,6 +163,27 @@ export default function GenerationsPanel({
     }
   };
 
+  const handleRegenerateAllSections = async () => {
+    const confirmed = window.confirm(
+      "Да се създаде ли нова версия на всички раздели? Това ще стартира нова LLM генерация за всяка секция.",
+    );
+    if (!confirmed) return;
+
+    setRegeneratingAllJob(true);
+    setError(null);
+    try {
+      const nextJob = await api.agents.regenerateAllGenerationJob(projectId);
+      setGenerationJob(nextJob);
+      await load();
+    } catch (e: unknown) {
+      setError(
+        e instanceof Error ? e.message : "Неуспешно стартиране на новата версия.",
+      );
+    } finally {
+      setRegeneratingAllJob(false);
+    }
+  };
+
   const handleResumeGenerationJob = async () => {
     if (!generationJob) return;
     setResumingJob(true);
@@ -278,6 +300,7 @@ export default function GenerationsPanel({
         {generationJob && (
           <GenerationJobProgress
             job={generationJob}
+            availableSectionCount={0}
             onRetry={handleRetryGenerationJob}
             retrying={retryingJob}
             onPause={handlePauseGenerationJob}
@@ -286,6 +309,13 @@ export default function GenerationsPanel({
             resuming={resumingJob}
           />
         )}
+        <GenerationStartActions
+          generationJob={generationJob}
+          completing={retryingJob}
+          regeneratingAll={regeneratingAllJob}
+          onComplete={handleRetryGenerationJob}
+          onRegenerateAll={handleRegenerateAllSections}
+        />
         <p className="text-xs leading-relaxed text-gray-400">
           Все още няма генерирани текстове. Използвайте TP AI, за да
           генерирате съдържание по одобрения outline.
@@ -323,6 +353,7 @@ export default function GenerationsPanel({
       {generationJob && (
         <GenerationJobProgress
           job={generationJob}
+          availableSectionCount={sections.length}
           onRetry={handleRetryGenerationJob}
           retrying={retryingJob}
           onPause={handlePauseGenerationJob}
@@ -331,6 +362,13 @@ export default function GenerationsPanel({
           resuming={resumingJob}
         />
       )}
+      <GenerationStartActions
+        generationJob={generationJob}
+        completing={retryingJob}
+        regeneratingAll={regeneratingAllJob}
+        onComplete={handleRetryGenerationJob}
+        onRegenerateAll={handleRegenerateAllSections}
+      />
       <StaleRegenerationAction
         staleSectionCount={countStaleSelectedSections(sections)}
         generationJob={generationJob}
@@ -942,8 +980,52 @@ function getSectionAttention(
   };
 }
 
+function GenerationStartActions({
+  generationJob,
+  completing,
+  regeneratingAll,
+  onComplete,
+  onRegenerateAll,
+}: {
+  generationJob: GenerationJob | null;
+  completing: boolean;
+  regeneratingAll: boolean;
+  onComplete: () => void;
+  onRegenerateAll: () => void;
+}) {
+  const unavailable =
+    generationJob?.status === "queued" ||
+    generationJob?.status === "processing" ||
+    generationJob?.status === "pause_requested" ||
+    generationJob?.status === "paused";
+
+  return (
+    <div className="mb-2 flex flex-wrap gap-2">
+      <button
+        type="button"
+        onClick={onComplete}
+        disabled={unavailable || completing || regeneratingAll}
+        data-testid="generation-complete-missing-button"
+        className="rounded border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        {completing ? "Стартира..." : "Довърши липсващите"}
+      </button>
+      <button
+        type="button"
+        onClick={onRegenerateAll}
+        disabled={unavailable || completing || regeneratingAll}
+        data-testid="generation-regenerate-all-button"
+        className="rounded border border-blue-300 bg-blue-50 px-2.5 py-1.5 text-xs font-medium text-blue-800 transition hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        {regeneratingAll ? "Стартира..." : "Нова версия на всички"}
+      </button>
+    </div>
+  );
+}
+
 function GenerationJobProgress({
   job,
+  availableSectionCount,
   onRetry,
   retrying = false,
   onPause,
@@ -952,6 +1034,7 @@ function GenerationJobProgress({
   resuming = false,
 }: {
   job: GenerationJob;
+  availableSectionCount: number;
   onRetry?: () => void;
   retrying?: boolean;
   onPause?: () => void;
@@ -960,9 +1043,19 @@ function GenerationJobProgress({
   resuming?: boolean;
 }) {
   const doneCount = job.completed_sections + job.skipped_sections;
+  const isIncompleteDoneJob =
+    job.status === "done" &&
+    job.total_sections > 0 &&
+    availableSectionCount < job.total_sections;
+  const displayedDoneCount = isIncompleteDoneJob
+    ? availableSectionCount
+    : doneCount;
   const percent =
     job.total_sections > 0
-      ? Math.min(100, Math.round((doneCount / job.total_sections) * 100))
+      ? Math.min(
+          100,
+          Math.round((displayedDoneCount / job.total_sections) * 100),
+        )
       : job.status === "done"
         ? 100
         : 0;
@@ -979,7 +1072,9 @@ function GenerationJobProgress({
       : job.status === "pause_requested"
         ? "Изчаква пауза"
         : job.status === "done"
-          ? "Готово"
+          ? isIncompleteDoneJob
+            ? "Непълна генерация"
+            : "Готово"
           : job.status === "error"
             ? "Грешка"
             : job.status === "queued"
@@ -991,7 +1086,7 @@ function GenerationJobProgress({
       className={`mb-2 rounded-lg border px-3 py-2 text-xs ${
         job.status === "error"
           ? "border-red-200 bg-red-50 text-red-700"
-          : isPaused || job.status === "pause_requested"
+          : isPaused || job.status === "pause_requested" || isIncompleteDoneJob
             ? "border-amber-200 bg-amber-50 text-amber-800"
             : isActive
               ? "border-blue-200 bg-blue-50 text-blue-800"
@@ -1002,7 +1097,7 @@ function GenerationJobProgress({
       <div className="mb-1 flex items-center justify-between gap-2">
         <span className="font-medium">{statusLabel}</span>
         <span className="shrink-0 tabular-nums">
-          {doneCount} / {job.total_sections}
+          {displayedDoneCount} / {job.total_sections}
         </span>
       </div>
       <div className="h-1.5 overflow-hidden rounded-full bg-white/70">
@@ -1024,6 +1119,13 @@ function GenerationJobProgress({
       {isPaused && (
         <p className="mt-1 text-[11px] opacity-90">
           Генерираният дотук текст може да бъде експортиран като работен DOCX.
+        </p>
+      )}
+      {isIncompleteDoneJob && (
+        <p className="mt-1 text-[11px] opacity-90">
+          Последната задача е отчетена като завършена, но са налични само{" "}
+          {availableSectionCount} от {job.total_sections} раздела. Използвайте
+          „Довърши липсващите“ или „Нова версия на всички“.
         </p>
       )}
       {error && job.status === "error" && (

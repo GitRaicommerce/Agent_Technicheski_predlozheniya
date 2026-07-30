@@ -244,6 +244,8 @@
 - Raised the default and local Docker LLM output budget from 4,096 to 16,384 tokens so detailed Bulgarian sections are not routinely cut off before valid JSON is completed.
 - Added approved-outline completeness to DOCX readiness, including exact missing-section counts and titles in the API, Markdown report, and export UI while preserving working-draft export.
 - Added safe pause and resume controls for background generation: pause requests finish and persist the current section before stopping, paused jobs keep all completed text exportable as a working DOCX, and resume starts only the remaining section scope.
+- Separated "complete missing sections" from "new version of all sections": explicit full-regeneration intents and the Generations action now create and select a new revision for every approved outline section instead of silently reusing old text.
+- Bound drafting, generation history, verification, and export readiness to the latest approved outline, so a newer unapproved outline draft cannot hide existing text or receive a "new generation" command; legacy jobs that claim completion without persisted text are now shown as incomplete using the actual available section count.
 
 ## Active Goals
 

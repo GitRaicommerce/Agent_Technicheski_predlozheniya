@@ -280,7 +280,10 @@ async def _load_outline_section_metadata(
 ) -> dict[str, dict]:
     result = await db.execute(
         select(TpOutline)
-        .where(TpOutline.project_id == project_id)
+        .where(
+            TpOutline.project_id == project_id,
+            TpOutline.status_locked.is_(True),
+        )
         .order_by(TpOutline.version.desc())
         .limit(1)
     )

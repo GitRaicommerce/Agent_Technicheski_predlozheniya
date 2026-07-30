@@ -12,6 +12,7 @@ from app.agents.generation_jobs import (
     _set_job_result,
     _sections_pending_generation,
     create_drafting_quality_job,
+    create_drafting_all_job,
     create_drafting_requirements_job,
     create_drafting_stale_job,
     request_generation_job_pause,
@@ -124,6 +125,50 @@ async def test_resume_targeted_job_only_enqueues_remaining_sections(mock_db):
         target_reason="quality_review",
         target_guidance={"section-2": {"instructions": ["expand"]}},
         job_type="drafting_quality",
+    )
+
+
+@pytest.mark.asyncio
+async def test_full_regeneration_targets_every_outline_section(mock_db):
+    project = _make_project()
+    outline = TpOutline(
+        id=str(uuid.uuid4()),
+        project_id=project.id,
+        outline_json={
+            "sections": [
+                {
+                    "uid": "section-1",
+                    "title": "Section 1",
+                    "subsections": [
+                        {"uid": "section-1-1", "title": "Section 1.1"}
+                    ],
+                },
+                {"uid": "section-2", "title": "Section 2"},
+            ]
+        },
+        status_locked=True,
+        version=1,
+    )
+    mock_db.execute = AsyncMock(return_value=_outline_result(outline))
+    next_job = SimpleNamespace(id="next-job")
+
+    with patch(
+        "app.agents.generation_jobs.create_drafting_job",
+        new=AsyncMock(return_value=next_job),
+    ) as create_job:
+        result = await create_drafting_all_job(
+            project,
+            mock_db,
+            regenerate_existing=True,
+        )
+
+    assert result is next_job
+    create_job.assert_awaited_once_with(
+        project=project,
+        db=mock_db,
+        target_section_uids=["section-1", "section-1-1", "section-2"],
+        target_reason="regenerate_all",
+        job_type="drafting_all",
     )
 
 

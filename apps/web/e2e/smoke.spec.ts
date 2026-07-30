@@ -813,6 +813,65 @@ test.describe("smoke", () => {
     }
   });
 
+  test("starts an explicit new revision of all sections", async ({
+    page,
+    request,
+  }) => {
+    const projectName = `Smoke Regenerate All ${Date.now()}`;
+    const createResponse = await request.post("/api/v1/projects", {
+      data: {
+        name: projectName,
+        location: "Sofia",
+      },
+    });
+
+    expect(createResponse.ok()).toBeTruthy();
+    const project = (await createResponse.json()) as { id: string };
+    const projectId = project.id;
+    await seedProjectState(projectId, { outlineLocked: true });
+    let regenerateAllStarted = false;
+
+    await page.route(
+      `**/api/v1/agents/${projectId}/generation-jobs/regenerate-all`,
+      async (route) => {
+        regenerateAllStarted = true;
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            id: randomUUID(),
+            project_id: projectId,
+            job_type: "drafting_all",
+            status: "queued",
+            total_sections: 0,
+            completed_sections: 0,
+            skipped_sections: 0,
+            current_section_uid: null,
+            current_section_title: null,
+            error: null,
+            result_json: { target_reason: "regenerate_all" },
+            trace_id: randomUUID(),
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            completed_at: null,
+          }),
+        });
+      },
+    );
+    page.on("dialog", (dialog) => dialog.accept());
+
+    try {
+      await page.goto(`/projects/${projectId}`);
+      await waitForProjectPage(page, projectName);
+      await page.getByTestId("generations-panel-toggle").click();
+      await page.getByTestId("generation-regenerate-all-button").click();
+
+      await expect.poll(() => regenerateAllStarted).toBeTruthy();
+    } finally {
+      await request.delete(`/api/v1/projects/${projectId}`);
+    }
+  });
+
   test("starts stale selected section regeneration from generations panel", async ({
     page,
     request,

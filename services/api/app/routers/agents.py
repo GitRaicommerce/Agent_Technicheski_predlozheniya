@@ -471,10 +471,14 @@ async def list_generations(project_id: str, db: AsyncSession = Depends(get_db)):
     from app.core.models import Generation, TpOutline
     from sqlalchemy import select
 
-    # Load section titles from the latest outline (best-effort)
+    # Generations belong to the approved structure. A newer outline draft must
+    # not hide the current working text or relabel it with unrelated section IDs.
     outline_result = await db.execute(
         select(TpOutline)
-        .where(TpOutline.project_id == project_id)
+        .where(
+            TpOutline.project_id == project_id,
+            TpOutline.status_locked.is_(True),
+        )
         .order_by(TpOutline.version.desc())
         .limit(1)
     )
@@ -582,6 +586,31 @@ async def retry_generation_job(
     from app.agents.generation_jobs import create_drafting_all_job
 
     job = await create_drafting_all_job(project=project, db=db)
+    return _generation_job_response(job)
+
+
+@router.post(
+    "/{project_id}/generation-jobs/regenerate-all",
+    response_model=GenerationJobResponse,
+)
+async def regenerate_all_sections_job(
+    project_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    project = await db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    from app.agents.generation_jobs import create_drafting_all_job
+
+    try:
+        job = await create_drafting_all_job(
+            project=project,
+            db=db,
+            regenerate_existing=True,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     return _generation_job_response(job)
 
 

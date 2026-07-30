@@ -173,8 +173,45 @@ def _targeted_sections(
     ]
 
 
-async def create_drafting_all_job(project: Project, db) -> GenerationJob:
-    return await create_drafting_job(project=project, db=db)
+async def create_drafting_all_job(
+    project: Project,
+    db,
+    *,
+    regenerate_existing: bool = False,
+) -> GenerationJob:
+    if not regenerate_existing:
+        return await create_drafting_job(project=project, db=db)
+
+    outline_result = await db.execute(
+        select(TpOutline)
+        .where(
+            TpOutline.project_id == project.id,
+            TpOutline.status_locked.is_(True),
+        )
+        .order_by(TpOutline.version.desc())
+        .limit(1)
+    )
+    outline = outline_result.scalar_one_or_none()
+    if not outline:
+        raise ValueError("No approved outline is available for full regeneration.")
+
+    all_sections: list[dict[str, Any]] = []
+    _collect_sections(outline.outline_json.get("sections", []), all_sections)
+    section_uids = [
+        str(section["uid"])
+        for section in all_sections
+        if section.get("uid")
+    ]
+    if not section_uids:
+        raise ValueError("The outline has no sections to regenerate.")
+
+    return await create_drafting_job(
+        project=project,
+        db=db,
+        target_section_uids=section_uids,
+        target_reason="regenerate_all",
+        job_type="drafting_all",
+    )
 
 
 async def request_generation_job_pause(job: GenerationJob, db) -> GenerationJob:
@@ -198,7 +235,10 @@ async def resume_generation_job(
         raise ValueError("Only paused generation jobs can be resumed.")
 
     previous_result = job.result_json if isinstance(job.result_json, dict) else {}
-    if job.job_type == "drafting_all":
+    if (
+        job.job_type == "drafting_all"
+        and previous_result.get("target_reason") != "regenerate_all"
+    ):
         return await create_drafting_all_job(project=project, db=db)
 
     original_targets = [
@@ -619,7 +659,10 @@ async def _run_drafting_all_job(job: GenerationJob, db) -> None:
 
     outline_result = await db.execute(
         select(TpOutline)
-        .where(TpOutline.project_id == project.id)
+        .where(
+            TpOutline.project_id == project.id,
+            TpOutline.status_locked.is_(True),
+        )
         .order_by(TpOutline.version.desc())
         .limit(1)
     )

@@ -523,6 +523,11 @@ export const api = {
         `/api/v1/agents/${projectId}/generation-jobs/retry`,
         { method: "POST" },
       ),
+    regenerateAllGenerationJob: (projectId: string) =>
+      apiFetch<GenerationJob>(
+        `/api/v1/agents/${projectId}/generation-jobs/regenerate-all`,
+        { method: "POST" },
+      ),
     pauseGenerationJob: (projectId: string, jobId: string) =>
       apiFetch<GenerationJob>(
         `/api/v1/agents/${projectId}/generation-jobs/${jobId}/pause`,

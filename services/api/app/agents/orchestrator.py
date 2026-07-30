@@ -161,6 +161,34 @@ async def run_orchestrator(
     # Step 2: dispatch to sub-agent if the LLM chose one
     agent_name = result.get("agent_called")
     agent_params = result.get("agent_params") or {}
+    regenerate_existing = _requests_full_regeneration(message)
+    if regenerate_existing:
+        approved_outline = (
+            latest_outline
+            if latest_outline and latest_outline.status_locked
+            else None
+        )
+        if approved_outline is None:
+            approved_outline_result = await db.execute(
+                select(TpOutline)
+                .where(
+                    TpOutline.project_id == project.id,
+                    TpOutline.status_locked.is_(True),
+                )
+                .order_by(TpOutline.version.desc())
+                .limit(1)
+            )
+            approved_outline = approved_outline_result.scalar_one_or_none()
+
+        agent_name = "drafting_all" if approved_outline else None
+        agent_params = {"regenerate_existing": True} if approved_outline else {}
+        result["agent_called"] = agent_name
+        result["agent_params"] = agent_params
+        if approved_outline is None:
+            result["assistant_message"] = (
+                "За нова генерация първо одобрете съдържанието. "
+                "Не е създадена нова структура или задача за текст."
+            )
 
     if agent_name and agent_name not in (None, "null"):
         log.info("orchestrator_dispatch", agent=agent_name, trace_id=trace_id)
@@ -168,7 +196,13 @@ async def run_orchestrator(
         if agent_name == "drafting_all":
             from app.agents.generation_jobs import create_drafting_all_job
 
-            job = await create_drafting_all_job(project=project, db=db)
+            job = await create_drafting_all_job(
+                project=project,
+                db=db,
+                regenerate_existing=bool(
+                    agent_params.get("regenerate_existing")
+                ),
+            )
             result["agent_result"] = {
                 "_agent": "drafting_all",
                 "job_id": job.id,
@@ -178,6 +212,11 @@ async def run_orchestrator(
                 "Стартирах генериране на всички раздели във фонов режим. "
                 "Следете напредъка в секция **Генерации**."
             )
+            if regenerate_existing:
+                result["assistant_message"] = (
+                    "Стартирах нова версия на всички раздели. "
+                    "Следете напредъка в секция **Генерации**."
+                )
         elif False and agent_name == "drafting_all":
             # Generate ALL ungeneated sections in sequence
             sub_result = await _run_drafting_all(
@@ -230,6 +269,22 @@ async def run_orchestrator(
     return result
 
 
+def _requests_full_regeneration(message: str) -> bool:
+    normalized = " ".join(message.casefold().split())
+    phrases = (
+        "нова генерация",
+        "нова версия на всички",
+        "нова версия на всичко",
+        "генерирай наново",
+        "генериране наново",
+        "регенерирай всичко",
+        "регенерирай всички",
+        "прегенерирай всичко",
+        "прегенерирай всички",
+    )
+    return any(phrase in normalized for phrase in phrases)
+
+
 async def _safe_run_legislation(
     *,
     project_id: str,
@@ -278,12 +333,14 @@ async def _run_drafting_all(
     from sqlalchemy import select, func
     from app.core.models import TpOutline, Generation
 
-    # Prefer the newest outline version, even if the previous approved version
-    # is older. Otherwise "generate all" can keep drafting against stale
-    # generic sections after the user has regenerated a better structure.
+    # Draft only against an explicitly approved structure. A newer outline
+    # draft may be under review and can have unrelated section identifiers.
     outline_result = await db.execute(
         select(TpOutline)
-        .where(TpOutline.project_id == project.id)
+        .where(
+            TpOutline.project_id == project.id,
+            TpOutline.status_locked.is_(True),
+        )
         .order_by(TpOutline.version.desc())
         .limit(1)
     )

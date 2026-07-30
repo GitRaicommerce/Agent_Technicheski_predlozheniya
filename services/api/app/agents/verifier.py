@@ -100,7 +100,10 @@ async def run_verifier(
 
     outline_result = await db.execute(
         select(TpOutline)
-        .where(TpOutline.project_id == project_id)
+        .where(
+            TpOutline.project_id == project_id,
+            TpOutline.status_locked.is_(True),
+        )
         .order_by(TpOutline.version.desc())
         .limit(1)
     )

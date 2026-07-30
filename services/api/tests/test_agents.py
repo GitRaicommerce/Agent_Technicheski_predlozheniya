@@ -264,8 +264,8 @@ async def test_get_generations_grouped(client, mock_db):
 
 
 @pytest.mark.asyncio
-async def test_get_generations_filters_out_stale_sections_not_in_latest_outline(client, mock_db):
-    """Показва само генерации за секциите от последния outline."""
+async def test_get_generations_filters_out_sections_not_in_approved_outline(client, mock_db):
+    """Показва само генерации за секциите от последния одобрен outline."""
     from datetime import datetime, timezone
     from app.core.models import Generation, TpOutline
 
@@ -278,7 +278,7 @@ async def test_get_generations_filters_out_stale_sections_not_in_latest_outline(
         id=str(uuid.uuid4()),
         project_id=pid,
         outline_json={"sections": [{"uid": current_sec_uid, "title": "Концепция и подход"}]},
-        status_locked=False,
+        status_locked=True,
         version=7,
     )
     current_generation = Generation(
@@ -317,6 +317,8 @@ async def test_get_generations_filters_out_stale_sections_not_in_latest_outline(
     assert len(data) == 1
     assert data[0]["section_uid"] == current_sec_uid
     assert data[0]["section_title"] == "Концепция и подход"
+    outline_query = str(mock_db.execute.await_args_list[0].args[0]).lower()
+    assert "status_locked" in outline_query
 
 
 # ---------------------------------------------------------------------------
@@ -413,6 +415,48 @@ async def test_retry_generation_job_creates_background_job(client, mock_db):
     assert data["id"] == job.id
     assert data["status"] == "queued"
     create_job.assert_awaited_once_with(project=project, db=mock_db)
+
+
+@pytest.mark.asyncio
+async def test_regenerate_all_job_requests_new_versions_for_existing_sections(
+    client,
+    mock_db,
+):
+    from datetime import datetime, timezone
+    from app.core.models import GenerationJob
+
+    project = _make_project()
+    now = datetime.now(timezone.utc)
+    job = GenerationJob(
+        id=str(uuid.uuid4()),
+        project_id=project.id,
+        job_type="drafting_all",
+        status="queued",
+        total_sections=0,
+        completed_sections=0,
+        skipped_sections=0,
+        result_json={"target_reason": "regenerate_all"},
+        trace_id=str(uuid.uuid4()),
+        created_at=now,
+        updated_at=now,
+    )
+    mock_db.get = AsyncMock(return_value=project)
+
+    with patch(
+        "app.agents.generation_jobs.create_drafting_all_job",
+        new=AsyncMock(return_value=job),
+    ) as create_job:
+        resp = await client.post(
+            f"/api/v1/agents/{project.id}/generation-jobs/regenerate-all"
+        )
+
+    assert resp.status_code == 200
+    assert resp.json()["result_json"]["target_reason"] == "regenerate_all"
+    create_job.assert_awaited_once_with(
+        project=project,
+        db=mock_db,
+        regenerate_existing=True,
+    )
 
 
 @pytest.mark.asyncio

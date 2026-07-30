@@ -59,14 +59,124 @@ async def test_run_orchestrator_enqueues_drafting_all_job(mock_db):
             db=mock_db,
         )
 
-    create_job.assert_awaited_once_with(project=project, db=mock_db)
+    create_job.assert_awaited_once_with(
+        project=project,
+        db=mock_db,
+        regenerate_existing=False,
+    )
     run_sync.assert_not_awaited()
     assert result["agent_result"]["job_id"] == job.id
     assert result["agent_result"]["job_status"] == "queued"
 
 
 @pytest.mark.asyncio
-async def test_run_drafting_all_prefers_latest_outline_even_if_unlocked(mock_db):
+async def test_new_generation_phrase_forces_full_regeneration(mock_db):
+    project = _make_project()
+    outline = TpOutline(
+        id=str(uuid.uuid4()),
+        project_id=project.id,
+        outline_json={"sections": [{"uid": "section-1", "title": "Section 1"}]},
+        status_locked=True,
+        version=1,
+    )
+    mock_db.execute = AsyncMock(
+        side_effect=[[], _outline_result(outline), []]
+    )
+    job = MagicMock(id=str(uuid.uuid4()), status="queued")
+
+    with (
+        patch(
+            "app.agents.orchestrator.llm_gateway.call",
+            new=AsyncMock(
+                return_value={
+                    "agent_called": None,
+                    "agent_params": {},
+                    "assistant_message": "Old content is already ready.",
+                }
+            ),
+        ),
+        patch(
+            "app.agents.generation_jobs.create_drafting_all_job",
+            new=AsyncMock(return_value=job),
+        ) as create_job,
+    ):
+        result = await run_orchestrator(
+            project=project,
+            message="Направи нова генерация",
+            history=[],
+            db=mock_db,
+        )
+
+    create_job.assert_awaited_once_with(
+        project=project,
+        db=mock_db,
+        regenerate_existing=True,
+    )
+    assert result["agent_called"] == "drafting_all"
+    assert result["agent_params"]["regenerate_existing"] is True
+    assert "нова версия на всички раздели" in result["assistant_message"]
+
+
+@pytest.mark.asyncio
+async def test_new_generation_uses_approved_outline_behind_newer_draft(mock_db):
+    project = _make_project()
+    draft_outline = TpOutline(
+        id=str(uuid.uuid4()),
+        project_id=project.id,
+        outline_json={"sections": [{"uid": "draft-section", "title": "Draft"}]},
+        status_locked=False,
+        version=2,
+    )
+    approved_outline = TpOutline(
+        id=str(uuid.uuid4()),
+        project_id=project.id,
+        outline_json={"sections": [{"uid": "approved-section", "title": "Approved"}]},
+        status_locked=True,
+        version=1,
+    )
+    mock_db.execute = AsyncMock(
+        side_effect=[
+            [],
+            _outline_result(draft_outline),
+            [],
+            _outline_result(approved_outline),
+        ]
+    )
+    job = MagicMock(id=str(uuid.uuid4()), status="queued")
+
+    with (
+        patch(
+            "app.agents.orchestrator.llm_gateway.call",
+            new=AsyncMock(
+                return_value={
+                    "agent_called": "tender_struct",
+                    "agent_params": {},
+                    "assistant_message": "Creating another outline.",
+                }
+            ),
+        ),
+        patch(
+            "app.agents.generation_jobs.create_drafting_all_job",
+            new=AsyncMock(return_value=job),
+        ) as create_job,
+    ):
+        result = await run_orchestrator(
+            project=project,
+            message="Направи нова генерация",
+            history=[],
+            db=mock_db,
+        )
+
+    create_job.assert_awaited_once_with(
+        project=project,
+        db=mock_db,
+        regenerate_existing=True,
+    )
+    assert result["agent_called"] == "drafting_all"
+
+
+@pytest.mark.asyncio
+async def test_run_drafting_all_uses_latest_approved_outline(mock_db):
     project = _make_project()
     latest_outline = TpOutline(
         id=str(uuid.uuid4()),
@@ -104,7 +214,7 @@ async def test_run_drafting_all_prefers_latest_outline_even_if_unlocked(mock_db)
     async def execute_side_effect(statement):
         sql = str(statement)
         if "FROM tp_outlines" in sql:
-            if "status_locked = true" in sql.lower():
+            if "status_locked" in sql.lower():
                 return _outline_result(locked_outline)
             return _outline_result(latest_outline)
         if "FROM generations" in sql:
@@ -137,11 +247,11 @@ async def test_run_drafting_all_prefers_latest_outline_even_if_unlocked(mock_db)
     ):
         result = await _run_drafting_all(project=project, db=mock_db, trace_id=str(uuid.uuid4()))
 
-    assert result["outline_version"] == 7
-    assert result["outline_locked"] is False
+    assert result["outline_version"] == 1
+    assert result["outline_locked"] is True
     assert result["generated_count"] == 1
-    assert result["sections"][0]["title"] == "Концепция и подход"
-    assert run_examples.await_args_list[0].kwargs["query"] == "Концепция и подход"
+    assert result["sections"][0]["title"] == "Общи данни за проекта"
+    assert run_examples.await_args_list[0].kwargs["query"] == "Общи данни за проекта"
 
 
 @pytest.mark.asyncio
