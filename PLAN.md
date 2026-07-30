@@ -240,6 +240,9 @@
 - Fixed the warning-state export interaction so the primary DOCX button immediately downloads the current working draft after readiness checks, instead of stopping after warnings and requiring a second hidden/unclear action.
 - Made project deletion idempotent and guarded against duplicate UI submissions, so a repeated DELETE after a successful removal no longer surfaces a misleading `404 Project not found` error.
 - Routed long-running orchestrator chat and legislation refresh requests through dedicated Next.js handlers with a five-minute execution window, preventing the rewrite proxy from returning misleading `500` errors while the backend is still processing.
+- Fixed bulk generation falsely reporting empty model results as completed sections: drafting now requires persisted non-empty text, truncated provider responses fail explicitly, progress snapshots update reliably, and the worker timeout is four hours for large approved outlines.
+- Raised the default and local Docker LLM output budget from 4,096 to 16,384 tokens so detailed Bulgarian sections are not routinely cut off before valid JSON is completed.
+- Added approved-outline completeness to DOCX readiness, including exact missing-section counts and titles in the API, Markdown report, and export UI while preserving working-draft export.
 
 ## Active Goals
 
@@ -250,7 +253,7 @@
 
 ## Next Recommended Steps
 
-1. Use `scripts/run_calibration_remediation_cycle.py --execute --wait --require-action-ready` with explicit `--action-key resolve_duplicate_selected` or the Generations bulk duplicate resolver to clear Pernik's legacy duplicate selected generations; the latest dry-run already confirms the planned action path and target counts.
+1. Re-run `Generate all` for the current Pernik water-supply project after the generation-completeness fix, confirm all 23 approved outline sections receive persisted text, then export a new working draft for reference comparison.
 2. Use the calibration remediation cycle script with `--execute --wait --action-key regenerate_stale` or Generations panel bulk stale-regeneration action for Pernik after duplicate selections are resolved; then use the bulk missing-requirements and quality/depth regeneration actions for any remaining requirement-coverage or blueprint-aware shallow sections reported by export preflight or gap-priority diagnostics.
 3. After resolving Pernik's duplicate selected variants and stale selected sections, regenerate affected sections so the section structure plan and iterative drafting quality-repair pass can improve subtopic coverage, checklist coverage, and depth before export readiness is checked again.
 4. Re-run the Pernik calibration bundle after remediation with `--action-report` and compare the regenerated output against the winning proposal, focusing on the manifest word-volume scorecard, section-level drafting-depth diagnostics, executed remediation evidence, execution-status deltas, and action target deltas in the before/after calibration manifest comparison report.

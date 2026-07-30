@@ -11,7 +11,12 @@ from app.core.llm_gateway import LLMGateway
 
 def _json_response(content: str = '{"status":"ok"}') -> SimpleNamespace:
     return SimpleNamespace(
-        choices=[SimpleNamespace(message=SimpleNamespace(content=content))]
+        choices=[
+            SimpleNamespace(
+                message=SimpleNamespace(content=content),
+                finish_reason="stop",
+            )
+        ]
     )
 
 
@@ -86,4 +91,51 @@ async def test_unavailable_fallback_provider_is_skipped(monkeypatch):
             user_message="Hello",
             provider="openai",
             model="gpt-4o-mini",
+        )
+
+
+@pytest.mark.asyncio
+async def test_openai_truncated_response_is_not_treated_as_valid_output(monkeypatch):
+    response = _json_response('{"status":"partial"}')
+    response.choices[0].finish_reason = "length"
+    gateway = LLMGateway()
+    gateway._openai_client = SimpleNamespace(
+        chat=SimpleNamespace(
+            completions=SimpleNamespace(create=AsyncMock(return_value=response))
+        )
+    )
+    monkeypatch.setattr(gateway_module.settings, "llm_max_tokens", 100)
+
+    with pytest.raises(RuntimeError, match="truncated"):
+        await gateway._call_provider(
+            provider="openai",
+            model="gpt-5.5",
+            system_prompt="Return JSON.",
+            user_message="Hello",
+        )
+
+
+@pytest.mark.asyncio
+async def test_anthropic_truncated_response_is_not_treated_as_valid_output(
+    monkeypatch,
+):
+    gateway = LLMGateway()
+    gateway._anthropic_client = SimpleNamespace(
+        messages=SimpleNamespace(
+            create=AsyncMock(
+                return_value=SimpleNamespace(
+                    stop_reason="max_tokens",
+                    content=[SimpleNamespace(text='{"status":"partial"}')],
+                )
+            )
+        )
+    )
+    monkeypatch.setattr(gateway_module.settings, "llm_max_tokens", 100)
+
+    with pytest.raises(RuntimeError, match="truncated"):
+        await gateway._call_provider(
+            provider="anthropic",
+            model="claude-test",
+            system_prompt="Return JSON.",
+            user_message="Hello",
         )

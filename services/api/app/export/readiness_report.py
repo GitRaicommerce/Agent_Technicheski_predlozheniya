@@ -97,6 +97,10 @@ def _blocker_actions(readiness: dict[str, Any]) -> list[str]:
         actions.append(
             "Регенерирайте избраните stale секции след разрешаване на дублираните selected варианти."
         )
+    if "missing_sections" in blocker_codes:
+        actions.append(
+            "Generate the missing sections from the approved outline."
+        )
     if "missing_requirements" in blocker_codes:
         actions.append(
             "Регенерирайте или редактирайте секциите с непокрити checklist изисквания."
@@ -119,6 +123,7 @@ def render_export_readiness_report(readiness: dict[str, Any]) -> str:
         f"- Ready: `{bool(readiness.get('ready'))}`",
         f"- Selected generations: `{_as_int(readiness.get('selected_generation_count'))}`",
         f"- Selected sections: `{_as_int(readiness.get('selected_section_count'))}`",
+        f"- Outline sections: `{_as_int(readiness.get('outline_section_count'))}`",
         f"- Blockers: `{_as_int(readiness.get('blocker_count'))}`",
         f"- Message: {_truncate(readiness.get('message') or '')}",
         "",
@@ -183,6 +188,16 @@ def render_export_readiness_report(readiness: dict[str, Any]) -> str:
     if stale_section_details:
         lines.extend(["", "## Stale Evidence Sections", ""])
         for section in stale_section_details:
+            lines.append(f"- {_section_label(section)}")
+
+    missing_generation_sections = [
+        item
+        for item in readiness.get("missing_generation_sections") or []
+        if isinstance(item, dict)
+    ]
+    if missing_generation_sections:
+        lines.extend(["", "## Sections Without Generated Text", ""])
+        for section in missing_generation_sections:
             lines.append(f"- {_section_label(section)}")
 
     missing_sections = [

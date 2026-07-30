@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     llm_default_model: str = "gpt-5.5"
     llm_fallback_provider: str = "anthropic"
     llm_fallback_model: str = "claude-3-5-sonnet-20241022"
-    llm_max_tokens: int = 4096
+    llm_max_tokens: int = 16384
     llm_temperature: float = 0.2
 
     # Embeddings

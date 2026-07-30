@@ -227,6 +227,38 @@ describe("ExportButton", () => {
     expect(openGenerationsMock).toHaveBeenCalled();
   });
 
+  it("shows how many approved outline sections have no generated text", async () => {
+    const openGenerationsMock = vi.fn();
+    readinessMock.mockResolvedValue({
+      project_id: "project-1",
+      ready: false,
+      status: "blocked",
+      outline_section_count: 23,
+      missing_generation_section_count: 18,
+      missing_generation_sections: [
+        { section_uid: "s1", section_title: "Missing section" },
+      ],
+    });
+
+    render(
+      <ExportButton
+        projectId="project-1"
+        projectName="Project Alpha"
+        onOpenGenerations={openGenerationsMock}
+      />,
+    );
+
+    await userEvent.click(screen.getByTestId("export-docx-button"));
+
+    expect(await screen.findByTestId("export-missing-generation-warning"))
+      .toHaveTextContent("18 секции");
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Отвори Генерации" }),
+    );
+    expect(openGenerationsMock).toHaveBeenCalled();
+  });
+
   it("exports the current draft immediately when warning blockers remain", async () => {
     readinessMock.mockResolvedValue({
       project_id: "project-1",

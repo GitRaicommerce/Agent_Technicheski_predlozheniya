@@ -939,6 +939,10 @@ async def run_drafting(
 
     if saved_ids:
         await db.flush()
+    else:
+        raise ValueError(
+            "Drafting completed without a non-empty generated section text."
+        )
 
     llm_result["_agent"] = "drafting"
     llm_result["_trace_id"] = trace_id

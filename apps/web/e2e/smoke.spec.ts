@@ -51,12 +51,28 @@ test.beforeEach(async ({ page }) => {
 });
 
 function exportReadyText(opening: string) {
-  const detailSentence =
-    "The proposal explains the execution sequence, responsible roles, coordination rhythm, quality controls, reporting evidence, risk response, resource readiness, acceptance checks, and communication duties in enough operational detail for export validation.";
+  const phases = [
+    "mobilization",
+    "design coordination",
+    "site preparation",
+    "material approval",
+    "work execution",
+    "quality inspection",
+    "progress reporting",
+    "risk monitoring",
+    "stakeholder communication",
+    "interim acceptance",
+    "defect correction",
+    "final handover",
+  ];
 
-  return [opening, ...Array.from({ length: 12 }, () => detailSentence)].join(
-    " ",
-  );
+  return [
+    opening,
+    ...phases.map(
+      (phase) =>
+        `For ${phase}, the proposal defines the execution sequence, responsible roles, coordination rhythm, quality controls, reporting evidence, risk response, resource readiness, acceptance checks, corrective actions, and communication duties in enough operational detail for export validation.`,
+    ),
+  ].join(" ");
 }
 
 async function seedProjectState(
@@ -86,6 +102,7 @@ async function seedProjectState(
   const snapshotId = randomUUID();
   const normalizedId = randomUUID();
   const generationId = randomUUID();
+  const subsectionGenerationId = randomUUID();
   const alternativeGenerationId = randomUUID();
   const generationJobId = randomUUID();
 
@@ -232,6 +249,23 @@ async function seedProjectState(
         options?.staleGeneration ? "stale" : "ok",
         randomUUID(),
         JSON.stringify(generationFlags),
+      ],
+    );
+
+    await client.query(
+      `
+        INSERT INTO generations (
+          id, project_id, section_uid, variant, revision_number, text,
+          evidence_status, selected, trace_id, flags_json
+        )
+        VALUES ($1, $2, $3, '1', 1, $4, 'ok', true, $5, 'null'::jsonb)
+      `,
+      [
+        subsectionGenerationId,
+        projectId,
+        subsectionUid,
+        exportReadyText("Seeded subsection text for smoke export."),
+        randomUUID(),
       ],
     );
 
@@ -500,7 +534,7 @@ test.describe("smoke", () => {
       await expect(page.getByRole("button", { name: /\.docx/i })).toBeVisible();
       const exportResponse = await request.get(`/api/v1/export/${projectId}/docx`);
 
-      expect(exportResponse.ok()).toBeTruthy();
+      expect(exportResponse.ok(), await exportResponse.text()).toBeTruthy();
       expect(exportResponse.headers()["content-disposition"]).toContain(".docx");
     } finally {
       await request.delete(`/api/v1/projects/${projectId}`);
@@ -605,7 +639,7 @@ test.describe("smoke", () => {
       ).toHaveCount(0);
 
       const exportResponse = await request.get(`/api/v1/export/${projectId}/docx`);
-      expect(exportResponse.ok()).toBeTruthy();
+      expect(exportResponse.ok(), await exportResponse.text()).toBeTruthy();
     } finally {
       await request.delete(`/api/v1/projects/${projectId}`);
     }
@@ -841,7 +875,7 @@ test.describe("smoke", () => {
       await page.getByTestId("generations-panel-toggle").click();
       await expect(
         page.getByTestId("generation-stale-selected-action"),
-      ).toContainText("1 selected stale section");
+      ).toContainText("1 остаряла избрана секция");
       await expect(page.getByTestId("generation-attention-summary")).toContainText(
         "1 секция изисква внимание",
       );

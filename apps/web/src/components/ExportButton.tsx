@@ -35,6 +35,9 @@ export default function ExportButton({
     useState<number | null>(null);
   const [staleWarning, setStaleWarning] = useState(false);
   const [staleSectionCount, setStaleSectionCount] = useState<number | null>(null);
+  const [missingGenerationWarning, setMissingGenerationWarning] = useState(false);
+  const [missingGenerationSectionCount, setMissingGenerationSectionCount] =
+    useState<number | null>(null);
   const [missingRequirementWarning, setMissingRequirementWarning] = useState(false);
   const [missingRequirementCount, setMissingRequirementCount] =
     useState<number | null>(null);
@@ -54,6 +57,7 @@ export default function ExportButton({
   const hasReadinessWarnings =
     duplicateSelectedWarning ||
     staleWarning ||
+    missingGenerationWarning ||
     missingRequirementWarning ||
     qualityWarning;
 
@@ -69,6 +73,11 @@ export default function ExportButton({
     if (isStaleExportError(source, message)) {
       setStaleWarning(true);
       setStaleSectionCount(getStaleSectionCount(source));
+      handled = true;
+    }
+    if (isMissingGenerationExportError(source)) {
+      setMissingGenerationWarning(true);
+      setMissingGenerationSectionCount(getMissingGenerationSectionCount(source));
       handled = true;
     }
     if (isRequirementCoverageExportError(source)) {
@@ -114,6 +123,8 @@ export default function ExportButton({
     setDuplicateSelectedCount(null);
     setStaleWarning(false);
     setStaleSectionCount(null);
+    setMissingGenerationWarning(false);
+    setMissingGenerationSectionCount(null);
     setMissingRequirementWarning(false);
     setMissingRequirementCount(null);
     setMissingRequirementGuidance([]);
@@ -243,6 +254,30 @@ export default function ExportButton({
                 : ""
             }. `}
             Регенерирайте ги преди DOCX export.
+          </p>
+          {onOpenGenerations && (
+            <button
+              type="button"
+              onClick={onOpenGenerations}
+              className="mt-2 rounded border border-amber-300 bg-white px-2 py-1 font-medium text-amber-800 transition hover:bg-amber-100"
+            >
+              Отвори Генерации
+            </button>
+          )}
+        </div>
+      )}
+
+      {missingGenerationWarning && (
+        <div
+          data-testid="export-missing-generation-warning"
+          className="mt-1 max-w-xs rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800"
+        >
+          <p>
+            {`Липсва генериран текст за ${
+              missingGenerationSectionCount ?? "някои"
+            } секции от одобреното съдържание. `}
+            Пуснете отново „Генерирай всички“, за да бъдат създадени липсващите
+            раздели.
           </p>
           {onOpenGenerations && (
             <button
@@ -386,6 +421,36 @@ function getStaleSectionCount(err: unknown): number | null {
   return uniqueSectionIds.length > 0
     ? new Set(uniqueSectionIds).size
     : staleSections.length;
+}
+
+function isMissingGenerationExportError(err: unknown): boolean {
+  const payload = getReadinessPayload(err);
+  return (
+    !!payload &&
+    typeof payload === "object" &&
+    (positiveNumber(
+      (payload as { missing_generation_section_count?: unknown })
+        .missing_generation_section_count,
+    ) ||
+      nonEmptyArray(
+        (payload as { missing_generation_sections?: unknown })
+          .missing_generation_sections,
+      ))
+  );
+}
+
+function getMissingGenerationSectionCount(err: unknown): number | null {
+  const payload = getReadinessPayload(err);
+  if (!payload || typeof payload !== "object") return null;
+
+  const explicitCount = (
+    payload as { missing_generation_section_count?: unknown }
+  ).missing_generation_section_count;
+  if (typeof explicitCount === "number") return explicitCount;
+
+  const sections = (payload as { missing_generation_sections?: unknown })
+    .missing_generation_sections;
+  return Array.isArray(sections) ? sections.length : null;
 }
 
 function isDuplicateSelectedExportError(err: unknown): boolean {

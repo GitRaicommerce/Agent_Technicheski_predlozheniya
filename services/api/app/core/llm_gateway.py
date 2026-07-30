@@ -167,7 +167,12 @@ class LLMGateway:
             response = await client.chat.completions.create(
                 **request_kwargs,
             )
-            return response.choices[0].message.content
+            choice = response.choices[0]
+            if choice.finish_reason == "length":
+                raise RuntimeError(
+                    "LLM response was truncated by the output token limit."
+                )
+            return choice.message.content or ""
 
         elif provider == "anthropic":
             client = self._get_anthropic()
@@ -177,6 +182,10 @@ class LLMGateway:
                 messages=built_messages,
                 max_tokens=settings.llm_max_tokens,
             )
+            if response.stop_reason == "max_tokens":
+                raise RuntimeError(
+                    "LLM response was truncated by the output token limit."
+                )
             return response.content[0].text
 
         else:

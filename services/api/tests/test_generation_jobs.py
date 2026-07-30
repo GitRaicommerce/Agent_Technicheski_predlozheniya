@@ -8,6 +8,7 @@ import pytest
 
 from app.agents.generation_jobs import (
     _run_drafting_all_job,
+    _set_job_result,
     _sections_pending_generation,
     create_drafting_quality_job,
     create_drafting_requirements_job,
@@ -41,10 +42,23 @@ def test_sections_pending_generation_retries_stale_sections():
     assert [section["uid"] for section in pending] == ["stale", "missing"]
 
 
+def test_set_job_result_snapshots_progress_lists():
+    outline = SimpleNamespace(id="outline-1", version=1)
+    job = SimpleNamespace(result_json=None)
+    results = [{"section_uid": "section-1"}]
+    failed_sections: list[dict] = []
+
+    _set_job_result(job, outline, results, failed_sections)
+    results.append({"section_uid": "section-2"})
+
+    assert job.result_json["sections"] == [{"section_uid": "section-1"}]
+
+
 @pytest.mark.asyncio
 async def test_generation_job_records_failed_section_and_keeps_progress(mock_db):
     project = _make_project()
     section_ok = str(uuid.uuid4())
+    section_empty = str(uuid.uuid4())
     section_failed = str(uuid.uuid4())
     outline = TpOutline(
         id=str(uuid.uuid4()),
@@ -54,6 +68,12 @@ async def test_generation_job_records_failed_section_and_keeps_progress(mock_db)
                 {
                     "uid": section_ok,
                     "title": "Концепция и подход",
+                    "requirements": [],
+                    "subsections": [],
+                },
+                {
+                    "uid": section_empty,
+                    "title": "Empty model response",
                     "requirements": [],
                     "subsections": [],
                 },
@@ -84,7 +104,7 @@ async def test_generation_job_records_failed_section_and_keeps_progress(mock_db)
         updated_at=None,
     )
 
-    mock_db.get = AsyncMock(side_effect=[project, job])
+    mock_db.get = AsyncMock(side_effect=[project, job, job])
     mock_db.execute = AsyncMock(side_effect=[_outline_result(outline), []])
 
     with (
@@ -109,6 +129,7 @@ async def test_generation_job_records_failed_section_and_keeps_progress(mock_db)
             new=AsyncMock(
                 side_effect=[
                     {"generation_ids": {"variant_1": str(uuid.uuid4())}},
+                    {"generation_ids": {}},
                     RuntimeError("Connection error."),
                 ]
             ),
@@ -118,11 +139,12 @@ async def test_generation_job_records_failed_section_and_keeps_progress(mock_db)
 
     assert job.status == "error"
     assert job.completed_sections == 1
-    assert job.skipped_sections == 1
+    assert job.skipped_sections == 2
     assert len(job.result_json["sections"]) == 1
     assert job.result_json["sections"][0]["section_uid"] == section_ok
-    assert len(job.result_json["failed_sections"]) == 1
-    assert job.result_json["failed_sections"][0]["section_uid"] == section_failed
+    assert len(job.result_json["failed_sections"]) == 2
+    assert job.result_json["failed_sections"][0]["section_uid"] == section_empty
+    assert job.result_json["failed_sections"][1]["section_uid"] == section_failed
     assert "Run generation again" in job.error
 
 

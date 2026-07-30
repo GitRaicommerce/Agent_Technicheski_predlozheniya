@@ -359,6 +359,7 @@ export interface ExportReadiness {
   ready: boolean;
   status: "ready" | "blocked" | string;
   message?: string;
+  outline_section_count?: number;
   selected_generation_count?: number;
   selected_section_count?: number;
   blocker_count?: number;
@@ -367,6 +368,11 @@ export interface ExportReadiness {
   duplicate_selected_count?: number;
   stale_sections?: string[];
   stale_section_count?: number;
+  missing_generation_sections?: Array<{
+    section_uid: string;
+    section_title?: string;
+  }>;
+  missing_generation_section_count?: number;
   missing_requirement_sections?: unknown[];
   missing_requirement_count?: number;
   quality_sections?: ExportQualitySection[];

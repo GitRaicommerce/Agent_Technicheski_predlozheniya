@@ -285,7 +285,7 @@ async def _load_outline_section_metadata(
         .limit(1)
     )
     outline = result.scalar_one_or_none()
-    if not outline:
+    if not outline or not isinstance(outline.outline_json, dict):
         return {}
 
     sections = outline.outline_json.get("sections", outline.outline_json.get("outline", []))
@@ -409,6 +409,26 @@ def _selected_section_count(generations: list[Generation]) -> int:
     return len({generation.section_uid for generation in generations})
 
 
+def _missing_generation_sections(
+    generations: list[Generation],
+    outline_section_metadata: dict[str, dict],
+) -> list[dict]:
+    selected_uids = {generation.section_uid for generation in generations}
+    return [
+        {
+            "section_uid": section_uid,
+            **(
+                {"section_title": title}
+                if isinstance((title := metadata.get("section_title")), str)
+                and title.strip()
+                else {}
+            ),
+        }
+        for section_uid, metadata in outline_section_metadata.items()
+        if section_uid not in selected_uids
+    ]
+
+
 def _stale_sections(generations: list[Generation]) -> list[str]:
     section_uids: list[str] = []
     seen: set[str] = set()
@@ -433,6 +453,10 @@ def _readiness_message(readiness: dict) -> str:
         )
     if code == "stale_evidence":
         return "Pre-export check failed: some selected sections have stale evidence."
+    if code == "missing_sections":
+        return (
+            "Pre-export check failed: some outline sections have no generated text."
+        )
     if code == "missing_requirements":
         return (
             "Pre-export check failed: some selected sections do not cover all "
@@ -467,10 +491,13 @@ async def _build_export_readiness(
         for generation in selected_generations
         if (issue := _missing_requirement_coverage(generation))
     ]
-    outline_section_metadata = (
-        await _load_outline_section_metadata(project_id, db)
-        if selected_generations
-        else {}
+    outline_section_metadata = await _load_outline_section_metadata(
+        project_id,
+        db,
+    )
+    missing_generation_sections = _missing_generation_sections(
+        selected_generations,
+        outline_section_metadata,
     )
     outline_requirement_counts = _requirement_counts_from_metadata(
         outline_section_metadata
@@ -517,6 +544,14 @@ async def _build_export_readiness(
                 "message": "Some selected sections have stale evidence.",
             }
         )
+    if missing_generation_sections:
+        blockers.append(
+            {
+                "code": "missing_sections",
+                "count": len(missing_generation_sections),
+                "message": "Some outline sections have no generated text.",
+            }
+        )
     if missing_requirement_sections:
         blockers.append(
             {
@@ -540,6 +575,7 @@ async def _build_export_readiness(
         "status": "ready" if not blockers else "blocked",
         "selected_generation_count": len(selected_generations),
         "selected_section_count": _selected_section_count(selected_generations),
+        "outline_section_count": len(outline_section_metadata),
         "blocker_count": len(blockers),
         "blockers": blockers,
         "duplicate_selected_sections": duplicate_sections,
@@ -547,6 +583,8 @@ async def _build_export_readiness(
         "stale_sections": stale_sections,
         "stale_section_details": stale_section_details,
         "stale_section_count": len(stale_sections),
+        "missing_generation_sections": missing_generation_sections,
+        "missing_generation_section_count": len(missing_generation_sections),
         "missing_requirement_sections": missing_requirement_sections,
         "missing_requirement_count": missing_requirement_count,
         "quality_sections": quality_sections,

@@ -302,6 +302,54 @@ async def test_export_readiness_report_returns_markdown_summary(client, mock_db)
 
 
 @pytest.mark.asyncio
+async def test_export_readiness_reports_outline_sections_without_generated_text(
+    client,
+    mock_db,
+):
+    project = _make_project()
+    mock_db.get = AsyncMock(return_value=project)
+
+    generation = MagicMock()
+    generation.id = "gen-1"
+    generation.section_uid = "sec-generated"
+    generation.evidence_status = "ok"
+    generation.flags_json = {}
+    generation.text = "Generated section text."
+    generation.used_sources_json = {}
+
+    selected_result = MagicMock()
+    selected_result.scalars.return_value.all.return_value = [generation]
+    outline = MagicMock()
+    outline.outline_json = {
+        "sections": [
+            {"uid": "sec-generated", "title": "Generated section"},
+            {"uid": "sec-missing", "title": "Missing section"},
+        ]
+    }
+    outline_result = MagicMock()
+    outline_result.scalar_one_or_none.return_value = outline
+    mock_db.execute = AsyncMock(side_effect=[selected_result, outline_result])
+
+    resp = await client.get(f"/api/v1/export/{project.id}/readiness")
+
+    assert resp.status_code == 200
+    detail = resp.json()
+    assert detail["ready"] is False
+    assert detail["outline_section_count"] == 2
+    assert detail["selected_section_count"] == 1
+    assert detail["missing_generation_section_count"] == 1
+    assert detail["missing_generation_sections"] == [
+        {
+            "section_uid": "sec-missing",
+            "section_title": "Missing section",
+        }
+    ]
+    assert "missing_sections" in [
+        blocker["code"] for blocker in detail["blockers"]
+    ]
+
+
+@pytest.mark.asyncio
 async def test_export_docx_missing_requirement_coverage_returns_409(client, mock_db):
     project = _make_project()
     mock_db.get = AsyncMock(return_value=project)

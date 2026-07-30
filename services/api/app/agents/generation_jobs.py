@@ -14,6 +14,8 @@ from app.core.models import Generation, GenerationJob, Project, TpOutline
 
 log = structlog.get_logger()
 
+GENERATION_JOB_TIMEOUT_SECONDS = 4 * 60 * 60
+
 
 TERMINAL_JOB_STATUSES = {"done", "error"}
 
@@ -48,8 +50,8 @@ def _set_job_result(
         "target_reason": previous_result.get("target_reason"),
         "outline_id": outline.id,
         "outline_version": outline.version,
-        "sections": results,
-        "failed_sections": failed_sections,
+        "sections": [dict(item) for item in results],
+        "failed_sections": [dict(item) for item in failed_sections],
     }
     if previous_result.get("target_guidance") is not None:
         job.result_json["target_guidance"] = previous_result.get("target_guidance")
@@ -510,7 +512,11 @@ def _enqueue_generation_job(job_id: str) -> None:
 
     redis = Redis.from_url(settings.redis_url)
     q = Queue("ingest", connection=redis)
-    q.enqueue(process_generation_job, job_id, job_timeout=3600)
+    q.enqueue(
+        process_generation_job,
+        job_id,
+        job_timeout=GENERATION_JOB_TIMEOUT_SECONDS,
+    )
 
 
 def process_generation_job(job_id: str) -> None:
@@ -699,6 +705,13 @@ async def _run_drafting_all_job(job: GenerationJob, db) -> None:
                 section_requirement_items=requirement_items,
                 section_drafting_guidance=drafting_guidance,
             )
+            generation_ids = drafting_result.get("generation_ids")
+            if not isinstance(generation_ids, dict) or not any(
+                generation_ids.values()
+            ):
+                raise ValueError(
+                    "Drafting returned no persisted generation for this section."
+                )
         except Exception as exc:
             await db.rollback()
             job = await db.get(GenerationJob, job.id)
@@ -729,7 +742,7 @@ async def _run_drafting_all_job(job: GenerationJob, db) -> None:
             _section_result(
                 uid,
                 title,
-                generation_ids=drafting_result.get("generation_ids"),
+                generation_ids=generation_ids,
             )
         )
         _set_job_result(job, outline, results, failed_sections)
