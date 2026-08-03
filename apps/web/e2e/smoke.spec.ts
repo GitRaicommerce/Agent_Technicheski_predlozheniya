@@ -497,6 +497,9 @@ test.describe("smoke", () => {
       await page.getByTestId("outline-panel-toggle").click();
       await expect(page.getByTestId("outline-panel-toggle")).toBeVisible();
 
+      await page.getByTestId("understanding-panel-toggle").click();
+      await expect(page.getByTestId("understanding-panel")).toBeVisible();
+
       await page.getByTestId("generations-panel-toggle").click();
       await expect(page.getByTestId("generations-panel-toggle")).toBeVisible();
     } finally {

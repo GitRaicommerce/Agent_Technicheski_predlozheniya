@@ -57,6 +57,15 @@ class Project(Base):
     generation_jobs: Mapped[list[GenerationJob]] = relationship(
         back_populates="project", cascade="all, delete-orphan"
     )
+    requirement_register: Mapped[list[RequirementRegister]] = relationship(
+        back_populates="project", cascade="all, delete-orphan"
+    )
+    wbs_items: Mapped[list[WbsItem]] = relationship(
+        back_populates="project", cascade="all, delete-orphan"
+    )
+    fact_sheets: Mapped[list[ProjectFactSheet]] = relationship(
+        back_populates="project", cascade="all, delete-orphan"
+    )
 
 
 class ProjectFile(Base):
@@ -373,3 +382,68 @@ class GenerationJob(Base):
     completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
 
     project: Mapped[Project] = relationship(back_populates="generation_jobs")
+
+
+class RequirementRegister(Base):
+    __tablename__ = "requirement_register"
+
+    id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), primary_key=True, default=_uuid
+    )
+    project_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("projects.id", ondelete="CASCADE")
+    )
+    source_file_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("project_files.id", ondelete="CASCADE")
+    )
+    source_page: Mapped[Optional[int]] = mapped_column(Integer)
+    source_quote: Mapped[str] = mapped_column(Text)
+    normalized_text: Mapped[str] = mapped_column(Text)
+    kind: Mapped[str] = mapped_column(String(32))
+    target_section_hint: Mapped[Optional[str]] = mapped_column(String(1024))
+    status: Mapped[str] = mapped_column(String(16), default="extracted")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    project: Mapped[Project] = relationship(back_populates="requirement_register")
+
+
+class WbsItem(Base):
+    __tablename__ = "wbs_items"
+
+    id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), primary_key=True, default=_uuid
+    )
+    project_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("projects.id", ondelete="CASCADE")
+    )
+    parent_id: Mapped[Optional[str]] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("wbs_items.id", ondelete="CASCADE")
+    )
+    level: Mapped[int] = mapped_column(Integer, default=0)
+    kind: Mapped[str] = mapped_column(String(32))
+    title: Mapped[str] = mapped_column(String(1024))
+    description: Mapped[Optional[str]] = mapped_column(Text)
+    source_refs_json: Mapped[list] = mapped_column(JSONB, default=list)
+    schedule_task_uid: Mapped[Optional[str]] = mapped_column(String(128))
+    order_index: Mapped[int] = mapped_column(Integer, default=0)
+    status: Mapped[str] = mapped_column(String(16), default="extracted")
+
+    project: Mapped[Project] = relationship(back_populates="wbs_items")
+
+
+class ProjectFactSheet(Base):
+    __tablename__ = "project_fact_sheet"
+
+    id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), primary_key=True, default=_uuid
+    )
+    project_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("projects.id", ondelete="CASCADE")
+    )
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    facts_json: Mapped[dict] = mapped_column(JSONB, default=dict)
+    status: Mapped[str] = mapped_column(String(16), default="draft")
+
+    project: Mapped[Project] = relationship(back_populates="fact_sheets")

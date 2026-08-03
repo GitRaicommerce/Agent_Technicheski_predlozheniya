@@ -344,6 +344,66 @@ export interface GenerationJob {
   completed_at?: string | null;
 }
 
+export type UnderstandingItemStatus = "extracted" | "confirmed" | "rejected";
+
+export interface UnderstandingRequirement {
+  id: string;
+  project_id: string;
+  source_file_id: string;
+  source_page?: number | null;
+  source_quote: string;
+  normalized_text: string;
+  kind: "obligation" | "prohibition" | "format" | "content" | "evaluation";
+  target_section_hint?: string | null;
+  status: UnderstandingItemStatus;
+  created_at: string;
+}
+
+export interface UnderstandingWbsItem {
+  id: string;
+  project_id: string;
+  parent_id?: string | null;
+  level: number;
+  kind: "etap" | "activity" | "subactivity" | "task";
+  title: string;
+  description?: string | null;
+  source_refs_json: Array<Record<string, unknown>>;
+  schedule_task_uid?: string | null;
+  order_index: number;
+  status: UnderstandingItemStatus;
+}
+
+export interface UnderstandingFactSheet {
+  id: string;
+  project_id: string;
+  version: number;
+  facts_json: Record<string, unknown>;
+  status: "draft" | "confirmed";
+}
+
+export interface UnderstandingJob {
+  id: string;
+  project_id: string;
+  status: "queued" | "processing" | "done" | "error" | string;
+  total_batches: number;
+  completed_batches: number;
+  current_step?: string | null;
+  error?: string | null;
+  result_json?: Record<string, unknown> | null;
+  created_at: string;
+  updated_at: string;
+  completed_at?: string | null;
+}
+
+export interface UnderstandingWorkspace {
+  enabled: boolean;
+  sources: Array<{ id: string; filename: string }>;
+  requirements: UnderstandingRequirement[];
+  wbs_items: UnderstandingWbsItem[];
+  fact_sheet?: UnderstandingFactSheet | null;
+  latest_job?: UnderstandingJob | null;
+}
+
 export interface DuplicateSelectionResolutionResponse {
   status: string;
   resolved_count: number;
@@ -566,6 +626,88 @@ export const api = {
     regenerateSection: (projectId: string, sectionUid: string) =>
       apiFetch<RegenerateResponse>(
         `/api/v1/agents/${projectId}/sections/${encodeURIComponent(sectionUid)}/regenerate`,
+        { method: "POST" },
+      ),
+  },
+  understanding: {
+    get: (projectId: string) =>
+      apiFetch<UnderstandingWorkspace>(`/api/v1/understanding/${projectId}`),
+    start: (projectId: string) =>
+      apiFetch<UnderstandingJob>(`/api/v1/understanding/${projectId}/jobs`, {
+        method: "POST",
+      }),
+    getJob: (projectId: string, jobId: string) =>
+      apiFetch<UnderstandingJob>(
+        `/api/v1/understanding/${projectId}/jobs/${jobId}`,
+      ),
+    createRequirement: (
+      projectId: string,
+      data: Omit<UnderstandingRequirement, "id" | "project_id" | "created_at">,
+    ) =>
+      apiFetch<UnderstandingRequirement>(
+        `/api/v1/understanding/${projectId}/requirements`,
+        { method: "POST", body: JSON.stringify(data) },
+      ),
+    updateRequirement: (
+      projectId: string,
+      itemId: string,
+      data: Partial<UnderstandingRequirement>,
+    ) =>
+      apiFetch<UnderstandingRequirement>(
+        `/api/v1/understanding/${projectId}/requirements/${itemId}`,
+        { method: "PUT", body: JSON.stringify(data) },
+      ),
+    deleteRequirement: (projectId: string, itemId: string) =>
+      apiNoContent(
+        `/api/v1/understanding/${projectId}/requirements/${itemId}`,
+        { method: "DELETE" },
+      ),
+    confirmRequirements: (projectId: string) =>
+      apiFetch<{ status: string; updated: number }>(
+        `/api/v1/understanding/${projectId}/requirements/confirm`,
+        { method: "POST" },
+      ),
+    createWbsItem: (
+      projectId: string,
+      data: Omit<UnderstandingWbsItem, "id" | "project_id">,
+    ) =>
+      apiFetch<UnderstandingWbsItem>(
+        `/api/v1/understanding/${projectId}/wbs`,
+        { method: "POST", body: JSON.stringify(data) },
+      ),
+    updateWbsItem: (
+      projectId: string,
+      itemId: string,
+      data: Partial<UnderstandingWbsItem>,
+    ) =>
+      apiFetch<UnderstandingWbsItem>(
+        `/api/v1/understanding/${projectId}/wbs/${itemId}`,
+        { method: "PUT", body: JSON.stringify(data) },
+      ),
+    deleteWbsItem: (projectId: string, itemId: string) =>
+      apiNoContent(`/api/v1/understanding/${projectId}/wbs/${itemId}`, {
+        method: "DELETE",
+      }),
+    confirmWbs: (projectId: string) =>
+      apiFetch<{ status: string; updated: number }>(
+        `/api/v1/understanding/${projectId}/wbs/confirm`,
+        { method: "POST" },
+      ),
+    saveFactSheet: (
+      projectId: string,
+      factsJson: Record<string, unknown>,
+      status: "draft" | "confirmed" = "draft",
+    ) =>
+      apiFetch<UnderstandingFactSheet>(
+        `/api/v1/understanding/${projectId}/fact-sheet`,
+        {
+          method: "PUT",
+          body: JSON.stringify({ facts_json: factsJson, status }),
+        },
+      ),
+    confirmFactSheet: (projectId: string) =>
+      apiFetch<UnderstandingFactSheet>(
+        `/api/v1/understanding/${projectId}/fact-sheet/confirm`,
         { method: "POST" },
       ),
   },

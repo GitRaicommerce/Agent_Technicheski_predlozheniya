@@ -110,6 +110,8 @@ TP AI is a monorepo for an AI-assisted workflow that prepares technical proposal
   - `apps/web/src/components/SchedulePanel.test.tsx`
   - `apps/web/src/components/SchedulePanel.tsx`
   - `apps/web/src/components/ToastProvider.tsx`
+  - `apps/web/src/components/UnderstandingPanel.test.tsx`
+  - `apps/web/src/components/UnderstandingPanel.tsx`
 - `apps/web/src/lib/`
   - `apps/web/src/lib/api.ts`
   - `apps/web/src/lib/serverApiProxy.test.ts`
@@ -131,6 +133,7 @@ TP AI is a monorepo for an AI-assisted workflow that prepares technical proposal
   - `services/api/app/agents/requirements.py`
   - `services/api/app/agents/schedule.py`
   - `services/api/app/agents/tender_struct.py`
+  - `services/api/app/agents/understanding.py`
   - `services/api/app/agents/verifier.py`
 - `services/api/app/core/`
   - `services/api/app/core/__init__.py`
@@ -158,6 +161,7 @@ TP AI is a monorepo for an AI-assisted workflow that prepares technical proposal
   - `services/api/app/routers/export.py`
   - `services/api/app/routers/files.py`
   - `services/api/app/routers/projects.py`
+  - `services/api/app/routers/understanding.py`
 - `services/api/app/__init__.py`
 - `services/api/app/main.py`
 
@@ -167,10 +171,11 @@ TP AI is a monorepo for an AI-assisted workflow that prepares technical proposal
 - `services/api/app/routers/export.py`
 - `services/api/app/routers/files.py`
 - `services/api/app/routers/projects.py`
+- `services/api/app/routers/understanding.py`
 
 ## Test Inventory
 
-- Total backend tests discovered: `214`
+- Total backend tests discovered: `221`
 - `test_agents.py`: `42`
 - `test_common_proposal_scenarios.py`: `19`
 - `test_config.py`: `2`
@@ -192,6 +197,7 @@ TP AI is a monorepo for an AI-assisted workflow that prepares technical proposal
 - `test_requirement_coverage.py`: `2`
 - `test_requirement_coverage_strictness.py`: `9`
 - `test_tender_struct.py`: `13`
+- `test_understanding.py`: `7`
 - `test_verifier.py`: `1`
 - `test_worker.py`: `2`
 

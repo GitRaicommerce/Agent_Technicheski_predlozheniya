@@ -19,6 +19,7 @@
 
 ## Completed Work
 
+- Implemented rework Phase 1 behind `GENERATION_PIPELINE=v2`: added Alembic-backed requirement register, WBS, and versioned project fact sheets; an all-chunk, citation-validating understanding map-reduce RQ job with schedule linking; editable/confirmable API contracts; and the Bulgarian three-tab “Разбиране” workspace. A read-only Pernik smoke proved all 683 tender chunks are preserved across 6 batches and the live workspace sees both source files; the paid LLM extraction is intentionally left for the user acceptance test.
 - Completed rework Phase 0: added an opt-in `GENERATION_PIPELINE=v2` switch with `v1` as the safe default, froze the existing compact v1 grounding-context behavior with a regression snapshot, and verified that tender ingestion persists pgvector embeddings with audit metadata.
 - Reviewed the repository structure, architecture, toolchain, and documentation quality.
 - Identified documentation drift between README claims and the real codebase.
@@ -257,12 +258,13 @@
 
 ## Next Recommended Steps
 
-1. Re-run `Generate all` for the current Pernik water-supply project after the generation-completeness fix, confirm all 23 approved outline sections receive persisted text, then export a new working draft for reference comparison.
-2. Use the calibration remediation cycle script with `--execute --wait --action-key regenerate_stale` or Generations panel bulk stale-regeneration action for Pernik after duplicate selections are resolved; then use the bulk missing-requirements and quality/depth regeneration actions for any remaining requirement-coverage or blueprint-aware shallow sections reported by export preflight or gap-priority diagnostics.
-3. After resolving Pernik's duplicate selected variants and stale selected sections, regenerate affected sections so the section structure plan and iterative drafting quality-repair pass can improve subtopic coverage, checklist coverage, and depth before export readiness is checked again.
-4. Re-run the Pernik calibration bundle after remediation with `--action-report` and compare the regenerated output against the winning proposal, focusing on the manifest word-volume scorecard, section-level drafting-depth diagnostics, executed remediation evidence, execution-status deltas, and action target deltas in the before/after calibration manifest comparison report.
-5. Expand generated documentation with more precise backend endpoint and workflow coverage.
-6. Continue broadening common tender regression coverage with more real-world noisy PDF extraction, DOCX readiness combinations, and operational-action coverage cases across quality, risk, environment, safety, communication, and documentation requirements.
+1. Run “Стартирай пълен анализ” in the Pernik project, review the extracted quotations, WBS hierarchy/schedule links, and fact sheet in the new “Разбиране” tab, then confirm the three artifacts as the Phase 1 acceptance test before starting rework Phase 2.
+2. Re-run `Generate all` for the current Pernik water-supply project after the generation-completeness fix, confirm all 23 approved outline sections receive persisted text, then export a new working draft for reference comparison.
+3. Use the calibration remediation cycle script with `--execute --wait --action-key regenerate_stale` or Generations panel bulk stale-regeneration action for Pernik after duplicate selections are resolved; then use the bulk missing-requirements and quality/depth regeneration actions for any remaining requirement-coverage or blueprint-aware shallow sections reported by export preflight or gap-priority diagnostics.
+4. After resolving Pernik's duplicate selected variants and stale selected sections, regenerate affected sections so the section structure plan and iterative drafting quality-repair pass can improve subtopic coverage, checklist coverage, and depth before export readiness is checked again.
+5. Re-run the Pernik calibration bundle after remediation with `--action-report` and compare the regenerated output against the winning proposal, focusing on the manifest word-volume scorecard, section-level drafting-depth diagnostics, executed remediation evidence, execution-status deltas, and action target deltas in the before/after calibration manifest comparison report.
+6. Expand generated documentation with more precise backend endpoint and workflow coverage.
+7. Continue broadening common tender regression coverage with more real-world noisy PDF extraction, DOCX readiness combinations, and operational-action coverage cases across quality, risk, environment, safety, communication, and documentation requirements.
 
 ## Notes
 

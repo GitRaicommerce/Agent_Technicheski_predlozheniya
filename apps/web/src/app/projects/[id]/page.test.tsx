@@ -111,6 +111,10 @@ vi.mock("@/components/GenerationsPanel", () => ({
   ),
 }));
 
+vi.mock("@/components/UnderstandingPanel", () => ({
+  default: () => <div>Understanding Panel</div>,
+}));
+
 vi.mock("@/lib/api", async () => {
   const actual = await vi.importActual<typeof import("@/lib/api")>("@/lib/api");
 
@@ -248,6 +252,15 @@ describe("ProjectPage", () => {
     await userEvent.click(screen.getByTestId("requirements-panel-toggle"));
 
     expect(screen.getByText("Requirement Checklist Panel")).toBeInTheDocument();
+  });
+
+  it("opens the Bulgarian understanding workspace", async () => {
+    render(<ProjectPage />);
+
+    expect(await screen.findByText("Project Alpha")).toBeInTheDocument();
+    await userEvent.click(screen.getByTestId("understanding-panel-toggle"));
+
+    expect(screen.getByText("Understanding Panel")).toBeInTheDocument();
   });
 
   it("passes quality export blockers into the generations panel", async () => {

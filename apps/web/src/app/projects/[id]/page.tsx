@@ -12,6 +12,7 @@ import OutlinePanel from "@/components/OutlinePanel";
 import RequirementChecklistPanel from "@/components/RequirementChecklistPanel";
 import SchedulePanel from "@/components/SchedulePanel";
 import GenerationsPanel from "@/components/GenerationsPanel";
+import UnderstandingPanel from "@/components/UnderstandingPanel";
 
 type Module = "examples" | "tender_docs" | "schedule" | "legislation";
 
@@ -43,6 +44,7 @@ export default function ProjectPage() {
   const [loading, setLoading] = useState(true);
   const [activeModule, setActiveModule] = useState<Module | null>(null);
   const [showRequirements, setShowRequirements] = useState(false);
+  const [showUnderstanding, setShowUnderstanding] = useState(false);
   const [showOutline, setShowOutline] = useState(false);
   const [showSchedule, setShowSchedule] = useState(false);
   const [showGenerations, setShowGenerations] = useState(false);
@@ -444,6 +446,25 @@ export default function ProjectPage() {
                   projectId={project.id}
                   refreshKey={requirementsRefreshKey}
                 />
+              </div>
+            )}
+          </div>
+
+          {/* Фаза „Разбиране“ */}
+          <div className="border-b">
+            <button
+              onClick={() => setShowUnderstanding((value) => !value)}
+              data-testid="understanding-panel-toggle"
+              className="w-full px-3 py-2.5 text-left text-sm font-semibold text-gray-700 flex justify-between items-center hover:bg-gray-50 transition"
+            >
+              <span>🧭 Разбиране</span>
+              <span className="text-gray-400 text-xs">
+                {showUnderstanding ? "▾" : "▸"}
+              </span>
+            </button>
+            {showUnderstanding && (
+              <div className="px-3 pb-3">
+                <UnderstandingPanel projectId={project.id} />
               </div>
             )}
           </div>
