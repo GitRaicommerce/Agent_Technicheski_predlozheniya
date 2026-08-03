@@ -7,6 +7,7 @@ markers and is never treated as instructions.
 from __future__ import annotations
 
 import asyncio
+import copy
 import hashlib
 import math
 import re
@@ -133,6 +134,11 @@ def _llm_chunks(batch: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 def _is_output_truncation(exc: Exception) -> bool:
     return "truncated by the output token limit" in str(exc).casefold()
+
+
+def _checkpoint_snapshot(checkpoint: dict[str, Any]) -> dict[str, Any]:
+    """Detach JSONB state so every nested update is detected and persisted."""
+    return copy.deepcopy(checkpoint)
 
 
 def _map_user_message(batch: list[dict[str, Any]], index: int, total: int) -> str:
@@ -917,7 +923,9 @@ async def _process_understanding_job_async(job_id: str) -> None:
             await db.commit()
 
         async def persist_checkpoint(checkpoint: dict[str, Any]) -> None:
-            job.result_json = {"understanding_checkpoint": checkpoint}
+            job.result_json = {
+                "understanding_checkpoint": _checkpoint_snapshot(checkpoint)
+            }
             job.updated_at = datetime.now(timezone.utc)
             await db.commit()
 

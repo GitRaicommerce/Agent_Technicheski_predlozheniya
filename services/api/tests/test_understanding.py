@@ -11,6 +11,7 @@ import pytest
 from app.agents.understanding import (
     _audit_user_message,
     _backcheck_winning_proposal,
+    _checkpoint_snapshot,
     _batch_chunks,
     _map_user_message,
     _run_batch_with_adaptive_split,
@@ -67,6 +68,16 @@ def test_understanding_prompts_exclude_non_json_pgvector_values():
     assert "embedding" not in audit_prompt
     assert "Изискване към техническото предложение." in map_prompt
     assert "Изискване към техническото предложение." in audit_prompt
+
+
+def test_checkpoint_snapshot_is_detached_from_later_nested_mutations():
+    working = {"map_results": {"map:1": {"requirements": []}}}
+    persisted = _checkpoint_snapshot(working)
+
+    working["map_results"]["map:2"] = {"requirements": []}
+
+    assert set(persisted["map_results"]) == {"map:1"}
+    assert set(working["map_results"]) == {"map:1", "map:2"}
 
 
 def test_understanding_map_rejects_non_verbatim_quotes_and_unknown_sources():
