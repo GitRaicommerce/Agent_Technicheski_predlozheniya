@@ -13,6 +13,7 @@ from app.agents.understanding import (
     _backcheck_winning_proposal,
     _batch_chunks,
     _map_user_message,
+    _run_batch_with_adaptive_split,
     _sanitize_map_result,
     reduce_understanding_maps,
 )
@@ -166,6 +167,67 @@ def test_audit_prompt_contains_registry_and_untrusted_document_boundaries():
     assert "CURRENT_REQUIREMENT_REGISTER" in prompt
     assert "UNTRUSTED_TENDER_DOCUMENT" in prompt
     assert "Не се допуска смесване." in prompt
+
+
+@pytest.mark.asyncio
+async def test_truncated_understanding_batch_splits_and_checkpoints_leaf_results():
+    batch = [
+        {"chunk_id": str(index), "file_id": "file", "filename": "tender.pdf", "text": f"Текст {index}"}
+        for index in range(4)
+    ]
+    lookup = {item["chunk_id"]: item for item in batch}
+    cache: dict = {}
+    complete = AsyncMock()
+    split = AsyncMock()
+    llm_call = AsyncMock(
+        side_effect=[
+            RuntimeError("LLM response was truncated by the output token limit."),
+            {"requirements": [], "wbs_items": [], "facts": {}},
+            {"requirements": [], "wbs_items": [], "facts": {}},
+        ]
+    )
+
+    with patch("app.agents.understanding.llm_gateway.call", new=llm_call):
+        results = await _run_batch_with_adaptive_split(
+            batch=batch,
+            batch_key="map:1",
+            prompt_builder=lambda items: str(len(items)),
+            system_prompt="system",
+            agent="understanding_map",
+            trace_id="trace",
+            chunk_lookup=lookup,
+            origin="map",
+            cache=cache,
+            on_start=AsyncMock(),
+            on_split=split,
+            on_complete=complete,
+        )
+
+    assert len(results) == 2
+    assert llm_call.await_count == 3
+    assert set(cache) == {"map:1.1", "map:1.2"}
+    split.assert_awaited_once()
+    assert complete.await_count == 2
+
+    resumed_call = AsyncMock()
+    with patch("app.agents.understanding.llm_gateway.call", new=resumed_call):
+        resumed = await _run_batch_with_adaptive_split(
+            batch=batch,
+            batch_key="map:1",
+            prompt_builder=lambda items: str(len(items)),
+            system_prompt="system",
+            agent="understanding_map",
+            trace_id="trace",
+            chunk_lookup=lookup,
+            origin="map",
+            cache=cache,
+            on_start=AsyncMock(),
+            on_split=AsyncMock(),
+            on_complete=AsyncMock(),
+        )
+
+    assert len(resumed) == 2
+    resumed_call.assert_not_awaited()
 
 
 def test_winning_proposal_backcheck_returns_only_unmatched_points():

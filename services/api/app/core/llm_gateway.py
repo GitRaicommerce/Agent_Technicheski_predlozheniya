@@ -22,6 +22,12 @@ class LLMNotConfiguredError(Exception):
     pass
 
 
+class LLMOutputTruncatedError(RuntimeError):
+    """Raised when retrying unchanged input cannot overcome the output cap."""
+
+    pass
+
+
 class LLMGateway:
     def __init__(self):
         self._openai_client = None
@@ -44,7 +50,9 @@ class LLMGateway:
     @retry(
         stop=stop_after_attempt(2),
         wait=wait_exponential(multiplier=1, min=2, max=10),
-        retry=retry_if_not_exception_type(LLMNotConfiguredError),
+        retry=retry_if_not_exception_type(
+            (LLMNotConfiguredError, LLMOutputTruncatedError)
+        ),
         reraise=True,
     )
     async def call(
@@ -169,7 +177,7 @@ class LLMGateway:
             )
             choice = response.choices[0]
             if choice.finish_reason == "length":
-                raise RuntimeError(
+                raise LLMOutputTruncatedError(
                     "LLM response was truncated by the output token limit."
                 )
             return choice.message.content or ""
@@ -183,7 +191,7 @@ class LLMGateway:
                 max_tokens=settings.llm_max_tokens,
             )
             if response.stop_reason == "max_tokens":
-                raise RuntimeError(
+                raise LLMOutputTruncatedError(
                     "LLM response was truncated by the output token limit."
                 )
             return response.content[0].text

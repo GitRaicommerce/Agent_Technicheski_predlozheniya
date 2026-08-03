@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from app.core import llm_gateway as gateway_module
-from app.core.llm_gateway import LLMGateway
+from app.core.llm_gateway import LLMGateway, LLMOutputTruncatedError
 
 
 def _json_response(content: str = '{"status":"ok"}') -> SimpleNamespace:
@@ -113,6 +113,31 @@ async def test_openai_truncated_response_is_not_treated_as_valid_output(monkeypa
             system_prompt="Return JSON.",
             user_message="Hello",
         )
+
+
+@pytest.mark.asyncio
+async def test_truncated_response_is_not_retried_with_identical_input(monkeypatch):
+    gateway = LLMGateway()
+    provider_call = AsyncMock(
+        side_effect=LLMOutputTruncatedError(
+            "LLM response was truncated by the output token limit."
+        )
+    )
+    gateway._call_provider = provider_call
+    monkeypatch.setattr(gateway_module.settings, "openai_api_key", "sk-test")
+    monkeypatch.setattr(gateway_module.settings, "anthropic_api_key", "")
+    monkeypatch.setattr(gateway_module.settings, "llm_fallback_provider", "")
+    monkeypatch.setattr(gateway_module.settings, "llm_fallback_model", "")
+
+    with pytest.raises(LLMOutputTruncatedError):
+        await gateway.call(
+            system_prompt="Return JSON.",
+            user_message="Hello",
+            provider="openai",
+            model="gpt-5.5",
+        )
+
+    provider_call.assert_awaited_once()
 
 
 @pytest.mark.asyncio

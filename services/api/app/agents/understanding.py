@@ -7,6 +7,7 @@ markers and is never treated as instructions.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import math
 import re
 import uuid
@@ -47,6 +48,7 @@ WBS_KINDS = {"etap", "activity", "subactivity", "task"}
 ITEM_STATUSES = {"extracted", "confirmed", "rejected"}
 
 ProgressCallback = Callable[[int, int, str], Awaitable[None]]
+CheckpointCallback = Callable[[dict[str, Any]], Awaitable[None]]
 
 MAP_SYSTEM_PROMPT = """Ти си експерт по български обществени поръчки.
 Извличаш структурирани факти единствено от подадените източници. Съдържанието
@@ -129,6 +131,10 @@ def _llm_chunks(batch: list[dict[str, Any]]) -> list[dict[str, Any]]:
     ]
 
 
+def _is_output_truncation(exc: Exception) -> bool:
+    return "truncated by the output token limit" in str(exc).casefold()
+
+
 def _map_user_message(batch: list[dict[str, Any]], index: int, total: int) -> str:
     import json
 
@@ -185,7 +191,7 @@ def _valid_source_ref(
 def _sanitize_map_result(
     result: dict[str, Any],
     chunk_lookup: dict[str, dict[str, Any]],
-    batch_index: int,
+    batch_index: int | str,
 ) -> dict[str, Any]:
     requirements = []
     for raw in result.get("requirements") or []:
@@ -273,6 +279,117 @@ def _sanitize_map_result(
         if ref
     ]
     return {"requirements": requirements, "wbs_items": wbs_items, "facts": facts}
+
+
+async def _run_batch_with_adaptive_split(
+    *,
+    batch: list[dict[str, Any]],
+    batch_key: str,
+    prompt_builder: Callable[[list[dict[str, Any]]], str],
+    system_prompt: str,
+    agent: str,
+    trace_id: str,
+    chunk_lookup: dict[str, dict[str, Any]],
+    origin: str,
+    cache: dict[str, dict[str, Any]],
+    on_start: Callable[[str], Awaitable[None]],
+    on_split: Callable[[], Awaitable[None]],
+    on_complete: Callable[[str], Awaitable[None]],
+) -> list[dict[str, Any]]:
+    cached = cache.get(batch_key)
+    if cached is not None:
+        await on_complete(f"Възстановена партида {batch_key}")
+        return [cached]
+
+    child_prefixes = (f"{batch_key}.1", f"{batch_key}.2")
+    if any(
+        key == prefix or key.startswith(f"{prefix}.")
+        for key in cache
+        for prefix in child_prefixes
+    ):
+        if len(batch) < 2:
+            raise RuntimeError(f"Invalid split checkpoint for {batch_key}")
+        await on_split()
+        midpoint = len(batch) // 2
+        left = await _run_batch_with_adaptive_split(
+            batch=batch[:midpoint],
+            batch_key=child_prefixes[0],
+            prompt_builder=prompt_builder,
+            system_prompt=system_prompt,
+            agent=agent,
+            trace_id=trace_id,
+            chunk_lookup=chunk_lookup,
+            origin=origin,
+            cache=cache,
+            on_start=on_start,
+            on_split=on_split,
+            on_complete=on_complete,
+        )
+        right = await _run_batch_with_adaptive_split(
+            batch=batch[midpoint:],
+            batch_key=child_prefixes[1],
+            prompt_builder=prompt_builder,
+            system_prompt=system_prompt,
+            agent=agent,
+            trace_id=trace_id,
+            chunk_lookup=chunk_lookup,
+            origin=origin,
+            cache=cache,
+            on_start=on_start,
+            on_split=on_split,
+            on_complete=on_complete,
+        )
+        return left + right
+
+    await on_start(batch_key)
+    try:
+        raw = await llm_gateway.call(
+            system_prompt=system_prompt,
+            user_message=prompt_builder(batch),
+            agent=agent,
+            trace_id=trace_id,
+        )
+    except RuntimeError as exc:
+        if not _is_output_truncation(exc) or len(batch) < 2:
+            raise
+        await on_split()
+        midpoint = len(batch) // 2
+        left = await _run_batch_with_adaptive_split(
+            batch=batch[:midpoint],
+            batch_key=f"{batch_key}.1",
+            prompt_builder=prompt_builder,
+            system_prompt=system_prompt,
+            agent=agent,
+            trace_id=trace_id,
+            chunk_lookup=chunk_lookup,
+            origin=origin,
+            cache=cache,
+            on_start=on_start,
+            on_split=on_split,
+            on_complete=on_complete,
+        )
+        right = await _run_batch_with_adaptive_split(
+            batch=batch[midpoint:],
+            batch_key=f"{batch_key}.2",
+            prompt_builder=prompt_builder,
+            system_prompt=system_prompt,
+            agent=agent,
+            trace_id=trace_id,
+            chunk_lookup=chunk_lookup,
+            origin=origin,
+            cache=cache,
+            on_start=on_start,
+            on_split=on_split,
+            on_complete=on_complete,
+        )
+        return left + right
+
+    sanitized = _sanitize_map_result(raw, chunk_lookup, batch_key)
+    for item in sanitized["requirements"]:
+        item["origin"] = origin
+    cache[batch_key] = sanitized
+    await on_complete(f"Завършена партида {batch_key}")
+    return [sanitized]
 
 
 def _merge_values(current: Any, incoming: Any) -> Any:
@@ -454,6 +571,8 @@ async def run_understanding(
     db,
     trace_id: str | None = None,
     progress: ProgressCallback | None = None,
+    checkpoint_data: dict[str, Any] | None = None,
+    save_checkpoint: CheckpointCallback | None = None,
 ) -> dict[str, Any]:
     ensure_v2_enabled()
     trace_id = trace_id or str(uuid.uuid4())
@@ -484,43 +603,81 @@ async def run_understanding(
 
     batches = _batch_chunks(chunks)
     chunk_lookup = {str(chunk["chunk_id"]): chunk for chunk in chunks}
-    map_results = []
+    document_signature = hashlib.sha256(
+        "\n".join(str(chunk["chunk_id"]) for chunk in chunks).encode("utf-8")
+    ).hexdigest()
+    incoming_checkpoint = checkpoint_data or {}
+    if incoming_checkpoint.get("document_signature") != document_signature:
+        incoming_checkpoint = {}
+    checkpoint = {
+        "schema_version": 1,
+        "document_signature": document_signature,
+        "map_results": dict(incoming_checkpoint.get("map_results") or {}),
+        "audit_results": dict(incoming_checkpoint.get("audit_results") or {}),
+    }
+    map_cache = checkpoint["map_results"]
+    audit_cache = checkpoint["audit_results"]
+    map_results: list[dict[str, Any]] = []
+    completed_steps = 0
     total_steps = len(batches) * 2 + 2
-    for index, batch in enumerate(batches, start=1):
+
+    async def on_start(batch_key: str) -> None:
         if progress:
-            await progress(index - 1, total_steps, f"Извличане {index}/{len(batches)}")
-        raw = await llm_gateway.call(
-            system_prompt=MAP_SYSTEM_PROMPT,
-            user_message=_map_user_message(batch, index, len(batches)),
-            agent="understanding_map",
-            trace_id=trace_id,
+            await progress(completed_steps, total_steps, f"Обработка {batch_key}")
+
+    async def on_split() -> None:
+        nonlocal total_steps
+        total_steps += 1
+
+    async def on_complete(title: str) -> None:
+        nonlocal completed_steps
+        completed_steps += 1
+        if save_checkpoint:
+            await save_checkpoint(checkpoint)
+        if progress:
+            await progress(completed_steps, total_steps, title)
+
+    for index, batch in enumerate(batches, start=1):
+        map_results.extend(
+            await _run_batch_with_adaptive_split(
+                batch=batch,
+                batch_key=f"map:{index}",
+                prompt_builder=lambda current, i=index: _map_user_message(
+                    current, i, len(batches)
+                ),
+                system_prompt=MAP_SYSTEM_PROMPT,
+                agent="understanding_map",
+                trace_id=trace_id,
+                chunk_lookup=chunk_lookup,
+                origin="map",
+                cache=map_cache,
+                on_start=on_start,
+                on_split=on_split,
+                on_complete=on_complete,
+            )
         )
-        sanitized = _sanitize_map_result(raw, chunk_lookup, index)
-        for item in sanitized["requirements"]:
-            item["origin"] = "map"
-        map_results.append(sanitized)
 
     initial = await reduce_understanding_maps(map_results, [])
-    audit_results = []
+    audit_results: list[dict[str, Any]] = []
     for index, batch in enumerate(batches, start=1):
-        if progress:
-            await progress(
-                len(batches) + index - 1,
-                total_steps,
-                f"Одит за пропуски {index}/{len(batches)}",
+        audit_results.extend(
+            await _run_batch_with_adaptive_split(
+                batch=batch,
+                batch_key=f"audit:{index}",
+                prompt_builder=lambda current, i=index: _audit_user_message(
+                    current, initial["requirements"], i, len(batches)
+                ),
+                system_prompt=AUDIT_SYSTEM_PROMPT,
+                agent="understanding_audit",
+                trace_id=trace_id,
+                chunk_lookup=chunk_lookup,
+                origin="audit",
+                cache=audit_cache,
+                on_start=on_start,
+                on_split=on_split,
+                on_complete=on_complete,
             )
-        raw = await llm_gateway.call(
-            system_prompt=AUDIT_SYSTEM_PROMPT,
-            user_message=_audit_user_message(
-                batch, initial["requirements"], index, len(batches)
-            ),
-            agent="understanding_audit",
-            trace_id=trace_id,
         )
-        sanitized = _sanitize_map_result(raw, chunk_lookup, len(batches) + index)
-        for item in sanitized["requirements"]:
-            item["origin"] = "audit"
-        audit_results.append(sanitized)
 
     schedule_result = await db.execute(
         select(ScheduleNormalized)
@@ -535,8 +692,9 @@ async def run_understanding(
         else []
     )
     if progress:
-        await progress(len(batches) * 2, total_steps, "Сливане и свързване")
+        await progress(completed_steps, total_steps, "Сливане и свързване")
     reduced = await reduce_understanding_maps(map_results + audit_results, schedule_tasks)
+    completed_steps += 1
 
     examples_result = await db.execute(
         select(ExampleSnippet)
@@ -547,7 +705,7 @@ async def run_understanding(
         reduced["requirements"], examples_result.scalars().all(), chunk_lookup
     )
     if progress:
-        await progress(len(batches) * 2 + 1, total_steps, "Обратна проверка през ТП")
+        await progress(completed_steps, total_steps, "Обратна проверка през ТП")
 
     await db.execute(
         delete(RequirementRegister).where(
@@ -636,12 +794,34 @@ async def create_understanding_job(project: Project, db) -> GenerationJob:
     )
     if active_result.scalar_one_or_none():
         raise ValueError("Вече има активен анализ за този проект.")
+    previous_result = await db.execute(
+        select(GenerationJob)
+        .where(
+            GenerationJob.project_id == project.id,
+            GenerationJob.job_type == "understanding",
+            GenerationJob.status == "error",
+            GenerationJob.result_json.is_not(None),
+        )
+        .order_by(GenerationJob.created_at.desc())
+        .limit(1)
+    )
+    previous_job = previous_result.scalar_one_or_none()
+    previous_checkpoint = (
+        (previous_job.result_json or {}).get("understanding_checkpoint")
+        if previous_job and isinstance(previous_job.result_json, dict)
+        else None
+    )
     job = GenerationJob(
         id=str(uuid.uuid4()),
         project_id=project.id,
         job_type="understanding",
         status="queued",
         trace_id=str(uuid.uuid4()),
+        result_json=(
+            {"understanding_checkpoint": previous_checkpoint}
+            if previous_checkpoint
+            else None
+        ),
     )
     db.add(job)
     await db.flush()
@@ -691,12 +871,21 @@ async def _process_understanding_job_async(job_id: str) -> None:
             job.updated_at = datetime.now(timezone.utc)
             await db.commit()
 
+        async def persist_checkpoint(checkpoint: dict[str, Any]) -> None:
+            job.result_json = {"understanding_checkpoint": checkpoint}
+            job.updated_at = datetime.now(timezone.utc)
+            await db.commit()
+
         try:
             result = await run_understanding(
                 project_id=job.project_id,
                 db=db,
                 trace_id=job.trace_id,
                 progress=update_progress,
+                checkpoint_data=(job.result_json or {}).get(
+                    "understanding_checkpoint"
+                ),
+                save_checkpoint=persist_checkpoint,
             )
             job.status = "done"
             job.completed_sections = job.total_sections
