@@ -18,6 +18,7 @@ from app.agents.understanding import (
     reduce_understanding_maps,
 )
 from app.core.models import ProjectFactSheet, RequirementRegister, WbsItem
+from app.routers.understanding import _job_response
 from tests.conftest import _make_project
 
 
@@ -251,6 +252,35 @@ def test_winning_proposal_backcheck_returns_only_unmatched_points():
         {"source": {"embedding": [1.0, 0.0]}},
     )
     assert [gap["snippet_id"] for gap in gaps] == ["gap"]
+
+
+def test_understanding_job_response_does_not_send_checkpoint_payload_to_ui():
+    now = datetime.now(timezone.utc)
+    job = SimpleNamespace(
+        id="job",
+        project_id="project",
+        status="processing",
+        total_sections=18,
+        completed_sections=16,
+        current_section_title="Сливане и свързване",
+        error=None,
+        result_json={
+            "understanding_checkpoint": {
+                "map_results": {"map:1": {"large": "payload"}},
+                "audit_results": {"audit:1": {"large": "payload"}},
+            }
+        },
+        created_at=now,
+        updated_at=now,
+        completed_at=None,
+    )
+
+    response = _job_response(job)
+
+    assert response.result_json == {
+        "checkpoint_saved": True,
+        "checkpoint_leaf_batches": 2,
+    }
 
 
 @pytest.mark.asyncio
@@ -499,3 +529,83 @@ async def test_requirement_delete_preserves_noise_measurement(
     assert item.status == "rejected"
     mock_db.delete.assert_not_awaited()
     mock_db.flush.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_active_understanding_job_can_be_cancelled(
+    client, mock_db, monkeypatch
+):
+    monkeypatch.setattr("app.core.config.settings.generation_pipeline", "v2")
+    now = datetime.now(timezone.utc)
+    job = SimpleNamespace(
+        id="55555555-5555-5555-5555-555555555555",
+        project_id="11111111-1111-1111-1111-111111111111",
+        job_type="understanding",
+        status="processing",
+        total_sections=18,
+        completed_sections=16,
+        current_section_uid="17",
+        current_section_title="Сливане и свързване",
+        error=None,
+        result_json={"understanding_checkpoint": {"map_results": {}, "audit_results": {}}},
+        created_at=now,
+        updated_at=now,
+        completed_at=None,
+    )
+    mock_db.get = AsyncMock(return_value=job)
+
+    with patch("app.routers.understanding.request_understanding_job_stop") as stop:
+        response = await client.post(
+            f"/api/v1/understanding/{job.project_id}/jobs/{job.id}/cancel"
+        )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "cancelled"
+    assert job.status == "cancelled"
+    assert job.result_json["understanding_checkpoint"] == {
+        "map_results": {},
+        "audit_results": {},
+    }
+    stop.assert_called_once_with(job.id)
+
+
+@pytest.mark.asyncio
+async def test_timed_out_understanding_job_can_resume_from_checkpoint(
+    client, mock_db, monkeypatch
+):
+    monkeypatch.setattr("app.core.config.settings.generation_pipeline", "v2")
+    now = datetime.now(timezone.utc)
+    project = _make_project()
+    old_job = SimpleNamespace(
+        id="55555555-5555-5555-5555-555555555555",
+        project_id=project.id,
+        job_type="understanding",
+        status="timed_out",
+    )
+    next_job = SimpleNamespace(
+        id="66666666-6666-6666-6666-666666666666",
+        project_id=project.id,
+        status="queued",
+        total_sections=0,
+        completed_sections=0,
+        current_section_title=None,
+        error=None,
+        result_json={"understanding_checkpoint": {"map_results": {"map:1": {}}}},
+        created_at=now,
+        updated_at=now,
+        completed_at=None,
+    )
+    mock_db.get = AsyncMock(side_effect=[project, old_job])
+
+    with patch(
+        "app.routers.understanding.create_understanding_job",
+        new=AsyncMock(return_value=next_job),
+    ) as create_job:
+        response = await client.post(
+            f"/api/v1/understanding/{project.id}/jobs/{old_job.id}/resume"
+        )
+
+    assert response.status_code == 202
+    assert response.json()["status"] == "queued"
+    assert response.json()["result_json"]["checkpoint_saved"] is True
+    create_job.assert_awaited_once_with(project, mock_db)

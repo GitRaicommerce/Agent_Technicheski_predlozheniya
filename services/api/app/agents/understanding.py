@@ -34,7 +34,7 @@ from app.core.models import (
 
 log = structlog.get_logger()
 
-UNDERSTANDING_JOB_TIMEOUT_SECONDS = 60 * 60
+UNDERSTANDING_JOB_TIMEOUT_SECONDS = 3 * 60 * 60
 MAP_BATCH_MAX_CHARS = 90_000
 REQUIREMENT_KINDS = {
     "obligation",
@@ -799,7 +799,7 @@ async def create_understanding_job(project: Project, db) -> GenerationJob:
         .where(
             GenerationJob.project_id == project.id,
             GenerationJob.job_type == "understanding",
-            GenerationJob.status == "error",
+            GenerationJob.status.in_(["error", "cancelled", "timed_out"]),
             GenerationJob.result_json.is_not(None),
         )
         .order_by(GenerationJob.created_at.desc())
@@ -845,12 +845,55 @@ def enqueue_understanding_job(job_id: str) -> None:
     Queue("ingest", connection=redis).enqueue(
         process_understanding_job,
         job_id,
+        job_id=f"understanding:{job_id}",
         job_timeout=UNDERSTANDING_JOB_TIMEOUT_SECONDS,
     )
 
 
+def request_understanding_job_stop(job_id: str) -> None:
+    """Best-effort stop for a running RQ work horse; DB status is authoritative."""
+    from redis import Redis
+    from rq.command import send_stop_job_command
+
+    redis = Redis.from_url(settings.redis_url)
+    try:
+        send_stop_job_command(redis, f"understanding:{job_id}")
+    except Exception as exc:
+        log.info("understanding_stop_not_running", job_id=job_id, error=str(exc))
+
+
 def process_understanding_job(job_id: str) -> None:
-    asyncio.run(_process_understanding_job_async(job_id))
+    try:
+        asyncio.run(_process_understanding_job_async(job_id))
+    except Exception as exc:
+        from rq.timeouts import JobTimeoutException
+
+        if not isinstance(exc, JobTimeoutException):
+            raise
+        asyncio.run(
+            _mark_understanding_job_terminated(
+                job_id,
+                "timed_out",
+                f"Анализът надвиши максималното време от {UNDERSTANDING_JOB_TIMEOUT_SECONDS // 3600} часа.",
+            )
+        )
+        raise
+
+
+async def _mark_understanding_job_terminated(
+    job_id: str, status: str, error: str
+) -> None:
+    async with AsyncSessionLocal() as db:
+        job = await db.get(GenerationJob, job_id)
+        if not job or job.status in ("done", "cancelled"):
+            return
+        job.status = status
+        job.error = error
+        job.current_section_uid = None
+        job.current_section_title = None
+        job.completed_at = datetime.now(timezone.utc)
+        job.updated_at = datetime.now(timezone.utc)
+        await db.commit()
 
 
 async def _process_understanding_job_async(job_id: str) -> None:
@@ -858,6 +901,8 @@ async def _process_understanding_job_async(job_id: str) -> None:
         job = await db.get(GenerationJob, job_id)
         if not job:
             log.error("understanding_job_not_found", job_id=job_id)
+            return
+        if job.status == "cancelled":
             return
         job.status = "processing"
         job.updated_at = datetime.now(timezone.utc)

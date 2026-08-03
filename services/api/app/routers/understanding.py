@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.agents.understanding import (
     create_understanding_job,
     ensure_v2_enabled,
+    request_understanding_job_stop,
 )
 from app.core.database import get_db
 from app.core.models import (
@@ -138,6 +139,16 @@ class UnderstandingWorkspaceResponse(BaseModel):
 
 
 def _job_response(job: GenerationJob) -> UnderstandingJobResponse:
+    result_json = job.result_json
+    if isinstance(result_json, dict) and isinstance(
+        result_json.get("understanding_checkpoint"), dict
+    ):
+        checkpoint = result_json["understanding_checkpoint"]
+        result_json = {
+            "checkpoint_saved": True,
+            "checkpoint_leaf_batches": len(checkpoint.get("map_results") or {})
+            + len(checkpoint.get("audit_results") or {}),
+        }
     return UnderstandingJobResponse(
         id=job.id,
         project_id=job.project_id,
@@ -146,7 +157,7 @@ def _job_response(job: GenerationJob) -> UnderstandingJobResponse:
         completed_batches=job.completed_sections or 0,
         current_step=job.current_section_title,
         error=job.error,
-        result_json=job.result_json,
+        result_json=result_json,
         created_at=job.created_at,
         updated_at=job.updated_at,
         completed_at=job.completed_at,
@@ -300,6 +311,47 @@ async def get_understanding_job(
     if not job or job.project_id != project_id or job.job_type != "understanding":
         raise HTTPException(status_code=404, detail="Understanding job not found")
     return _job_response(job)
+
+
+@router.post(
+    "/{project_id}/jobs/{job_id}/cancel", response_model=UnderstandingJobResponse
+)
+async def cancel_understanding_job(
+    project_id: str, job_id: str, db: AsyncSession = Depends(get_db)
+):
+    _require_v2()
+    job = await db.get(GenerationJob, job_id)
+    if not job or job.project_id != project_id or job.job_type != "understanding":
+        raise HTTPException(status_code=404, detail="Understanding job not found")
+    if job.status not in ("queued", "processing"):
+        raise HTTPException(status_code=409, detail="Understanding job is not active")
+    job.status = "cancelled"
+    job.error = "Анализът е прекратен от потребителя."
+    job.current_section_uid = None
+    job.current_section_title = None
+    job.completed_at = datetime.now(job.updated_at.tzinfo)
+    await db.commit()
+    request_understanding_job_stop(job.id)
+    return _job_response(job)
+
+
+@router.post(
+    "/{project_id}/jobs/{job_id}/resume",
+    response_model=UnderstandingJobResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def resume_understanding_job(
+    project_id: str, job_id: str, db: AsyncSession = Depends(get_db)
+):
+    _require_v2()
+    project = await _project_or_404(project_id, db)
+    job = await db.get(GenerationJob, job_id)
+    if not job or job.project_id != project_id or job.job_type != "understanding":
+        raise HTTPException(status_code=404, detail="Understanding job not found")
+    if job.status not in ("error", "cancelled", "timed_out"):
+        raise HTTPException(status_code=409, detail="Understanding job cannot be resumed")
+    next_job = await create_understanding_job(project, db)
+    return _job_response(next_job)
 
 
 @router.post(

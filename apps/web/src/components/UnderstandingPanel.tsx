@@ -68,7 +68,7 @@ export default function UnderstandingPanel({ projectId }: { projectId: string })
     const timer = window.setInterval(async () => {
       const current = await api.understanding.getJob(projectId, job.id);
       setWorkspace((value) => (value ? { ...value, latest_job: current } : value));
-      if (["done", "error"].includes(current.status)) void load();
+      if (["done", "error", "cancelled", "timed_out"].includes(current.status)) void load();
     }, 2000);
     return () => window.clearInterval(timer);
   }, [load, projectId, workspace?.latest_job]);
@@ -90,6 +90,7 @@ export default function UnderstandingPanel({ projectId }: { projectId: string })
 
   const job = workspace?.latest_job;
   const jobActive = job && ["queued", "processing"].includes(job.status);
+  const jobResumable = job && ["error", "cancelled", "timed_out"].includes(job.status);
 
   return (
     <div data-testid="understanding-panel" className="space-y-3 text-xs">
@@ -114,6 +115,35 @@ export default function UnderstandingPanel({ projectId }: { projectId: string })
             <span>{job.completed_batches}/{job.total_batches || "?"}</span>
           </div>
           {job.error && <p className="mt-1 text-red-600">{job.error}</p>}
+          <div className="mt-2 flex gap-2">
+            {jobActive && (
+              <button
+                type="button"
+                data-testid="understanding-cancel"
+                disabled={busy}
+                onClick={() => act(() => api.understanding.cancelJob(projectId, job.id))}
+                className="flex-1 rounded border border-red-300 px-2 py-1 text-red-700 disabled:opacity-50"
+              >
+                Прекрати
+              </button>
+            )}
+            {jobResumable && (
+              <button
+                type="button"
+                data-testid="understanding-resume"
+                disabled={busy}
+                onClick={() => act(() => api.understanding.resumeJob(projectId, job.id))}
+                className="flex-1 rounded bg-blue-600 px-2 py-1 text-white disabled:opacity-50"
+              >
+                Продължи от checkpoint
+              </button>
+            )}
+          </div>
+          {jobActive && (
+            <p className="mt-2 text-[10px] text-gray-500">
+              Можеш да преглеждаш и редактираш останалите панели, докато анализът работи.
+            </p>
+          )}
         </div>
       )}
 

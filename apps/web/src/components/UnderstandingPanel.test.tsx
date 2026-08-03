@@ -76,6 +76,8 @@ const workspace: UnderstandingWorkspace = {
 
 const getMock = vi.mocked(api.understanding.get);
 const startMock = vi.mocked(api.understanding.start);
+const cancelJobMock = vi.mocked(api.understanding.cancelJob);
+const resumeJobMock = vi.mocked(api.understanding.resumeJob);
 const updateRequirementMock = vi.mocked(api.understanding.updateRequirement);
 const deleteRequirementMock = vi.mocked(api.understanding.deleteRequirement);
 const confirmRequirementsMock = vi.mocked(api.understanding.confirmRequirements);
@@ -95,6 +97,24 @@ describe("UnderstandingPanel", () => {
       completed_batches: 0,
       created_at: "2026-08-03T10:00:00Z",
       updated_at: "2026-08-03T10:00:00Z",
+    });
+    cancelJobMock.mockResolvedValue({
+      id: "job-1",
+      project_id: "project-1",
+      status: "cancelled",
+      total_batches: 18,
+      completed_batches: 16,
+      created_at: "2026-08-03T10:00:00Z",
+      updated_at: "2026-08-03T11:00:00Z",
+    });
+    resumeJobMock.mockResolvedValue({
+      id: "job-2",
+      project_id: "project-1",
+      status: "queued",
+      total_batches: 0,
+      completed_batches: 0,
+      created_at: "2026-08-03T11:00:00Z",
+      updated_at: "2026-08-03T11:00:00Z",
     });
     updateRequirementMock.mockResolvedValue(workspace.requirements[0]);
     deleteRequirementMock.mockResolvedValue();
@@ -143,6 +163,53 @@ describe("UnderstandingPanel", () => {
 
     await waitFor(() => {
       expect(startMock).toHaveBeenCalledWith("project-1");
+    });
+  });
+
+  it("allows cancelling an active job without disabling artifact tabs", async () => {
+    getMock.mockResolvedValueOnce({
+      ...workspace,
+      latest_job: {
+        id: "job-1",
+        project_id: "project-1",
+        status: "processing",
+        total_batches: 18,
+        completed_batches: 16,
+        current_step: "Сливане и свързване",
+        created_at: "2026-08-03T10:00:00Z",
+        updated_at: "2026-08-03T10:30:00Z",
+      },
+    });
+    render(<UnderstandingPanel projectId="project-1" />);
+
+    expect(await screen.findByRole("tab", { name: "Дейности" })).toBeEnabled();
+    await userEvent.click(screen.getByTestId("understanding-cancel"));
+
+    await waitFor(() => {
+      expect(cancelJobMock).toHaveBeenCalledWith("project-1", "job-1");
+    });
+  });
+
+  it("resumes a timed-out job from its checkpoint", async () => {
+    getMock.mockResolvedValueOnce({
+      ...workspace,
+      latest_job: {
+        id: "job-1",
+        project_id: "project-1",
+        status: "timed_out",
+        total_batches: 18,
+        completed_batches: 16,
+        error: "Анализът надвиши максималното време.",
+        created_at: "2026-08-03T10:00:00Z",
+        updated_at: "2026-08-03T11:00:00Z",
+      },
+    });
+    render(<UnderstandingPanel projectId="project-1" />);
+
+    await userEvent.click(await screen.findByTestId("understanding-resume"));
+
+    await waitFor(() => {
+      expect(resumeJobMock).toHaveBeenCalledWith("project-1", "job-1");
     });
   });
 

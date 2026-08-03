@@ -385,7 +385,7 @@ export interface UnderstandingFactSheet {
 export interface UnderstandingJob {
   id: string;
   project_id: string;
-  status: "queued" | "processing" | "done" | "error" | string;
+  status: "queued" | "processing" | "done" | "error" | "cancelled" | "timed_out" | string;
   total_batches: number;
   completed_batches: number;
   current_step?: string | null;
@@ -658,6 +658,16 @@ export const api = {
     getJob: (projectId: string, jobId: string) =>
       apiFetch<UnderstandingJob>(
         `/api/v1/understanding/${projectId}/jobs/${jobId}`,
+      ),
+    cancelJob: (projectId: string, jobId: string) =>
+      apiFetch<UnderstandingJob>(
+        `/api/v1/understanding/${projectId}/jobs/${jobId}/cancel`,
+        { method: "POST" },
+      ),
+    resumeJob: (projectId: string, jobId: string) =>
+      apiFetch<UnderstandingJob>(
+        `/api/v1/understanding/${projectId}/jobs/${jobId}/resume`,
+        { method: "POST" },
       ),
     createRequirement: (
       projectId: string,
