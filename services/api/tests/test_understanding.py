@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import json
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from app.agents.understanding import (
+    _audit_user_message,
+    _backcheck_winning_proposal,
     _batch_chunks,
     _map_user_message,
     _sanitize_map_result,
@@ -93,6 +97,79 @@ def test_understanding_map_rejects_non_verbatim_quotes_and_unknown_sources():
     assert result["requirements"][0]["source_ref"]["page"] == 4
     assert result["wbs_items"][0]["key"] == "2:a"
     assert result["facts"]["source_refs"][0]["chunk_id"] == "chunk-1"
+
+
+def test_pernik_hidden_requirement_fixture_overrides_generic_classification():
+    fixture_path = Path(__file__).parent / "fixtures" / "pernik_hidden_requirements.json"
+    cases = json.loads(fixture_path.read_text(encoding="utf-8"))
+    assert 5 <= len(cases) <= 10
+
+    for index, case in enumerate(cases):
+        chunk_id = f"hidden-{index}"
+        chunks = {
+            chunk_id: {
+                "chunk_id": chunk_id,
+                "file_id": "file-1",
+                "filename": "Документация.pdf",
+                "page": 20 + index,
+                "section_path": "Методика",
+                "text": case["quote"],
+            }
+        }
+        result = _sanitize_map_result(
+            {
+                "requirements": [
+                    {
+                        "source_chunk_id": chunk_id,
+                        "source_quote": case["quote"],
+                        "normalized_text": case["quote"],
+                        "kind": (
+                            case["expected_kind"]
+                            if case["expected_kind"] == "obligation"
+                            else "content"
+                        ),
+                    }
+                ]
+            },
+            chunks,
+            batch_index=index,
+        )
+        assert result["requirements"][0]["kind"] == case["expected_kind"]
+
+
+def test_audit_prompt_contains_registry_and_untrusted_document_boundaries():
+    prompt = _audit_user_message(
+        [{"chunk_id": "1", "text": "Не се допуска смесване."}],
+        [{"normalized_text": "Представя график", "kind": "obligation"}],
+        1,
+        1,
+    )
+    assert "CURRENT_REQUIREMENT_REGISTER" in prompt
+    assert "UNTRUSTED_TENDER_DOCUMENT" in prompt
+    assert "Не се допуска смесване." in prompt
+
+
+def test_winning_proposal_backcheck_returns_only_unmatched_points():
+    snippets = [
+        SimpleNamespace(
+            id="matched", file_id="example", text="Организация за контрол", embedding=[1.0, 0.0]
+        ),
+        SimpleNamespace(
+            id="gap", file_id="example", text="План за мобилизация", embedding=[0.0, 1.0]
+        ),
+    ]
+    requirements = [
+        {
+            "normalized_text": "Контрол",
+            "source_ref": {"chunk_id": "source"},
+        }
+    ]
+    gaps = _backcheck_winning_proposal(
+        requirements,
+        snippets,
+        {"source": {"embedding": [1.0, 0.0]}},
+    )
+    assert [gap["snippet_id"] for gap in gaps] == ["gap"]
 
 
 @pytest.mark.asyncio
@@ -192,6 +269,7 @@ async def test_understanding_workspace_api_returns_reviewable_artifacts(
         kind="obligation",
         target_section_hint="График",
         status="extracted",
+        origin="map",
         created_at=now,
     )
     wbs = WbsItem(
@@ -232,9 +310,13 @@ async def test_understanding_workspace_api_returns_reviewable_artifacts(
     assert payload["enabled"] is True
     assert payload["sources"] == [{"id": "22222222-2222-2222-2222-222222222222", "filename": "tender.pdf"}]
     assert payload["requirements"][0]["source_page"] == 8
+    assert payload["requirements"][0]["origin"] == "map"
     assert payload["wbs_items"][0]["schedule_task_uid"] == "12"
     assert payload["fact_sheet"]["facts_json"]["subject"] == "Проектиране"
     assert payload["latest_job"] is None
+    assert payload["acceptance"]["machine_total"] == 1
+    assert payload["acceptance"]["missed_rate"] == 0
+    assert payload["probable_gaps"] == []
 
 
 @pytest.mark.asyncio
@@ -309,3 +391,30 @@ async def test_requirement_api_rejects_non_verbatim_manual_source(
 
     assert response.status_code == 400
     assert "verbatim" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_requirement_delete_preserves_noise_measurement(
+    client, mock_db, monkeypatch
+):
+    monkeypatch.setattr("app.core.config.settings.generation_pipeline", "v2")
+    item = RequirementRegister(
+        id="11111111-1111-1111-1111-111111111111",
+        project_id="22222222-2222-2222-2222-222222222222",
+        source_file_id="33333333-3333-3333-3333-333333333333",
+        source_quote="Шум.",
+        normalized_text="Шум",
+        kind="content",
+        status="extracted",
+        origin="map",
+    )
+    mock_db.get = AsyncMock(return_value=item)
+
+    response = await client.delete(
+        f"/api/v1/understanding/{item.project_id}/requirements/{item.id}"
+    )
+
+    assert response.status_code == 204
+    assert item.status == "rejected"
+    mock_db.delete.assert_not_awaited()
+    mock_db.flush.assert_awaited_once()

@@ -40,7 +40,9 @@ class RequirementCreate(BaseModel):
     source_page: int | None = None
     source_quote: str = Field(min_length=1)
     normalized_text: str = Field(min_length=1)
-    kind: Literal["obligation", "prohibition", "format", "content", "evaluation"]
+    kind: Literal[
+        "obligation", "prohibition", "format", "content", "evaluation", "cross_ref"
+    ]
     target_section_hint: str | None = None
     status: Literal["extracted", "confirmed", "rejected"] = "extracted"
 
@@ -50,7 +52,9 @@ class RequirementUpdate(BaseModel):
     source_page: int | None = None
     source_quote: str | None = Field(default=None, min_length=1)
     normalized_text: str | None = Field(default=None, min_length=1)
-    kind: Literal["obligation", "prohibition", "format", "content", "evaluation"] | None = None
+    kind: Literal[
+        "obligation", "prohibition", "format", "content", "evaluation", "cross_ref"
+    ] | None = None
     target_section_hint: str | None = None
     status: Literal["extracted", "confirmed", "rejected"] | None = None
 
@@ -59,6 +63,7 @@ class RequirementResponse(RequirementCreate):
     id: str
     project_id: str
     created_at: datetime
+    origin: Literal["map", "audit", "manual"]
 
     model_config = {"from_attributes": True}
 
@@ -128,6 +133,8 @@ class UnderstandingWorkspaceResponse(BaseModel):
     wbs_items: list[WbsResponse]
     fact_sheet: FactSheetResponse | None
     latest_job: UnderstandingJobResponse | None
+    acceptance: dict[str, Any]
+    probable_gaps: list[dict[str, Any]]
 
 
 def _job_response(job: GenerationJob) -> UnderstandingJobResponse:
@@ -216,15 +223,52 @@ async def get_understanding_workspace(
         .limit(1)
     )
     job = job_result.scalar_one_or_none()
+    requirements = requirement_result.scalars().all()
+    machine = [item for item in requirements if item.origin in ("map", "audit")]
+    accepted_machine = [item for item in machine if item.status != "rejected"]
+    noise = [item for item in machine if item.status == "rejected"]
+    manual = [
+        item
+        for item in requirements
+        if item.origin == "manual" and item.status != "rejected"
+    ]
+    precision = len(accepted_machine) / len(machine) if machine else None
+    recall = (
+        len(accepted_machine) / (len(accepted_machine) + len(manual))
+        if accepted_machine or manual
+        else None
+    )
+    missed_rate = 1 - recall if recall is not None else None
+    review_complete = bool(machine) and all(item.status != "extracted" for item in machine)
+    probable_gaps = (
+        (job.result_json or {}).get("probable_gaps", [])
+        if job and isinstance(job.result_json, dict)
+        else []
+    )
     return UnderstandingWorkspaceResponse(
         sources=[
             {"id": file.id, "filename": file.filename}
             for file in source_result.scalars().all()
         ],
-        requirements=requirement_result.scalars().all(),
+        requirements=requirements,
         wbs_items=wbs_result.scalars().all(),
         fact_sheet=fact_result.scalar_one_or_none(),
         latest_job=_job_response(job) if job else None,
+        acceptance={
+            "machine_total": len(machine),
+            "accepted_machine": len(accepted_machine),
+            "noise_count": len(noise),
+            "manual_additions": len(manual),
+            "precision": precision,
+            "recall": recall,
+            "missed_rate": missed_rate,
+            "review_complete": review_complete,
+            "goal_missed_rate": 0.05,
+            "goal_met": review_complete
+            and missed_rate is not None
+            and missed_rate <= 0.05,
+        },
+        probable_gaps=probable_gaps,
     )
 
 
@@ -273,7 +317,9 @@ async def create_requirement(
     await _validate_requirement_source(
         project_id, data.source_file_id, data.source_quote, db
     )
-    item = RequirementRegister(project_id=project_id, **data.model_dump())
+    item = RequirementRegister(
+        project_id=project_id, origin="manual", **data.model_dump()
+    )
     db.add(item)
     await db.flush()
     await db.refresh(item)
@@ -316,7 +362,9 @@ async def delete_requirement(
     item = await db.get(RequirementRegister, item_id)
     if not item or item.project_id != project_id:
         raise HTTPException(status_code=404, detail="Requirement not found")
-    await db.delete(item)
+    # Preserve review evidence so precision/noise remains measurable.
+    item.status = "rejected"
+    await db.flush()
 
 
 @router.post("/{project_id}/requirements/confirm")

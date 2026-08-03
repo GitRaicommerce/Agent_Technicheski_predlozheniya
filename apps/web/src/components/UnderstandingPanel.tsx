@@ -16,11 +16,22 @@ const KIND_LABELS: Record<string, string> = {
   format: "Формат",
   content: "Съдържание",
   evaluation: "Оценяване",
+  cross_ref: "Кръстосана връзка",
   etap: "Етап",
   activity: "Дейност",
   subactivity: "Поддейност",
   task: "Задача",
 };
+
+const REQUIREMENT_KINDS = [
+  "obligation",
+  "prohibition",
+  "format",
+  "content",
+  "evaluation",
+  "cross_ref",
+] as const;
+const WBS_KINDS = ["etap", "activity", "subactivity", "task"] as const;
 
 export default function UnderstandingPanel({ projectId }: { projectId: string }) {
   const [workspace, setWorkspace] = useState<UnderstandingWorkspace | null>(null);
@@ -219,8 +230,13 @@ function RequirementsEditor({
   });
   return (
     <div className="space-y-2">
-      {workspace.requirements.map((item) => (
+      <AcceptanceSummary workspace={workspace} />
+      {workspace.requirements.filter((item) => item.status !== "rejected").map((item) => (
         <div key={item.id} className="rounded border bg-white p-2 space-y-1">
+          <div className="flex items-center justify-between text-[10px] text-gray-500">
+            <span>{workspace.sources.find((source) => source.id === item.source_file_id)?.filename ?? "Източник"}</span>
+            <span>{item.origin === "audit" ? "намерено при одита" : item.origin === "manual" ? "добавено ръчно" : "първично извличане"}</span>
+          </div>
           <textarea
             aria-label="Нормализирано изискване"
             value={item.normalized_text}
@@ -234,7 +250,7 @@ function RequirementsEditor({
               onChange={(event) => updateLocal(item.id, { kind: event.target.value as UnderstandingRequirement["kind"] })}
               className="min-w-0 flex-1 rounded border p-1"
             >
-              {Object.keys(KIND_LABELS).slice(0, 5).map((kind) => <option key={kind} value={kind}>{KIND_LABELS[kind]}</option>)}
+              {REQUIREMENT_KINDS.map((kind) => <option key={kind} value={kind}>{KIND_LABELS[kind]}</option>)}
             </select>
             <button type="button" disabled={busy} onClick={() => act(() => api.understanding.updateRequirement(projectId, item.id, item))} className="rounded border px-2">Запази</button>
             <button type="button" disabled={busy} aria-label="Изтрий изискване" onClick={() => act(() => api.understanding.deleteRequirement(projectId, item.id))} className="rounded border px-2 text-red-600">×</button>
@@ -254,7 +270,39 @@ function RequirementsEditor({
           <button type="button" disabled={busy || !draft.source_file_id || !draft.source_quote || !draft.normalized_text} onClick={() => act(() => api.understanding.createRequirement(projectId, draft as Omit<UnderstandingRequirement, "id" | "project_id" | "created_at">))} className="w-full rounded border px-2 py-1">Добави</button>
         </div>
       </details>
+      {workspace.probable_gaps.length > 0 && (
+        <details className="rounded border border-amber-300 bg-amber-50 p-2">
+          <summary className="cursor-pointer font-medium text-amber-900">
+            Вероятни пропуски от печелившото ТП ({workspace.probable_gaps.length})
+          </summary>
+          <div className="mt-2 space-y-2">
+            {workspace.probable_gaps.map((gap) => (
+              <p key={gap.snippet_id} className="rounded bg-white p-2 text-[11px] text-gray-700">
+                {gap.text}
+              </p>
+            ))}
+          </div>
+        </details>
+      )}
       <button type="button" disabled={busy || workspace.requirements.length === 0} onClick={() => act(() => api.understanding.confirmRequirements(projectId))} className="w-full rounded bg-green-600 px-2 py-1.5 text-white disabled:opacity-50">Потвърди регистъра</button>
+    </div>
+  );
+}
+
+function AcceptanceSummary({ workspace }: { workspace: UnderstandingWorkspace }) {
+  const metrics = workspace.acceptance;
+  const percent = (value?: number | null) => value == null ? "—" : `${(value * 100).toFixed(1)}%`;
+  return (
+    <div data-testid="understanding-acceptance" className="rounded border bg-blue-50 p-2">
+      <div className="grid grid-cols-3 gap-2 text-center">
+        <div><strong className="block">{percent(metrics.recall)}</strong><span>recall</span></div>
+        <div><strong className="block">{percent(metrics.precision)}</strong><span>precision</span></div>
+        <div><strong className="block">{percent(metrics.missed_rate)}</strong><span>пропуски</span></div>
+      </div>
+      <p className="mt-2 text-[10px] text-gray-600">
+        Ръчно добавени: {metrics.manual_additions}; шум: {metrics.noise_count}. Цел: ≤5% пропуски.
+        {!metrics.review_complete && " Числата са предварителни до потвърждаване на регистъра."}
+      </p>
     </div>
   );
 }
@@ -268,7 +316,7 @@ function WbsEditor({ projectId, workspace, busy, act, updateLocal }: { projectId
           <input aria-label="Наименование на дейност" value={item.title} onChange={(e) => updateLocal(item.id, { title: e.target.value })} className="w-full rounded border p-1 font-medium" />
           <div className="mt-1 flex gap-1">
             <select value={item.kind} onChange={(e) => updateLocal(item.id, { kind: e.target.value as UnderstandingWbsItem["kind"] })} className="min-w-0 flex-1 rounded border p-1">
-              {Object.keys(KIND_LABELS).slice(5).map((kind) => <option key={kind} value={kind}>{KIND_LABELS[kind]}</option>)}
+              {WBS_KINDS.map((kind) => <option key={kind} value={kind}>{KIND_LABELS[kind]}</option>)}
             </select>
             <button type="button" disabled={busy} onClick={() => act(() => api.understanding.updateWbsItem(projectId, item.id, item))} className="rounded border px-2">Запази</button>
             <button type="button" disabled={busy} aria-label="Изтрий дейност" onClick={() => act(() => api.understanding.deleteWbsItem(projectId, item.id))} className="rounded border px-2 text-red-600">×</button>

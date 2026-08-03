@@ -19,6 +19,7 @@
 
 ## Completed Work
 
+- Extended rework Phase 1 with the updated acceptance protocol: persisted map/audit/manual requirement origins and soft rejection for measurable recall/precision review; added `cross_ref` plus a seven-case Pernik hidden-constraint fixture; made a full-document self-critique pass mandatory; back-checks uploaded winning/reference TP snippets and exposes probable gaps; and shows live review metrics in the Understanding workspace. The real paid Pernik run and final measured acceptance numbers are intentionally left for the user test after Phase 1.
 - Implemented rework Phase 1 behind `GENERATION_PIPELINE=v2`: added Alembic-backed requirement register, WBS, and versioned project fact sheets; an all-chunk, citation-validating understanding map-reduce RQ job with schedule linking; editable/confirmable API contracts; and the Bulgarian three-tab “Разбиране” workspace. A read-only Pernik smoke proved all 683 tender chunks are preserved across 6 batches and the live workspace sees both source files; the paid LLM extraction is intentionally left for the user acceptance test.
 - Completed rework Phase 0: added an opt-in `GENERATION_PIPELINE=v2` switch with `v1` as the safe default, froze the existing compact v1 grounding-context behavior with a regression snapshot, and verified that tender ingestion persists pgvector embeddings with audit metadata.
 - Reviewed the repository structure, architecture, toolchain, and documentation quality.

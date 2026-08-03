@@ -353,9 +353,10 @@ export interface UnderstandingRequirement {
   source_page?: number | null;
   source_quote: string;
   normalized_text: string;
-  kind: "obligation" | "prohibition" | "format" | "content" | "evaluation";
+  kind: "obligation" | "prohibition" | "format" | "content" | "evaluation" | "cross_ref";
   target_section_hint?: string | null;
   status: UnderstandingItemStatus;
+  origin: "map" | "audit" | "manual";
   created_at: string;
 }
 
@@ -402,6 +403,24 @@ export interface UnderstandingWorkspace {
   wbs_items: UnderstandingWbsItem[];
   fact_sheet?: UnderstandingFactSheet | null;
   latest_job?: UnderstandingJob | null;
+  acceptance: {
+    machine_total: number;
+    accepted_machine: number;
+    noise_count: number;
+    manual_additions: number;
+    precision?: number | null;
+    recall?: number | null;
+    missed_rate?: number | null;
+    review_complete: boolean;
+    goal_missed_rate: number;
+    goal_met: boolean;
+  };
+  probable_gaps: Array<{
+    snippet_id: string;
+    file_id: string;
+    text: string;
+    best_match_score: number;
+  }>;
 }
 
 export interface DuplicateSelectionResolutionResponse {

@@ -32,6 +32,7 @@ const workspace: UnderstandingWorkspace = {
       kind: "obligation",
       target_section_hint: "График",
       status: "extracted",
+      origin: "map",
       created_at: "2026-08-03T10:00:00Z",
     },
   ],
@@ -58,6 +59,19 @@ const workspace: UnderstandingWorkspace = {
     status: "draft",
   },
   latest_job: null,
+  acceptance: {
+    machine_total: 1,
+    accepted_machine: 1,
+    noise_count: 0,
+    manual_additions: 0,
+    precision: 1,
+    recall: 1,
+    missed_rate: 0,
+    review_complete: false,
+    goal_missed_rate: 0.05,
+    goal_met: false,
+  },
+  probable_gaps: [],
 };
 
 const getMock = vi.mocked(api.understanding.get);
@@ -95,6 +109,7 @@ describe("UnderstandingPanel", () => {
 
     expect(await screen.findByText("стр. 8: „Участникът следва да представи график.“"))
       .toBeInTheDocument();
+    expect(screen.getByTestId("understanding-acceptance")).toHaveTextContent("100.0%");
     await userEvent.click(screen.getByRole("tab", { name: "Дейности" }));
     expect(screen.getByDisplayValue("Изготвяне на график")).toBeInTheDocument();
     expect(screen.getByText("График: задача 12")).toBeInTheDocument();

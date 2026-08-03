@@ -402,6 +402,7 @@ class RequirementRegister(Base):
     kind: Mapped[str] = mapped_column(String(32))
     target_section_hint: Mapped[Optional[str]] = mapped_column(String(1024))
     status: Mapped[str] = mapped_column(String(16), default="extracted")
+    origin: Mapped[str] = mapped_column(String(16), default="map")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
