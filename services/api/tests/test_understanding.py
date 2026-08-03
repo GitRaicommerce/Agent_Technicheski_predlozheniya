@@ -48,6 +48,25 @@ def test_understanding_batches_preserve_every_chunk_and_untrusted_boundary():
     assert "</UNTRUSTED_TENDER_DOCUMENT>" in prompt
 
 
+def test_understanding_prompts_exclude_non_json_pgvector_values():
+    non_serializable_float32 = object()
+    batch = [
+        {
+            "chunk_id": "1",
+            "text": "Изискване към техническото предложение.",
+            "embedding": [non_serializable_float32],
+        }
+    ]
+
+    map_prompt = _map_user_message(batch, 1, 1)
+    audit_prompt = _audit_user_message(batch, [], 1, 1)
+
+    assert "embedding" not in map_prompt
+    assert "embedding" not in audit_prompt
+    assert "Изискване към техническото предложение." in map_prompt
+    assert "Изискване към техническото предложение." in audit_prompt
+
+
 def test_understanding_map_rejects_non_verbatim_quotes_and_unknown_sources():
     chunks = {
         "chunk-1": {

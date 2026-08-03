@@ -121,13 +121,21 @@ def _batch_chunks(
     return batches
 
 
+def _llm_chunks(batch: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Remove vector-only fields before JSON encoding the untrusted source text."""
+    return [
+        {key: value for key, value in chunk.items() if key != "embedding"}
+        for chunk in batch
+    ]
+
+
 def _map_user_message(batch: list[dict[str, Any]], index: int, total: int) -> str:
     import json
 
     return (
         f"Партида {index}/{total}. Анализирай всички chunks.\n"
         "<UNTRUSTED_TENDER_DOCUMENT>\n"
-        + json.dumps(batch, ensure_ascii=False)
+        + json.dumps(_llm_chunks(batch), ensure_ascii=False)
         + "\n</UNTRUSTED_TENDER_DOCUMENT>"
     )
 
@@ -149,7 +157,7 @@ def _audit_user_message(
         "<CURRENT_REQUIREMENT_REGISTER>\n"
         + json.dumps(compact_registry, ensure_ascii=False)
         + "\n</CURRENT_REQUIREMENT_REGISTER>\n<UNTRUSTED_TENDER_DOCUMENT>\n"
-        + json.dumps(batch, ensure_ascii=False)
+        + json.dumps(_llm_chunks(batch), ensure_ascii=False)
         + "\n</UNTRUSTED_TENDER_DOCUMENT>"
     )
 
