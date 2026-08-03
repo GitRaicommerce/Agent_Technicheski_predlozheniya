@@ -201,6 +201,107 @@ async def test_grounding_context_includes_design_parts_from_schedule_and_tender(
 
 
 @pytest.mark.asyncio
+async def test_v1_grounding_context_regression_snapshot(mock_db):
+    """Freeze the compact keyword-ranked evidence pack while v2 is opt-in."""
+    schedule = SimpleNamespace(
+        schedule_json={
+            "tasks": [
+                {
+                    "uid": "20",
+                    "wbs": "2.2",
+                    "name": "Контрол на качеството",
+                    "duration_days": 4,
+                },
+                {
+                    "uid": "10",
+                    "wbs": "2.1",
+                    "name": "Проверка на качеството и отчет",
+                    "duration_days": 3,
+                },
+                {
+                    "uid": "30",
+                    "wbs": "3.1",
+                    "name": "Несвързана доставка",
+                    "duration_days": 2,
+                },
+            ]
+        },
+        status_locked=True,
+        version=3,
+    )
+    chunks = [
+        SimpleNamespace(
+            id="chunk-low",
+            page=2,
+            section_path="Общи условия",
+            text="Изпълнителят осигурява качество.",
+        ),
+        SimpleNamespace(
+            id="chunk-high",
+            page=9,
+            section_path="Контрол на качеството",
+            text="Контрол на качеството, проверки и отчет за качеството.",
+        ),
+        SimpleNamespace(
+            id="chunk-unmatched",
+            page=1,
+            section_path="Доставка",
+            text="Доставка на материали.",
+        ),
+    ]
+    mock_db.execute = AsyncMock(
+        side_effect=[
+            _one_result(schedule),
+            [SimpleNamespace(id="file-1")],
+            _scalar_result(chunks),
+        ]
+    )
+
+    context = await build_project_grounding_context(
+        project_id="project-1",
+        section_title="Контрол на качеството",
+        section_requirements=["Опиши проверките и отчета."],
+        db=mock_db,
+        max_tender_chunks=2,
+        max_schedule_tasks=2,
+    )
+
+    assert context == {
+        "section": {
+            "title": "Контрол на качеството",
+            "requirements": ["Опиши проверките и отчета."],
+        },
+        "tender_chunks": [
+            {
+                "chunk_id": "chunk-high",
+                "page": 9,
+                "section_path": "Контрол на качеството",
+                "text": "Контрол на качеството, проверки и отчет за качеството.",
+            }
+        ],
+        "schedule": {
+            "available": True,
+            "locked": True,
+            "version": 3,
+            "tasks": [
+                {
+                    "uid": "20",
+                    "wbs": "2.2",
+                    "name": "Контрол на качеството",
+                    "duration_days": 4,
+                },
+                {
+                    "uid": "10",
+                    "wbs": "2.1",
+                    "name": "Проверка на качеството и отчет",
+                    "duration_days": 3,
+                },
+            ],
+        },
+    }
+
+
+@pytest.mark.asyncio
 async def test_drafting_prompt_and_saved_generation_include_grounding_context(mock_db):
     project_id = str(uuid.uuid4())
     section_uid = str(uuid.uuid4())

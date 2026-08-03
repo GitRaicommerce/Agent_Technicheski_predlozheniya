@@ -30,6 +30,9 @@ class Settings(BaseSettings):
     llm_max_tokens: int = 16384
     llm_temperature: float = 0.2
 
+    # Generation architecture. v2 remains opt-in until the rework is complete.
+    generation_pipeline: str = "v1"
+
     # Embeddings
     embedding_model: str = "text-embedding-3-small"
     embedding_dims: int = 1536

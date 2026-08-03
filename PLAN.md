@@ -19,6 +19,7 @@
 
 ## Completed Work
 
+- Completed rework Phase 0: added an opt-in `GENERATION_PIPELINE=v2` switch with `v1` as the safe default, froze the existing compact v1 grounding-context behavior with a regression snapshot, and verified that tender ingestion persists pgvector embeddings with audit metadata.
 - Reviewed the repository structure, architecture, toolchain, and documentation quality.
 - Identified documentation drift between README claims and the real codebase.
 - Reworked `README.md` into a stable entry point.
