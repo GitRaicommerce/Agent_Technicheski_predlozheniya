@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import json
 from pathlib import Path
 from types import SimpleNamespace
@@ -578,6 +578,58 @@ async def test_active_understanding_job_can_be_cancelled(
         "audit_results": {},
     }
     stop.assert_called_once_with(job.id)
+
+
+@pytest.mark.asyncio
+async def test_orphaned_understanding_job_becomes_resumable(mock_db):
+    from app.agents.understanding import reconcile_understanding_job
+
+    old = datetime.now(timezone.utc) - timedelta(minutes=5)
+    job = SimpleNamespace(
+        id="55555555-5555-5555-5555-555555555555",
+        status="queued",
+        created_at=old,
+        updated_at=old,
+        current_section_uid=None,
+        current_section_title=None,
+        completed_at=None,
+        error=None,
+        result_json={"understanding_checkpoint": {"map_results": {"map:1": {}}}},
+    )
+
+    with patch(
+        "app.agents.understanding.understanding_job_has_live_rq_entry",
+        return_value=False,
+    ):
+        result = await reconcile_understanding_job(job, mock_db)
+
+    assert result.status == "error"
+    assert "Възобнови анализа" in result.error
+    assert result.result_json["understanding_checkpoint"]
+    assert result.completed_at is not None
+    mock_db.commit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_live_understanding_job_is_not_reconciled_as_orphan(mock_db):
+    from app.agents.understanding import reconcile_understanding_job
+
+    old = datetime.now(timezone.utc) - timedelta(minutes=5)
+    job = SimpleNamespace(
+        id="55555555-5555-5555-5555-555555555555",
+        status="processing",
+        created_at=old,
+        updated_at=old,
+    )
+
+    with patch(
+        "app.agents.understanding.understanding_job_has_live_rq_entry",
+        return_value=True,
+    ):
+        result = await reconcile_understanding_job(job, mock_db)
+
+    assert result.status == "processing"
+    mock_db.commit.assert_not_awaited()
 
 
 @pytest.mark.asyncio

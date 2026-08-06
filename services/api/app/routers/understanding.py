@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.agents.understanding import (
     create_understanding_job,
     ensure_v2_enabled,
+    reconcile_understanding_job,
     request_understanding_job_stop,
 )
 from app.core.database import get_db
@@ -234,6 +235,8 @@ async def get_understanding_workspace(
         .limit(1)
     )
     job = job_result.scalar_one_or_none()
+    if job:
+        await reconcile_understanding_job(job, db)
     requirements = requirement_result.scalars().all()
     machine = [item for item in requirements if item.origin in ("map", "audit")]
     accepted_machine = [item for item in machine if item.status != "rejected"]
@@ -310,6 +313,7 @@ async def get_understanding_job(
     job = await db.get(GenerationJob, job_id)
     if not job or job.project_id != project_id or job.job_type != "understanding":
         raise HTTPException(status_code=404, detail="Understanding job not found")
+    await reconcile_understanding_job(job, db)
     return _job_response(job)
 
 

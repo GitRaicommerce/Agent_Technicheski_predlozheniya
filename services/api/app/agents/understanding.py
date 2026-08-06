@@ -36,6 +36,7 @@ from app.core.models import (
 log = structlog.get_logger()
 
 UNDERSTANDING_JOB_TIMEOUT_SECONDS = 3 * 60 * 60
+UNDERSTANDING_ORPHAN_GRACE_SECONDS = 60
 MAP_BATCH_MAX_CHARS = 90_000
 REQUIREMENT_KINDS = {
     "obligation",
@@ -854,6 +855,76 @@ def enqueue_understanding_job(job_id: str) -> None:
         job_id=f"understanding:{job_id}",
         job_timeout=UNDERSTANDING_JOB_TIMEOUT_SECONDS,
     )
+
+
+def understanding_job_has_live_rq_entry(job_id: str, status: str) -> bool:
+    """Return whether an active DB job is still reachable by an RQ worker.
+
+    RQ persists the job hash separately from the queue/started registries.  A
+    Docker or Redis interruption can therefore leave a job whose hash still
+    says ``queued`` even though no worker can ever dequeue it.
+
+    Redis inspection is deliberately fail-open: a temporary Redis diagnostic
+    failure must not turn a healthy long-running analysis into an error.
+    """
+    from redis import Redis
+    from rq import Queue
+    from rq.registry import StartedJobRegistry
+
+    rq_job_id = f"understanding:{job_id}"
+    try:
+        redis = Redis.from_url(settings.redis_url)
+        if status == "queued":
+            return rq_job_id in Queue("ingest", connection=redis).get_job_ids()
+        if status == "processing":
+            started_ids = StartedJobRegistry(
+                "ingest", connection=redis
+            ).get_job_ids(cleanup=False)
+            # RQ 2 may store either a job id or a composite execution id.
+            return any(
+                item == rq_job_id or item.startswith(f"{rq_job_id}:")
+                for item in started_ids
+            )
+        return True
+    except Exception as exc:
+        log.warning(
+            "understanding_rq_state_unavailable", job_id=job_id, error=str(exc)
+        )
+        return True
+
+
+async def reconcile_understanding_job(job: GenerationJob, db) -> GenerationJob:
+    """Expose interrupted active jobs as resumable instead of polling forever."""
+    if job.status not in ("queued", "processing"):
+        return job
+    updated_at = job.updated_at or job.created_at
+    if updated_at is None:
+        return job
+    if updated_at.tzinfo is None:
+        updated_at = updated_at.replace(tzinfo=timezone.utc)
+    age_seconds = (datetime.now(timezone.utc) - updated_at).total_seconds()
+    if age_seconds < UNDERSTANDING_ORPHAN_GRACE_SECONDS:
+        return job
+    if understanding_job_has_live_rq_entry(job.id, job.status):
+        return job
+
+    previous_status = job.status
+    job.status = "error"
+    job.error = (
+        "Фоновият анализ е прекъснат и вече не присъства в работната опашка. "
+        "Натиснете „Възобнови анализа“, за да продължите от последния запазен checkpoint."
+    )
+    job.current_section_uid = None
+    job.current_section_title = None
+    job.completed_at = datetime.now(timezone.utc)
+    job.updated_at = datetime.now(timezone.utc)
+    await db.commit()
+    log.warning(
+        "understanding_orphan_recovered",
+        job_id=job.id,
+        previous_status=previous_status,
+    )
+    return job
 
 
 def request_understanding_job_stop(job_id: str) -> None:
