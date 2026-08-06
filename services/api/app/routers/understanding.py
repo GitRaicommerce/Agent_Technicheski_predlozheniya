@@ -335,6 +335,7 @@ async def cancel_understanding_job(
     job.current_section_title = None
     job.completed_at = datetime.now(job.updated_at.tzinfo)
     await db.commit()
+    await db.refresh(job)
     request_understanding_job_stop(job.id)
     return _job_response(job)
 

@@ -558,25 +558,82 @@ def _backcheck_winning_proposal(
     chunk_lookup: dict[str, dict[str, Any]],
 ) -> list[dict[str, Any]]:
     """Return example-TP points that have no plausible registry counterpart."""
-    gaps: list[dict[str, Any]] = []
-    for snippet in snippets:
-        text = re.sub(r"\s+", " ", str(snippet.text or "")).strip()
-        if not text:
-            continue
-        snippet_embedding = list(snippet.embedding) if snippet.embedding is not None else []
-        best_score = 0.0
+    vector_scores: dict[int, float] = {}
+    try:
+        import numpy as np
+
+        requirement_vectors = []
+        vector_size: int | None = None
         for requirement in requirements:
             ref = requirement.get("source_ref") or {}
             source = chunk_lookup.get(str(ref.get("chunk_id"))) or {}
             source_embedding = source.get("embedding") or []
-            if snippet_embedding and source_embedding:
-                score = _cosine(snippet_embedding, list(source_embedding))
-                threshold = 0.55
-            else:
-                score = _token_similarity(text, requirement.get("normalized_text") or "")
-                threshold = 0.18
-            if score > best_score:
-                best_score = score
+            if not source_embedding:
+                continue
+            if vector_size is None:
+                vector_size = len(source_embedding)
+            if len(source_embedding) == vector_size:
+                requirement_vectors.append(source_embedding)
+
+        if requirement_vectors and vector_size:
+            requirement_matrix = np.asarray(requirement_vectors, dtype=np.float32)
+            requirement_norms = np.linalg.norm(requirement_matrix, axis=1)
+            valid_requirements = requirement_norms > 0
+            requirement_matrix = requirement_matrix[valid_requirements]
+            requirement_norms = requirement_norms[valid_requirements]
+            if len(requirement_matrix):
+                requirement_matrix = requirement_matrix / requirement_norms[:, None]
+                batch_size = 256
+                for start in range(0, len(snippets), batch_size):
+                    batch = snippets[start : start + batch_size]
+                    rows: list[list[float]] = []
+                    row_indexes: list[int] = []
+                    for offset, snippet in enumerate(batch):
+                        embedding = (
+                            list(snippet.embedding)
+                            if snippet.embedding is not None
+                            else []
+                        )
+                        if len(embedding) == vector_size:
+                            rows.append(embedding)
+                            row_indexes.append(start + offset)
+                    if not rows:
+                        continue
+                    snippet_matrix = np.asarray(rows, dtype=np.float32)
+                    snippet_norms = np.linalg.norm(snippet_matrix, axis=1)
+                    valid_snippets = snippet_norms > 0
+                    normalized = np.zeros_like(snippet_matrix)
+                    normalized[valid_snippets] = (
+                        snippet_matrix[valid_snippets]
+                        / snippet_norms[valid_snippets, None]
+                    )
+                    best_scores = np.max(
+                        normalized @ requirement_matrix.T, axis=1
+                    )
+                    for row_index, score in zip(row_indexes, best_scores):
+                        vector_scores[row_index] = float(score)
+    except Exception as exc:
+        log.warning("understanding_backcheck_vectorization_failed", error=str(exc))
+
+    gaps: list[dict[str, Any]] = []
+    for snippet_index, snippet in enumerate(snippets):
+        text = re.sub(r"\s+", " ", str(snippet.text or "")).strip()
+        if not text:
+            continue
+        if snippet_index in vector_scores:
+            best_score = vector_scores[snippet_index]
+            threshold = 0.55
+        else:
+            best_score = max(
+                (
+                    _token_similarity(
+                        text, requirement.get("normalized_text") or ""
+                    )
+                    for requirement in requirements
+                ),
+                default=0.0,
+            )
+            threshold = 0.18
         if not requirements or best_score < threshold:
             gaps.append(
                 {
@@ -946,6 +1003,7 @@ async def reconcile_understanding_job(job: GenerationJob, db) -> GenerationJob:
     job.completed_at = datetime.now(timezone.utc)
     job.updated_at = datetime.now(timezone.utc)
     await db.commit()
+    await db.refresh(job)
     log.warning(
         "understanding_orphan_recovered",
         job_id=job.id,

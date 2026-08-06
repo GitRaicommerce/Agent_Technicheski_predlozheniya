@@ -305,6 +305,41 @@ def test_winning_proposal_backcheck_float32_scores_are_json_serializable():
     json.dumps(gaps)
 
 
+def test_winning_proposal_backcheck_vectorizes_float32_embeddings():
+    from numpy import float32
+
+    snippets = [
+        SimpleNamespace(
+            id="matched",
+            file_id="example",
+            text="Организация за контрол",
+            embedding=[float32(1.0), float32(0.0)],
+        ),
+        SimpleNamespace(
+            id="gap",
+            file_id="example",
+            text="План за мобилизация",
+            embedding=[float32(0.0), float32(1.0)],
+        ),
+    ]
+    requirements = [
+        {
+            "normalized_text": "Контрол",
+            "source_ref": {"chunk_id": "source"},
+        }
+    ]
+
+    gaps = _backcheck_winning_proposal(
+        requirements,
+        snippets,
+        {"source": {"embedding": [float32(1.0), float32(0.0)]}},
+    )
+
+    assert [gap["snippet_id"] for gap in gaps] == ["gap"]
+    assert type(gaps[0]["best_match_score"]) is float
+    json.dumps(gaps)
+
+
 def test_understanding_job_response_does_not_send_checkpoint_payload_to_ui():
     now = datetime.now(timezone.utc)
     job = SimpleNamespace(
@@ -617,6 +652,7 @@ async def test_active_understanding_job_can_be_cancelled(
         "map_results": {},
         "audit_results": {},
     }
+    mock_db.refresh.assert_awaited_once_with(job)
     stop.assert_called_once_with(job.id)
 
 
