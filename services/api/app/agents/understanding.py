@@ -139,7 +139,23 @@ def _is_output_truncation(exc: Exception) -> bool:
 
 def _checkpoint_snapshot(checkpoint: dict[str, Any]) -> dict[str, Any]:
     """Detach JSONB state so every nested update is detected and persisted."""
-    return copy.deepcopy(checkpoint)
+    return copy.deepcopy(_json_safe(checkpoint))
+
+
+def _json_safe(value: Any) -> Any:
+    """Recursively convert NumPy/pgvector scalar values to JSON primitives."""
+    if isinstance(value, dict):
+        return {str(key): _json_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(item) for item in value]
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    item = getattr(value, "item", None)
+    if callable(item):
+        converted = item()
+        if converted is not value:
+            return _json_safe(converted)
+    return value
 
 
 def _map_user_message(batch: list[dict[str, Any]], index: int, total: int) -> str:
@@ -433,7 +449,7 @@ def _cosine(left: list[float], right: list[float]) -> float:
     denominator = math.sqrt(sum(a * a for a in left)) * math.sqrt(
         sum(b * b for b in right)
     )
-    return numerator / denominator if denominator else 0.0
+    return float(numerator / denominator) if denominator else 0.0
 
 
 async def _link_schedule_tasks(
@@ -567,7 +583,7 @@ def _backcheck_winning_proposal(
                     "snippet_id": str(snippet.id),
                     "file_id": str(snippet.file_id),
                     "text": text[:1200],
-                    "best_match_score": round(best_score, 4),
+                    "best_match_score": round(float(best_score), 4),
                 }
             )
     return gaps
@@ -1026,7 +1042,7 @@ async def _process_understanding_job_async(job_id: str) -> None:
             job.completed_sections = job.total_sections
             job.current_section_uid = None
             job.current_section_title = None
-            job.result_json = result
+            job.result_json = _json_safe(result)
             job.completed_at = datetime.now(timezone.utc)
             job.updated_at = datetime.now(timezone.utc)
             await db.commit()

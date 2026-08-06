@@ -14,6 +14,7 @@ from app.agents.understanding import (
     _checkpoint_snapshot,
     _batch_chunks,
     _map_user_message,
+    _json_safe,
     _understanding_rq_job_id,
     _run_batch_with_adaptive_split,
     _sanitize_map_result,
@@ -88,6 +89,15 @@ def test_checkpoint_snapshot_is_detached_from_later_nested_mutations():
 
     assert set(persisted["map_results"]) == {"map:1"}
     assert set(working["map_results"]) == {"map:1", "map:2"}
+
+
+def test_understanding_results_convert_float32_to_json_number():
+    from numpy import float32
+
+    result = _json_safe({"probable_gaps": [{"best_match_score": float32(0.25)}]})
+
+    assert type(result["probable_gaps"][0]["best_match_score"]) is float
+    assert json.loads(json.dumps(result))["probable_gaps"][0]["best_match_score"] == 0.25
 
 
 def test_understanding_map_rejects_non_verbatim_quotes_and_unknown_sources():
@@ -273,6 +283,26 @@ def test_winning_proposal_backcheck_returns_only_unmatched_points():
         {"source": {"embedding": [1.0, 0.0]}},
     )
     assert [gap["snippet_id"] for gap in gaps] == ["gap"]
+
+
+def test_winning_proposal_backcheck_float32_scores_are_json_serializable():
+    from numpy import float32
+
+    gaps = _backcheck_winning_proposal(
+        [],
+        [
+            SimpleNamespace(
+                id="gap",
+                file_id="example",
+                text="План за мобилизация",
+                embedding=[float32(0.0), float32(1.0)],
+            )
+        ],
+        {},
+    )
+
+    assert type(gaps[0]["best_match_score"]) is float
+    json.dumps(gaps)
 
 
 def test_understanding_job_response_does_not_send_checkpoint_payload_to_ui():
