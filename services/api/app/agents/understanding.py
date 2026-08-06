@@ -852,9 +852,14 @@ def enqueue_understanding_job(job_id: str) -> None:
     Queue("ingest", connection=redis).enqueue(
         process_understanding_job,
         job_id,
-        job_id=f"understanding:{job_id}",
+        # RQ 2 reserves ':' as the job/execution-id separator.
+        job_id=_understanding_rq_job_id(job_id),
         job_timeout=UNDERSTANDING_JOB_TIMEOUT_SECONDS,
     )
+
+
+def _understanding_rq_job_id(job_id: str) -> str:
+    return f"understanding-{job_id}"
 
 
 def understanding_job_has_live_rq_entry(job_id: str, status: str) -> bool:
@@ -869,13 +874,19 @@ def understanding_job_has_live_rq_entry(job_id: str, status: str) -> bool:
     """
     from redis import Redis
     from rq import Queue
+    from rq.intermediate_queue import IntermediateQueue
     from rq.registry import StartedJobRegistry
 
-    rq_job_id = f"understanding:{job_id}"
+    rq_job_id = _understanding_rq_job_id(job_id)
     try:
         redis = Redis.from_url(settings.redis_url)
         if status == "queued":
-            return rq_job_id in Queue("ingest", connection=redis).get_job_ids()
+            queue = Queue("ingest", connection=redis)
+            queued_ids = queue.get_job_ids()
+            intermediate_ids = IntermediateQueue(
+                queue.key, connection=redis
+            ).get_job_ids()
+            return rq_job_id in queued_ids or rq_job_id in intermediate_ids
         if status == "processing":
             started_ids = StartedJobRegistry(
                 "ingest", connection=redis
@@ -934,7 +945,7 @@ def request_understanding_job_stop(job_id: str) -> None:
 
     redis = Redis.from_url(settings.redis_url)
     try:
-        send_stop_job_command(redis, f"understanding:{job_id}")
+        send_stop_job_command(redis, _understanding_rq_job_id(job_id))
     except Exception as exc:
         log.info("understanding_stop_not_running", job_id=job_id, error=str(exc))
 

@@ -14,6 +14,7 @@ from app.agents.understanding import (
     _checkpoint_snapshot,
     _batch_chunks,
     _map_user_message,
+    _understanding_rq_job_id,
     _run_batch_with_adaptive_split,
     _sanitize_map_result,
     reduce_understanding_maps,
@@ -27,6 +28,15 @@ def _scalar_result(items):
     result = MagicMock()
     result.scalars.return_value.all.return_value = items
     return result
+
+
+def test_understanding_rq_job_id_does_not_use_reserved_execution_separator():
+    rq_job_id = _understanding_rq_job_id(
+        "55555555-5555-5555-5555-555555555555"
+    )
+
+    assert rq_job_id == "understanding-55555555-5555-5555-5555-555555555555"
+    assert ":" not in rq_job_id
 
 
 def _one_result(item):
