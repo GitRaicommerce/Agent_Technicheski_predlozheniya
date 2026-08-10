@@ -30,7 +30,10 @@ const workspace: UnderstandingWorkspace = {
       source_quote: "Участникът следва да представи график.",
       normalized_text: "Представяне на график",
       kind: "obligation",
+      scope: "proposal_content",
       target_section_hint: "График",
+      proposal_path_json: ["Програма", "Линеен график"],
+      acceptance_criteria_json: ["Включва всички дейности"],
       status: "extracted",
       origin: "map",
       created_at: "2026-08-03T10:00:00Z",
@@ -61,6 +64,8 @@ const workspace: UnderstandingWorkspace = {
   latest_job: null,
   acceptance: {
     machine_total: 1,
+    all_requirement_count: 1,
+    proposal_requirement_count: 1,
     accepted_machine: 1,
     noise_count: 0,
     manual_additions: 0,
@@ -137,6 +142,37 @@ describe("UnderstandingPanel", () => {
     expect(screen.getByLabelText("Fact sheet JSON")).toHaveValue(
       '{\n  "subject": "Проектиране"\n}',
     );
+  });
+
+  it("defaults to proposal requirements and can reveal the full register", async () => {
+    getMock.mockResolvedValueOnce({
+      ...workspace,
+      requirements: [
+        ...workspace.requirements,
+        {
+          ...workspace.requirements[0],
+          id: "req-execution",
+          source_quote: "Изпълнителят извършва изпитване на уплътняването.",
+          normalized_text: "Изпитване на уплътняването",
+          scope: "execution_constraint",
+          proposal_path_json: [],
+          acceptance_criteria_json: [],
+        },
+      ],
+      acceptance: {
+        ...workspace.acceptance,
+        all_requirement_count: 2,
+        proposal_requirement_count: 1,
+      },
+    });
+    render(<UnderstandingPanel projectId="project-1" />);
+
+    expect(await screen.findByDisplayValue("Представяне на график")).toBeInTheDocument();
+    expect(screen.queryByDisplayValue("Изпитване на уплътняването")).not.toBeInTheDocument();
+
+    await userEvent.selectOptions(screen.getByLabelText("Обхват на изискванията"), "all");
+
+    expect(screen.getByDisplayValue("Изпитване на уплътняването")).toBeInTheDocument();
   });
 
   it("edits and saves an extracted requirement", async () => {

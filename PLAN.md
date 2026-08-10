@@ -19,6 +19,7 @@
 
 ## Completed Work
 
+- Refocused Phase 1 Understanding on the actual content contract for the technical proposal: the full tender register is preserved but every requirement now has an applicability scope; a dedicated whole-document proposal audit extracts section/subsection hierarchy and atomic acceptance criteria; proposal-only acceptance metrics and winning-TP back-checks no longer count execution, qualification, technical-deliverable, or contract clauses; and the UI defaults to proposal-facing requirements while retaining a full-register filter. Existing Pernik data was safely reclassified to 85 proposal-facing requirements out of 386 total without starting another paid LLM run.
 - Fixed Phase 1 final-result persistence after all paid LLM batches finish: pgvector/NumPy `float32` similarity scores are now normalized recursively to standard JSON numbers before checkpoint and final JSONB writes, with regression coverage for winning-proposal back-check results.
 - Vectorized the Phase 1 winning-proposal back-check in bounded NumPy batches, replacing billions of Python scalar operations on real projects with BLAS matrix comparisons while preserving lexical fallback and JSON-safe scores.
 - Refreshed server-updated Understanding job fields before cancel/recovery responses, preventing misleading `500 MissingGreenlet` responses after the requested state change already succeeded.
@@ -265,7 +266,7 @@
 
 ## Next Recommended Steps
 
-1. Run “Стартирай пълен анализ” in the Pernik project, review the extracted quotations, WBS hierarchy/schedule links, and fact sheet in the new “Разбиране” tab, then confirm the three artifacts as the Phase 1 acceptance test before starting rework Phase 2.
+1. Run “Стартирай пълен анализ” in the Pernik project with the corrected proposal-focused pass, review the default proposal-only register (including hierarchy and acceptance criteria), compare it with the full-register filter, and confirm the three artifacts only after proposal-specific recall/precision acceptance; do not start rework Phase 2 before this acceptance run.
 2. Re-run `Generate all` for the current Pernik water-supply project after the generation-completeness fix, confirm all 23 approved outline sections receive persisted text, then export a new working draft for reference comparison.
 3. Use the calibration remediation cycle script with `--execute --wait --action-key regenerate_stale` or Generations panel bulk stale-regeneration action for Pernik after duplicate selections are resolved; then use the bulk missing-requirements and quality/depth regeneration actions for any remaining requirement-coverage or blueprint-aware shallow sections reported by export preflight or gap-priority diagnostics.
 4. After resolving Pernik's duplicate selected variants and stale selected sections, regenerate affected sections so the section structure plan and iterative drafting quality-repair pass can improve subtopic coverage, checklist coverage, and depth before export readiness is checked again.

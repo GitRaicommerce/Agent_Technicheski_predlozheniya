@@ -45,7 +45,18 @@ class RequirementCreate(BaseModel):
     kind: Literal[
         "obligation", "prohibition", "format", "content", "evaluation", "cross_ref"
     ]
+    scope: Literal[
+        "proposal_content",
+        "proposal_format",
+        "evaluation_rule",
+        "execution_constraint",
+        "technical_deliverable",
+        "qualification_admin",
+        "contract_obligation",
+    ] = "proposal_content"
     target_section_hint: str | None = None
+    proposal_path_json: list[str] = Field(default_factory=list)
+    acceptance_criteria_json: list[str] = Field(default_factory=list)
     status: Literal["extracted", "confirmed", "rejected"] = "extracted"
 
 
@@ -57,7 +68,18 @@ class RequirementUpdate(BaseModel):
     kind: Literal[
         "obligation", "prohibition", "format", "content", "evaluation", "cross_ref"
     ] | None = None
+    scope: Literal[
+        "proposal_content",
+        "proposal_format",
+        "evaluation_rule",
+        "execution_constraint",
+        "technical_deliverable",
+        "qualification_admin",
+        "contract_obligation",
+    ] | None = None
     target_section_hint: str | None = None
+    proposal_path_json: list[str] | None = None
+    acceptance_criteria_json: list[str] | None = None
     status: Literal["extracted", "confirmed", "rejected"] | None = None
 
 
@@ -65,7 +87,7 @@ class RequirementResponse(RequirementCreate):
     id: str
     project_id: str
     created_at: datetime
-    origin: Literal["map", "audit", "manual"]
+    origin: Literal["map", "audit", "proposal_audit", "manual"]
 
     model_config = {"from_attributes": True}
 
@@ -148,7 +170,8 @@ def _job_response(job: GenerationJob) -> UnderstandingJobResponse:
         result_json = {
             "checkpoint_saved": True,
             "checkpoint_leaf_batches": len(checkpoint.get("map_results") or {})
-            + len(checkpoint.get("audit_results") or {}),
+            + len(checkpoint.get("audit_results") or {})
+            + len(checkpoint.get("proposal_results") or {}),
         }
     return UnderstandingJobResponse(
         id=job.id,
@@ -238,12 +261,20 @@ async def get_understanding_workspace(
     if job:
         await reconcile_understanding_job(job, db)
     requirements = requirement_result.scalars().all()
-    machine = [item for item in requirements if item.origin in ("map", "audit")]
+    proposal_scopes = {"proposal_content", "proposal_format", "evaluation_rule"}
+    proposal_requirements = [
+        item for item in requirements if item.scope in proposal_scopes
+    ]
+    machine = [
+        item
+        for item in proposal_requirements
+        if item.origin in ("map", "audit", "proposal_audit")
+    ]
     accepted_machine = [item for item in machine if item.status != "rejected"]
     noise = [item for item in machine if item.status == "rejected"]
     manual = [
         item
-        for item in requirements
+        for item in proposal_requirements
         if item.origin == "manual" and item.status != "rejected"
     ]
     precision = len(accepted_machine) / len(machine) if machine else None
@@ -270,6 +301,8 @@ async def get_understanding_workspace(
         latest_job=_job_response(job) if job else None,
         acceptance={
             "machine_total": len(machine),
+            "all_requirement_count": len(requirements),
+            "proposal_requirement_count": len(proposal_requirements),
             "accepted_machine": len(accepted_machine),
             "noise_count": len(noise),
             "manual_additions": len(manual),

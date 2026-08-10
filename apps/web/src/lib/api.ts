@@ -345,6 +345,14 @@ export interface GenerationJob {
 }
 
 export type UnderstandingItemStatus = "extracted" | "confirmed" | "rejected";
+export type UnderstandingRequirementScope =
+  | "proposal_content"
+  | "proposal_format"
+  | "evaluation_rule"
+  | "execution_constraint"
+  | "technical_deliverable"
+  | "qualification_admin"
+  | "contract_obligation";
 
 export interface UnderstandingRequirement {
   id: string;
@@ -354,9 +362,12 @@ export interface UnderstandingRequirement {
   source_quote: string;
   normalized_text: string;
   kind: "obligation" | "prohibition" | "format" | "content" | "evaluation" | "cross_ref";
+  scope: UnderstandingRequirementScope;
   target_section_hint?: string | null;
+  proposal_path_json: string[];
+  acceptance_criteria_json: string[];
   status: UnderstandingItemStatus;
-  origin: "map" | "audit" | "manual";
+  origin: "map" | "audit" | "proposal_audit" | "manual";
   created_at: string;
 }
 
@@ -405,6 +416,8 @@ export interface UnderstandingWorkspace {
   latest_job?: UnderstandingJob | null;
   acceptance: {
     machine_total: number;
+    all_requirement_count: number;
+    proposal_requirement_count: number;
     accepted_machine: number;
     noise_count: number;
     manual_additions: number;

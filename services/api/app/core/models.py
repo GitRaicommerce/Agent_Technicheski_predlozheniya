@@ -400,7 +400,12 @@ class RequirementRegister(Base):
     source_quote: Mapped[str] = mapped_column(Text)
     normalized_text: Mapped[str] = mapped_column(Text)
     kind: Mapped[str] = mapped_column(String(32))
+    scope: Mapped[str] = mapped_column(
+        String(32), default="execution_constraint"
+    )
     target_section_hint: Mapped[Optional[str]] = mapped_column(String(1024))
+    proposal_path_json: Mapped[list] = mapped_column(JSONB, default=list)
+    acceptance_criteria_json: Mapped[list] = mapped_column(JSONB, default=list)
     status: Mapped[str] = mapped_column(String(16), default="extracted")
     origin: Mapped[str] = mapped_column(String(16), default="map")
     created_at: Mapped[datetime] = mapped_column(

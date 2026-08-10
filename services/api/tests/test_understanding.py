@@ -13,6 +13,7 @@ from app.agents.understanding import (
     _backcheck_winning_proposal,
     _checkpoint_snapshot,
     _batch_chunks,
+    _classify_requirement_scope,
     _map_user_message,
     _json_safe,
     _understanding_rq_job_id,
@@ -149,6 +150,94 @@ def test_understanding_map_rejects_non_verbatim_quotes_and_unknown_sources():
     assert result["requirements"][0]["source_ref"]["page"] == 4
     assert result["wbs_items"][0]["key"] == "2:a"
     assert result["facts"]["source_refs"][0]["chunk_id"] == "chunk-1"
+
+
+@pytest.mark.parametrize(
+    ("text", "kind", "proposed_scope", "origin", "expected"),
+    [
+        (
+            "Техническото предложение трябва да съдържа линеен график.",
+            "content",
+            "execution_constraint",
+            "map",
+            "proposal_content",
+        ),
+        (
+            "Техническият проект трябва да съдържа обяснителна записка.",
+            "content",
+            "proposal_content",
+            "map",
+            "technical_deliverable",
+        ),
+        (
+            "Изпълнителят извършва изпитване на уплътняването.",
+            "evaluation",
+            "evaluation_rule",
+            "map",
+            "execution_constraint",
+        ),
+        (
+            "Офертите се класират по комплексна оценка.",
+            "evaluation",
+            "evaluation_rule",
+            "map",
+            "evaluation_rule",
+        ),
+        (
+            "Описва организацията и разпределението на отговорностите.",
+            "content",
+            "execution_constraint",
+            "proposal_audit",
+            "proposal_content",
+        ),
+    ],
+)
+def test_requirement_scope_separates_proposal_from_execution_evaluation(
+    text, kind, proposed_scope, origin, expected
+):
+    assert (
+        _classify_requirement_scope(text, kind, proposed_scope, origin) == expected
+    )
+
+
+def test_proposal_audit_preserves_hierarchy_and_acceptance_criteria():
+    quote = "Участникът следва да опише организацията за изпълнение."
+    chunks = {
+        "chunk-1": {
+            "chunk_id": "chunk-1",
+            "file_id": "file-1",
+            "filename": "Документация.pdf",
+            "page": 26,
+            "section_path": "Техническо предложение",
+            "text": quote,
+        }
+    }
+
+    result = _sanitize_map_result(
+        {
+            "requirements": [
+                {
+                    "source_chunk_id": "chunk-1",
+                    "source_quote": quote,
+                    "normalized_text": quote,
+                    "kind": "content",
+                    "scope": "proposal_content",
+                    "proposal_path": ["Организация", "Методология"],
+                    "acceptance_criteria": ["Описани са отговорните лица"],
+                }
+            ]
+        },
+        chunks,
+        batch_index="proposal:1",
+        origin="proposal_audit",
+    )
+
+    requirement = result["requirements"][0]
+    assert requirement["scope"] == "proposal_content"
+    assert requirement["proposal_path"] == ["Организация", "Методология"]
+    assert requirement["acceptance_criteria"] == [
+        "Описани са отговорните лица"
+    ]
 
 
 def test_pernik_hidden_requirement_fixture_overrides_generic_classification():
@@ -464,7 +553,10 @@ async def test_understanding_workspace_api_returns_reviewable_artifacts(
         source_quote="Участникът следва да представи график.",
         normalized_text="Представяне на график",
         kind="obligation",
+        scope="proposal_content",
         target_section_hint="График",
+        proposal_path_json=["Програма", "График"],
+        acceptance_criteria_json=["Включва всички дейности"],
         status="extracted",
         origin="map",
         created_at=now,
@@ -508,10 +600,17 @@ async def test_understanding_workspace_api_returns_reviewable_artifacts(
     assert payload["sources"] == [{"id": "22222222-2222-2222-2222-222222222222", "filename": "tender.pdf"}]
     assert payload["requirements"][0]["source_page"] == 8
     assert payload["requirements"][0]["origin"] == "map"
+    assert payload["requirements"][0]["scope"] == "proposal_content"
+    assert payload["requirements"][0]["proposal_path_json"] == [
+        "Програма",
+        "График",
+    ]
     assert payload["wbs_items"][0]["schedule_task_uid"] == "12"
     assert payload["fact_sheet"]["facts_json"]["subject"] == "Проектиране"
     assert payload["latest_job"] is None
     assert payload["acceptance"]["machine_total"] == 1
+    assert payload["acceptance"]["all_requirement_count"] == 1
+    assert payload["acceptance"]["proposal_requirement_count"] == 1
     assert payload["acceptance"]["missed_rate"] == 0
     assert payload["probable_gaps"] == []
 

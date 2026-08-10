@@ -100,7 +100,10 @@
 - `requirement_register`:
   `id, project_id, source_file_id, source_page, source_quote (точен цитат),
   normalized_text, kind (obligation|prohibition|format|content|evaluation),
-  target_section_hint, status (extracted|confirmed|rejected), created_at`.
+  scope (proposal_content|proposal_format|evaluation_rule|execution_constraint|
+  technical_deliverable|qualification_admin|contract_obligation),
+  target_section_hint, proposal_path_json, acceptance_criteria_json,
+  status (extracted|confirmed|rejected), created_at`.
 - `wbs_items`:
   `id, project_id, parent_id (nullable), level, kind (etap|activity|
   subactivity|task), title, description, source_refs_json,
@@ -121,6 +124,11 @@ Map-reduce по **всички** тръжни chunks (не top-N):
 - **Reduce:** сливане, дедупликация, изграждане на WBS дърво, свързване на
   WBS със задачите от `ScheduleNormalized` (по семантично сходство на
   наименованията + ръчна корекция в UI).
+- **Специализиран одит на ТП:** втори pass през всички chunks извлича само
+  договора за съдържание на офертното ТП — раздел → подточка → задължителен
+  елемент → минимум/забрана/критерий за приемане. Общите правила за изпълнение,
+  квалификация, бъдещия технически проект и договора остават в пълния регистър,
+  но не участват в proposal recall/precision.
 - Персистира в трите нови таблици. Изпълнява се като RQ job с прогрес
   (по модела на `GenerationJob`), стартиран от бутон/оркестратора.
 
@@ -138,8 +146,9 @@ Map-reduce по **всички** тръжни chunks (не top-N):
 доказва срещу еталонния проект (Перник), за който съществува човешко
 съдържание и печелившо ТП:
 
-1. **Recall/precision преглед:** потребителят сравнява регистъра с
-   изискванията, които е отчел ръчно. Измерват се: пропуснати изисквания
+1. **Recall/precision преглед:** потребителят сравнява proposal scopes
+   (`proposal_content`, `proposal_format`, `evaluation_rule`) с изискванията
+   към съдържанието на ТП, които е отчел ръчно. Измерват се: пропуснати изисквания
    (трябва да се добавят) и шум (трябва да се изтрие). Цел: ≤5% пропуски.
    UI-то трябва да прави този преглед бърз — цитат + страница до всеки запис,
    бутони добави/изтрий/коригирай.

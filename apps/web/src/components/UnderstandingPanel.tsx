@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import {
   api,
   type UnderstandingRequirement,
+  type UnderstandingRequirementScope,
   type UnderstandingWbsItem,
   type UnderstandingWorkspace,
 } from "@/lib/api";
@@ -31,6 +32,20 @@ const REQUIREMENT_KINDS = [
   "evaluation",
   "cross_ref",
 ] as const;
+const PROPOSAL_SCOPES: UnderstandingRequirementScope[] = [
+  "proposal_content",
+  "proposal_format",
+  "evaluation_rule",
+];
+const SCOPE_LABELS: Record<UnderstandingRequirementScope, string> = {
+  proposal_content: "Съдържание на ТП",
+  proposal_format: "Формат/ограничение на ТП",
+  evaluation_rule: "Оценяване на ТП",
+  execution_constraint: "Изискване към изпълнението",
+  technical_deliverable: "Технически проект/резултат",
+  qualification_admin: "Квалификация/административно",
+  contract_obligation: "Договорно задължение",
+};
 const WBS_KINDS = ["etap", "activity", "subactivity", "task"] as const;
 
 export default function UnderstandingPanel({ projectId }: { projectId: string }) {
@@ -254,26 +269,101 @@ function RequirementsEditor({
   act: (action: () => Promise<unknown>) => Promise<void>;
   updateLocal: (id: string, values: Partial<UnderstandingRequirement>) => void;
 }) {
+  const [scopeFilter, setScopeFilter] = useState<"proposal" | "all" | UnderstandingRequirementScope>("proposal");
   const [draft, setDraft] = useState<Partial<UnderstandingRequirement>>({
     kind: "content",
+    scope: "proposal_content",
+    proposal_path_json: [],
+    acceptance_criteria_json: [],
     status: "extracted",
+  });
+  const visibleRequirements = workspace.requirements.filter((item) => {
+    if (item.status === "rejected") return false;
+    if (scopeFilter === "all") return true;
+    if (scopeFilter === "proposal") return PROPOSAL_SCOPES.includes(item.scope);
+    return item.scope === scopeFilter;
   });
   return (
     <div className="space-y-2">
       <AcceptanceSummary workspace={workspace} />
-      {workspace.requirements.filter((item) => item.status !== "rejected").map((item) => (
+      <div className="rounded border bg-white p-2">
+        <label className="mb-1 block font-medium" htmlFor="understanding-scope-filter">
+          Показвани изисквания
+        </label>
+        <select
+          id="understanding-scope-filter"
+          aria-label="Обхват на изискванията"
+          value={scopeFilter}
+          onChange={(event) => setScopeFilter(event.target.value as typeof scopeFilter)}
+          className="w-full rounded border p-1"
+        >
+          <option value="proposal">Към съдържанието на ТП ({workspace.acceptance.proposal_requirement_count})</option>
+          <option value="all">Всички изисквания ({workspace.acceptance.all_requirement_count})</option>
+          {Object.entries(SCOPE_LABELS).map(([scope, label]) => (
+            <option key={scope} value={scope}>{label}</option>
+          ))}
+        </select>
+      </div>
+      {visibleRequirements.map((item) => (
         <div key={item.id} className="rounded border bg-white p-2 space-y-1">
           <div className="flex items-center justify-between text-[10px] text-gray-500">
             <span>{workspace.sources.find((source) => source.id === item.source_file_id)?.filename ?? "Източник"}</span>
-            <span>{item.origin === "audit" ? "намерено при одита" : item.origin === "manual" ? "добавено ръчно" : "първично извличане"}</span>
+            <span>{item.origin === "proposal_audit" || item.origin === "audit" ? "намерено при одита на ТП" : item.origin === "manual" ? "добавено ръчно" : "първично извличане"}</span>
           </div>
+          <span className="inline-block rounded bg-blue-50 px-1.5 py-0.5 text-[10px] text-blue-800">
+            {SCOPE_LABELS[item.scope]}
+          </span>
           <textarea
             aria-label="Нормализирано изискване"
             value={item.normalized_text}
             onChange={(event) => updateLocal(item.id, { normalized_text: event.target.value })}
             className="w-full rounded border p-1"
           />
+          {PROPOSAL_SCOPES.includes(item.scope) && (
+            <>
+              <input
+                aria-label="Път в съдържанието на ТП"
+                value={item.proposal_path_json.join(" → ")}
+                placeholder="Раздел → Подточка → Елемент"
+                onChange={(event) =>
+                  updateLocal(item.id, {
+                    proposal_path_json: event.target.value
+                      .split(/→|>/)
+                      .map((part) => part.trim())
+                      .filter(Boolean),
+                  })
+                }
+                className="w-full rounded border p-1 text-[11px]"
+              />
+              <textarea
+                aria-label="Критерии за приемане"
+                value={item.acceptance_criteria_json.join("\n")}
+                placeholder="Едно проверимо условие на ред"
+                onChange={(event) =>
+                  updateLocal(item.id, {
+                    acceptance_criteria_json: event.target.value
+                      .split("\n")
+                      .map((criterion) => criterion.trim())
+                      .filter(Boolean),
+                  })
+                }
+                className="w-full rounded border p-1 text-[11px]"
+              />
+            </>
+          )}
           <p className="text-[10px] text-gray-500">стр. {item.source_page ?? "—"}: „{item.source_quote}“</p>
+          {item.proposal_path_json.length > 0 && (
+            <p className="text-[10px] font-medium text-blue-700">
+              ТП: {item.proposal_path_json.join(" → ")}
+            </p>
+          )}
+          {item.acceptance_criteria_json.length > 0 && (
+            <ul className="list-disc space-y-0.5 pl-4 text-[10px] text-gray-600">
+              {item.acceptance_criteria_json.map((criterion, index) => (
+                <li key={`${item.id}-criterion-${index}`}>{criterion}</li>
+              ))}
+            </ul>
+          )}
           <div className="flex gap-1">
             <select
               value={item.kind}
@@ -281,6 +371,16 @@ function RequirementsEditor({
               className="min-w-0 flex-1 rounded border p-1"
             >
               {REQUIREMENT_KINDS.map((kind) => <option key={kind} value={kind}>{KIND_LABELS[kind]}</option>)}
+            </select>
+            <select
+              aria-label="Обхват"
+              value={item.scope}
+              onChange={(event) => updateLocal(item.id, { scope: event.target.value as UnderstandingRequirementScope })}
+              className="min-w-0 flex-1 rounded border p-1"
+            >
+              {Object.entries(SCOPE_LABELS).map(([scope, label]) => (
+                <option key={scope} value={scope}>{label}</option>
+              ))}
             </select>
             <button type="button" disabled={busy} onClick={() => act(() => api.understanding.updateRequirement(projectId, item.id, item))} className="rounded border px-2">Запази</button>
             <button type="button" disabled={busy} aria-label="Изтрий изискване" onClick={() => act(() => api.understanding.deleteRequirement(projectId, item.id))} className="rounded border px-2 text-red-600">×</button>
@@ -297,6 +397,9 @@ function RequirementsEditor({
           <input type="number" placeholder="Страница" value={draft.source_page ?? ""} onChange={(e) => setDraft({ ...draft, source_page: e.target.value ? Number(e.target.value) : null })} className="w-full rounded border p-1" />
           <textarea placeholder="Точен цитат" value={draft.source_quote || ""} onChange={(e) => setDraft({ ...draft, source_quote: e.target.value })} className="w-full rounded border p-1" />
           <textarea placeholder="Нормализирано изискване" value={draft.normalized_text || ""} onChange={(e) => setDraft({ ...draft, normalized_text: e.target.value })} className="w-full rounded border p-1" />
+          <select aria-label="Обхват на новото изискване" value={draft.scope || "proposal_content"} onChange={(e) => setDraft({ ...draft, scope: e.target.value as UnderstandingRequirementScope })} className="w-full rounded border p-1">
+            {Object.entries(SCOPE_LABELS).map(([scope, label]) => <option key={scope} value={scope}>{label}</option>)}
+          </select>
           <button type="button" disabled={busy || !draft.source_file_id || !draft.source_quote || !draft.normalized_text} onClick={() => act(() => api.understanding.createRequirement(projectId, draft as Omit<UnderstandingRequirement, "id" | "project_id" | "created_at">))} className="w-full rounded border px-2 py-1">Добави</button>
         </div>
       </details>
@@ -331,6 +434,7 @@ function AcceptanceSummary({ workspace }: { workspace: UnderstandingWorkspace })
       </div>
       <p className="mt-2 text-[10px] text-gray-600">
         Ръчно добавени: {metrics.manual_additions}; шум: {metrics.noise_count}. Цел: ≤5% пропуски.
+        {` Метриката обхваща ${metrics.proposal_requirement_count} изисквания към ТП от общо ${metrics.all_requirement_count}.`}
         {!metrics.review_complete && " Числата са предварителни до потвърждаване на регистъра."}
       </p>
     </div>
