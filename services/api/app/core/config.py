@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     anthropic_api_key: str = ""
     llm_default_provider: str = "openai"
-    llm_default_model: str = "gpt-5.5"
+    llm_default_model: str = "gpt-5.6"
     llm_fallback_provider: str = "anthropic"
     llm_fallback_model: str = "claude-3-5-sonnet-20241022"
     llm_max_tokens: int = 16384

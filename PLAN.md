@@ -19,6 +19,7 @@
 
 ## Completed Work
 
+- Migrated the application's default OpenAI model from `gpt-5.5` to the `gpt-5.6` alias (GPT-5.6 Sol), preserving the existing Chat Completions integration and default reasoning behavior for a clean Understanding acceptance comparison.
 - Refocused Phase 1 Understanding on the actual content contract for the technical proposal: the full tender register is preserved but every requirement now has an applicability scope; a dedicated whole-document proposal audit extracts section/subsection hierarchy and atomic acceptance criteria; proposal-only acceptance metrics and winning-TP back-checks no longer count execution, qualification, technical-deliverable, or contract clauses; and the UI defaults to proposal-facing requirements while retaining a full-register filter. Existing Pernik data was safely reclassified to 85 proposal-facing requirements out of 386 total without starting another paid LLM run.
 - Fixed Phase 1 final-result persistence after all paid LLM batches finish: pgvector/NumPy `float32` similarity scores are now normalized recursively to standard JSON numbers before checkpoint and final JSONB writes, with regression coverage for winning-proposal back-check results.
 - Vectorized the Phase 1 winning-proposal back-check in bounded NumPy batches, replacing billions of Python scalar operations on real projects with BLAS matrix comparisons while preserving lexical fallback and JSON-safe scores.
