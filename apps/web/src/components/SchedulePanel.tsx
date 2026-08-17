@@ -93,6 +93,22 @@ export default function SchedulePanel({ projectId, refreshKey = 0 }: Props) {
   const tasks = schedule.schedule_json.tasks ?? [];
   const resources = schedule.schedule_json.resources ?? [];
   const hasError = !!schedule.schedule_json.error;
+  const legacyTextFallback = tasks.length > 0 && tasks.every(
+    (task) => task.note === "extracted_from_pdf_text",
+  );
+  const detailedTasks = tasks.filter(
+    (task) => task.start || task.finish || task.duration_days != null,
+  );
+  const unreliable =
+    schedule.schedule_json.source_quality === "unreliable_text_fallback" ||
+    legacyTextFallback ||
+    tasks.length === 0 ||
+    (tasks.length === 1 && detailedTasks.length === 0);
+  const qualityMessage = schedule.schedule_json.warning || (
+    tasks.length === 1 && detailedTasks.length === 0
+      ? "Разпознат е само един запис без срок или продължителност. Качете Excel/MPP експорт или обработете PDF графика отново."
+      : "Графикът не е извлечен достатъчно надеждно за генериране."
+  );
 
   return (
     <div className="space-y-2">
@@ -102,7 +118,7 @@ export default function SchedulePanel({ projectId, refreshKey = 0 }: Props) {
         </button>
       </div>
       {/* Status badge */}
-      {schedule.status_locked ? (
+      {schedule.status_locked && !unreliable ? (
         <div className="flex items-center justify-between py-1">
           <div className="flex items-center gap-1.5 text-xs text-green-700 font-medium">
             <span>✓</span>
@@ -120,7 +136,7 @@ export default function SchedulePanel({ projectId, refreshKey = 0 }: Props) {
         <div>
           <button
             onClick={handleLock}
-            disabled={locking || hasError}
+            disabled={locking || hasError || unreliable}
             className="w-full py-1.5 px-3 bg-green-600 text-white text-xs rounded-lg hover:bg-green-700 disabled:opacity-50 transition"
           >
             {locking ? "Одобрява се..." : "✓ Одобри графика"}
@@ -136,6 +152,21 @@ export default function SchedulePanel({ projectId, refreshKey = 0 }: Props) {
         <p className="text-xs text-amber-600 bg-amber-50 rounded px-2 py-1">
           ⚠ {schedule.schedule_json.error}
         </p>
+      )}
+      {!hasError && unreliable && (
+        <div data-testid="schedule-quality-warning" className="text-xs text-red-700 bg-red-50 rounded px-2 py-1">
+          <p>⚠ {qualityMessage} Данните няма да се използват в техническото предложение.</p>
+          {schedule.status_locked && (
+            <button
+              type="button"
+              onClick={handleUnlock}
+              disabled={locking}
+              className="mt-1 underline disabled:opacity-50"
+            >
+              Премахни старото одобрение
+            </button>
+          )}
+        </div>
       )}
 
       {/* Summary stats */}

@@ -83,10 +83,6 @@ vi.mock("@/components/OutlinePanel", () => ({
   default: () => <div>Outline Panel</div>,
 }));
 
-vi.mock("@/components/RequirementChecklistPanel", () => ({
-  default: () => <div>Requirement Checklist Panel</div>,
-}));
-
 vi.mock("@/components/SchedulePanel", () => ({
   default: () => <div>Schedule Panel</div>,
 }));
@@ -245,13 +241,13 @@ describe("ProjectPage", () => {
     expect(screen.getByTestId("schedule-panel-toggle")).toBeInTheDocument();
   });
 
-  it("shows the requirements checklist as a dedicated project panel", async () => {
+  it("uses one requirements-understanding project panel", async () => {
     render(<ProjectPage />);
 
     expect(await screen.findByText("Project Alpha")).toBeInTheDocument();
-    await userEvent.click(screen.getByTestId("requirements-panel-toggle"));
-
-    expect(screen.getByText("Requirement Checklist Panel")).toBeInTheDocument();
+    expect(screen.queryByTestId("requirements-panel-toggle")).not.toBeInTheDocument();
+    expect(screen.getByTestId("understanding-panel-toggle"))
+      .toHaveTextContent("Разбиране на изискванията");
   });
 
   it("opens the Bulgarian understanding workspace", async () => {

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import hashlib
 import structlog
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 log = structlog.get_logger()
 
@@ -269,7 +269,7 @@ async def _ingest_tender_docs(file, content: bytes, db):
 
 
 async def _ingest_schedule(file, content: bytes, db):
-    from app.ingestion.schedule_parser import parse_schedule
+    from app.ingestion.schedule_parser import parse_schedule, schedule_quality
     from app.core.models import (
         ScheduleSnapshot,
         ScheduleNormalized,
@@ -279,9 +279,13 @@ async def _ingest_schedule(file, content: bytes, db):
     )
 
     result = parse_schedule(content, file.filename)
+    quality = schedule_quality(result.get("normalized"))
     warnings = []
     if result.get("warning"):
         warnings.append(str(result["warning"]))
+    warnings.extend(
+        reason for reason in quality["reasons"] if reason not in warnings
+    )
     file.ingest_quality_status = (
         "error" if result.get("error") else ("warning" if warnings else "ok")
     )
@@ -299,13 +303,21 @@ async def _ingest_schedule(file, content: bytes, db):
         "errors": [result["error"]] if result.get("error") else [],
         "tasks_count": len(result.get("tasks", [])),
         "resources_count": len(result.get("resources", [])),
+        "schedule_reliable": quality["reliable"],
     }
+
+    version_result = await db.execute(
+        select(func.max(ScheduleNormalized.version)).where(
+            ScheduleNormalized.project_id == file.project_id
+        )
+    )
+    next_version = int(version_result.scalar_one_or_none() or 0) + 1
 
     snapshot = ScheduleSnapshot(
         project_id=file.project_id,
         file_id=file.id,
         file_hash=file.file_hash,
-        parser_version="1.0.0",
+        parser_version=str(result.get("parser_version") or "1.1.0"),
     )
     db.add(snapshot)
     await db.flush()
@@ -314,6 +326,7 @@ async def _ingest_schedule(file, content: bytes, db):
         project_id=file.project_id,
         schedule_snapshot_id=snapshot.id,
         schedule_json=result["normalized"],
+        version=next_version,
     )
     db.add(normalized)
 

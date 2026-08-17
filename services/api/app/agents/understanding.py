@@ -83,6 +83,11 @@ source_chunk_ids}], където kind е etap|activity|subactivity|task;
 facts: {subject, contracting_authority, deadlines, stages, project_parts, team,
 key_parameters, source_refs}.
 
+В facts.team извличай длъжностите/ролите и броя на ключовите експерти, които
+са нужни за организацията в ТП. Не пренасяй изисквания за образование,
+правоспособност, години или обекти специфичен опит, сертификати и доказване
+чрез ЕЕДОП. Те са критерии за подбор, а не съдържание на ТП.
+
 source_quote трябва да е точен непроменен цитат от посочения chunk. За всеки
 факт използвай source_refs със source_chunk_id. Празните категории са празни
 списъци или null. Отговорът трябва да е строг JSON."""
@@ -95,6 +100,11 @@ PROPOSAL_AUDIT_SYSTEM_PROMPT = """Ти си независим одитор за
 Не извличай самостоятелно общи задължения за бъдещото изпълнение, технически
 характеристики, квалификация или договорни клаузи, освен ако документът изрично
 изисква те да бъдат описани в ТП. Открий липсващите спрямо текущия регистър.
+Не превръщай в изисквания към ТП финансов оборот, застраховки, свързаност,
+основания за отстраняване, ЕЕДОП, образование, правоспособност, сертификати,
+години/обекти опит на експертите. От критериите за подбор са релевантни само
+наименованията и броят на ключовите роли, когато са нужни за организационната
+част на ТП; конкретният опит и доказателствата остават извън ТП.
 Провери особено забрани, ограничения, минимални елементи, връзки „за всяка“
 и критерии за оценка. Запази йерархията раздел → подточка → задължителен
 елемент. Върни строг JSON:
@@ -167,7 +177,62 @@ def _classify_requirement_scope(
         "обосновка по чл.72",
         "провеждане на жребий",
         "решение за класиране",
+        "предложената цена",
+        "предлаганата цена",
+        "в ценовото предложение",
+        "в предложената цена",
+        "минимален оборот",
+        "общ оборот",
+        "финансов ресурс",
+        "икономическо и финансово състояние",
+        "застраховка професионална отговорност",
+        "свързани лица",
+        "свързани предприятия",
+        "основания за отстраняване",
+        "чл. 54 от зоп",
+        "чл. 55 от зоп",
     )
+    qualification_evidence_markers = (
+        "еедоп",
+        "критерий за подбор",
+        "технически и професионални способности",
+        "специфичен опит",
+        "професионален опит",
+        "години професионален опит",
+        "изпълнен обект",
+        "изпълнени обекти",
+        "изпълнена дейност",
+        "образователно-квалификационна степен",
+        "образование и квалификация",
+        "пълна проектантска правоспособност",
+        "правоспособност",
+        "удостоверение",
+        "сертификат",
+        "диплома",
+        "доказва с",
+        "декларира в",
+    )
+    proposal_team_presentation_markers = (
+        "само като квалификация и брой",
+        "само чрез квалификация и брой",
+        "посочат работните звена",
+        "посочи работните звена",
+        "конкретни задължения",
+        "разпределение на дейностите и отговорностите",
+        "организация на проектирането",
+        "организация на строителството",
+    )
+
+    is_team_presentation_rule = any(
+        marker in normalized for marker in proposal_team_presentation_markers
+    )
+    if any(marker in normalized for marker in administrative_markers):
+        return "qualification_admin"
+    if (
+        any(marker in normalized for marker in qualification_evidence_markers)
+        and not is_team_presentation_rule
+    ):
+        return "qualification_admin"
 
     # The dedicated audit is constrained to proposal-facing requirements, so
     # its classification is authoritative. The broad map is not.
@@ -175,8 +240,6 @@ def _classify_requirement_scope(
         if kind == "evaluation":
             return "evaluation_rule"
         return "proposal_format" if kind in format_kinds else "proposal_content"
-    if any(marker in normalized for marker in administrative_markers):
-        return "qualification_admin"
     has_proposal_marker = any(marker in normalized for marker in proposal_markers)
     has_evaluation_marker = any(marker in normalized for marker in evaluation_markers)
     if has_evaluation_marker and (
@@ -238,6 +301,50 @@ def _string_list(value: Any) -> list[str]:
         for item in values
         if (text := re.sub(r"\s+", " ", str(item or "")).strip())
     ]
+
+
+def _sanitize_team_facts(value: Any) -> Any:
+    """Keep proposal roles/counts while removing EEDOP qualification evidence."""
+    excluded_keys = {
+        "requirement",
+        "requirements",
+        "experience",
+        "specific_experience",
+        "education",
+        "certificates",
+        "credentials",
+        "proof",
+    }
+    if isinstance(value, list):
+        cleaned = [_sanitize_team_facts(item) for item in value]
+        return [item for item in cleaned if item not in (None, "", [], {})]
+    if isinstance(value, dict):
+        cleaned = {
+            key: _sanitize_team_facts(item)
+            for key, item in value.items()
+            if str(key).casefold() not in excluded_keys
+        }
+        return {
+            key: item
+            for key, item in cleaned.items()
+            if item not in (None, "", [], {})
+        }
+    if isinstance(value, str):
+        normalized = _normalize(value)
+        if any(
+            marker in normalized
+            for marker in (
+                "специфичен опит",
+                "професионален опит",
+                "изпълнен обект",
+                "изпълнени обекти",
+                "образователно-квалификационна",
+                "проектантска правоспособност",
+                "декларира в еедоп",
+            )
+        ):
+            return None
+    return value
 
 
 def _batch_chunks(
@@ -446,6 +553,8 @@ def _sanitize_map_result(
         )
         if raw_facts.get(key) not in (None, "", [])
     }
+    if "team" in facts:
+        facts["team"] = _sanitize_team_facts(facts["team"])
     facts["source_refs"] = [
         ref
         for ref in (

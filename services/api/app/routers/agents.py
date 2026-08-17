@@ -171,6 +171,17 @@ async def lock_schedule(
     schedule = result.scalar_one_or_none()
     if not schedule:
         raise HTTPException(status_code=404, detail="Schedule not found")
+    from app.ingestion.schedule_parser import schedule_quality
+
+    quality = schedule_quality(schedule.schedule_json)
+    if not quality["reliable"]:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Графикът не може да бъде одобрен, защото не е извлечен надеждно: "
+                + " ".join(quality["reasons"])
+            ),
+        )
     schedule.status_locked = True
     from datetime import datetime, timezone
 

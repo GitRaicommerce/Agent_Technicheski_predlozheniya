@@ -281,6 +281,8 @@ async def test_v1_grounding_context_regression_snapshot(mock_db):
         ],
         "schedule": {
             "available": True,
+            "reliable": True,
+            "quality_reasons": [],
             "locked": True,
             "version": 3,
             "tasks": [

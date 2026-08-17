@@ -269,7 +269,7 @@ function RequirementsEditor({
   act: (action: () => Promise<unknown>) => Promise<void>;
   updateLocal: (id: string, values: Partial<UnderstandingRequirement>) => void;
 }) {
-  const [scopeFilter, setScopeFilter] = useState<"proposal" | "all" | UnderstandingRequirementScope>("proposal");
+  const [scopeFilter, setScopeFilter] = useState<UnderstandingRequirementScope>("proposal_content");
   const [draft, setDraft] = useState<Partial<UnderstandingRequirement>>({
     kind: "content",
     scope: "proposal_content",
@@ -279,9 +279,7 @@ function RequirementsEditor({
   });
   const visibleRequirements = workspace.requirements.filter((item) => {
     if (item.status === "rejected") return false;
-    if (scopeFilter === "all") return true;
-    if (scopeFilter === "proposal") return PROPOSAL_SCOPES.includes(item.scope);
-    return item.scope === scopeFilter;
+    return PROPOSAL_SCOPES.includes(item.scope) && item.scope === scopeFilter;
   });
   return (
     <div className="space-y-2">
@@ -297,12 +295,13 @@ function RequirementsEditor({
           onChange={(event) => setScopeFilter(event.target.value as typeof scopeFilter)}
           className="w-full rounded border p-1"
         >
-          <option value="proposal">Към съдържанието на ТП ({workspace.acceptance.proposal_requirement_count})</option>
-          <option value="all">Всички изисквания ({workspace.acceptance.all_requirement_count})</option>
-          {Object.entries(SCOPE_LABELS).map(([scope, label]) => (
-            <option key={scope} value={scope}>{label}</option>
+          {PROPOSAL_SCOPES.map((scope) => (
+            <option key={scope} value={scope}>{SCOPE_LABELS[scope]}</option>
           ))}
         </select>
+        <p className="mt-1 text-[10px] text-gray-500">
+          Показват се само изискванията, които определят съдържанието, формата или оценяването на ТП. Критериите за подбор, ЕЕДОП, финансовите и договорните условия не участват в работния регистър.
+        </p>
       </div>
       {visibleRequirements.map((item) => (
         <div key={item.id} className="rounded border bg-white p-2 space-y-1">
@@ -417,7 +416,7 @@ function RequirementsEditor({
           </div>
         </details>
       )}
-      <button type="button" disabled={busy || workspace.requirements.length === 0} onClick={() => act(() => api.understanding.confirmRequirements(projectId))} className="w-full rounded bg-green-600 px-2 py-1.5 text-white disabled:opacity-50">Потвърди регистъра</button>
+      <button type="button" disabled={busy || workspace.acceptance.proposal_requirement_count === 0} onClick={() => act(() => api.understanding.confirmRequirements(projectId))} className="w-full rounded bg-green-600 px-2 py-1.5 text-white disabled:opacity-50">Потвърди изискванията към ТП</button>
     </div>
   );
 }
@@ -434,7 +433,7 @@ function AcceptanceSummary({ workspace }: { workspace: UnderstandingWorkspace })
       </div>
       <p className="mt-2 text-[10px] text-gray-600">
         Ръчно добавени: {metrics.manual_additions}; шум: {metrics.noise_count}. Цел: ≤5% пропуски.
-        {` Метриката обхваща ${metrics.proposal_requirement_count} изисквания към ТП от общо ${metrics.all_requirement_count}.`}
+        {` Работният регистър обхваща ${metrics.proposal_requirement_count} изисквания към ТП.`}
         {!metrics.review_complete && " Числата са предварителни до потвърждаване на регистъра."}
       </p>
     </div>

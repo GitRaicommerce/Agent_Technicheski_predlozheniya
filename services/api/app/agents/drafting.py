@@ -61,6 +61,10 @@ Requirements:
   several checklist items into a vague generic paragraph.
 - Use clear paragraphs and, where useful, subheadings or numbered points.
 - Integrate concrete schedule data when available.
+- Never expose source diagnostics in the proposal. Do not state that an uploaded
+  schedule, tender file or example is incomplete, contains only one activity,
+  lacks dates/resources, or could not be parsed. Missing-source warnings belong
+  in application diagnostics, never in the bidder's technical proposal.
 - Preserve mandatory subtopics as explicit subheadings or numbered points
   instead of compressing them into generic paragraphs.
 - Do not invent quantities, resources, dates, project parts or facts that are not in the provided sources.

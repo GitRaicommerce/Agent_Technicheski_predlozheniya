@@ -216,7 +216,10 @@ export interface ScheduleTask {
   uid: string;
   wbs?: string | null;
   name: string;
+  start?: string | null;
+  finish?: string | null;
   duration_days?: number | null;
+  note?: string | null;
 }
 
 export interface ScheduleResource {
@@ -231,6 +234,8 @@ export interface ScheduleInfo {
     tasks?: ScheduleTask[];
     resources?: ScheduleResource[];
     error?: string;
+    warning?: string;
+    source_quality?: string;
     [key: string]: unknown;
   };
   status_locked: boolean;

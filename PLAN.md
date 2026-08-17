@@ -19,6 +19,9 @@
 
 ## Completed Work
 
+- Unified the overlapping requirements checklist and Understanding navigation into one Bulgarian-first module, “Разбиране на изискванията”, whose working view is limited to proposal content, format, and evaluation requirements while preserving non-proposal records for traceability and manual reclassification.
+- Focused Understanding on technical-proposal applicability: financial/legal/EEDOP and expert qualification evidence are classified outside the proposal register, while mandatory expert role names, counts, responsibilities, and organization remain available for proposal planning. Existing Pernik data was deterministically repaired without another paid LLM run.
+- Fixed PDF schedule ingestion for large one-page Gantt exports: vector tables are now parsed into structured activities, unreliable page-text fallbacks cannot be approved or used for drafting, and drafting prompts cannot turn parser diagnostics into bidder assertions. The real Pernik schedule was repaired from one false page-block to 50 dated/resource-linked activities; six contaminated generations were marked stale.
 - Migrated the application's default OpenAI model from `gpt-5.5` to the `gpt-5.6` alias (GPT-5.6 Sol), preserving the existing Chat Completions integration and default reasoning behavior for a clean Understanding acceptance comparison.
 - Refocused Phase 1 Understanding on the actual content contract for the technical proposal: the full tender register is preserved but every requirement now has an applicability scope; a dedicated whole-document proposal audit extracts section/subsection hierarchy and atomic acceptance criteria; proposal-only acceptance metrics and winning-TP back-checks no longer count execution, qualification, technical-deliverable, or contract clauses; and the UI defaults to proposal-facing requirements while retaining a full-register filter. Existing Pernik data was safely reclassified to 85 proposal-facing requirements out of 386 total without starting another paid LLM run.
 - Fixed Phase 1 final-result persistence after all paid LLM batches finish: pgvector/NumPy `float32` similarity scores are now normalized recursively to standard JSON numbers before checkpoint and final JSONB writes, with regression coverage for winning-proposal back-check results.
@@ -267,13 +270,12 @@
 
 ## Next Recommended Steps
 
-1. Run “Стартирай пълен анализ” in the Pernik project with the corrected proposal-focused pass, review the default proposal-only register (including hierarchy and acceptance criteria), compare it with the full-register filter, and confirm the three artifacts only after proposal-specific recall/precision acceptance; do not start rework Phase 2 before this acceptance run.
-2. Re-run `Generate all` for the current Pernik water-supply project after the generation-completeness fix, confirm all 23 approved outline sections receive persisted text, then export a new working draft for reference comparison.
-3. Use the calibration remediation cycle script with `--execute --wait --action-key regenerate_stale` or Generations panel bulk stale-regeneration action for Pernik after duplicate selections are resolved; then use the bulk missing-requirements and quality/depth regeneration actions for any remaining requirement-coverage or blueprint-aware shallow sections reported by export preflight or gap-priority diagnostics.
-4. After resolving Pernik's duplicate selected variants and stale selected sections, regenerate affected sections so the section structure plan and iterative drafting quality-repair pass can improve subtopic coverage, checklist coverage, and depth before export readiness is checked again.
-5. Re-run the Pernik calibration bundle after remediation with `--action-report` and compare the regenerated output against the winning proposal, focusing on the manifest word-volume scorecard, section-level drafting-depth diagnostics, executed remediation evidence, execution-status deltas, and action target deltas in the before/after calibration manifest comparison report.
-6. Expand generated documentation with more precise backend endpoint and workflow coverage.
-7. Continue broadening common tender regression coverage with more real-world noisy PDF extraction, DOCX readiness combinations, and operational-action coverage cases across quality, risk, environment, safety, communication, and documentation requirements.
+1. Implement rework Phase 2 so a confirmed “Разбиране на изискванията” workspace deterministically creates a new content plan; the current Pernik approved outline is a legacy July plan and does not yet consume the completed August Understanding artifacts.
+2. Review and approve the repaired 50-activity Pernik schedule, then regenerate the three selected stale sections before continuing the paused generation job; do not reuse the contaminated variants.
+3. Re-run `Generate all` only after the Phase 2 content plan has been reviewed, confirm all approved sections receive persisted text, and export a new working draft for reference comparison.
+4. Re-run the Pernik calibration bundle after regeneration and compare the output against the winning proposal, focusing on requirement coverage, section depth, schedule consistency, and role/responsibility coverage without EEDOP qualification prose.
+5. Expand generated documentation with more precise backend endpoint and workflow coverage.
+6. Continue broadening common tender regression coverage with more real-world noisy PDF extraction, DOCX readiness combinations, and operational-action coverage cases across quality, risk, environment, safety, communication, and documentation requirements.
 
 ## Notes
 

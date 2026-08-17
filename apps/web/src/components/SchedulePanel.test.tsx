@@ -63,7 +63,7 @@ describe("SchedulePanel", () => {
     getScheduleMock.mockResolvedValue({
       id: "schedule-1",
       schedule_json: {
-        tasks: [],
+        tasks: [{ uid: "1", name: "Проектиране", duration_days: 5 }],
         resources: [],
       },
       status_locked: false,
@@ -87,5 +87,28 @@ describe("SchedulePanel", () => {
     await waitFor(() => {
       expect(unlockScheduleMock).toHaveBeenCalledWith("project-1", "schedule-1");
     });
+  });
+
+  it("blocks approval of a legacy one-block PDF extraction", async () => {
+    getScheduleMock.mockResolvedValue({
+      id: "schedule-legacy",
+      schedule_json: {
+        tasks: [{
+          uid: "1",
+          name: "ID Вид дейност Срок Начало Край",
+          duration_days: null,
+          note: "extracted_from_pdf_text",
+        }],
+        resources: [],
+      },
+      status_locked: false,
+      version: 1,
+    });
+
+    render(<SchedulePanel projectId="project-1" />);
+
+    expect(await screen.findByTestId("schedule-quality-warning"))
+      .toHaveTextContent("няма да се използват");
+    expect(screen.getByRole("button", { name: /Одобри графика/i })).toBeDisabled();
   });
 });

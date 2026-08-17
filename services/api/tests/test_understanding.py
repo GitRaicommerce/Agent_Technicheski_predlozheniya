@@ -19,6 +19,7 @@ from app.agents.understanding import (
     _understanding_rq_job_id,
     _run_batch_with_adaptive_split,
     _sanitize_map_result,
+    _sanitize_team_facts,
     reduce_understanding_maps,
 )
 from app.core.models import ProjectFactSheet, RequirementRegister, WbsItem
@@ -190,6 +191,27 @@ def test_understanding_map_rejects_non_verbatim_quotes_and_unknown_sources():
             "proposal_audit",
             "proposal_content",
         ),
+        (
+            "Техническият ръководител трябва да има специфичен опит в минимум един изпълнен обект.",
+            "content",
+            "proposal_content",
+            "proposal_audit",
+            "qualification_admin",
+        ),
+        (
+            "Участникът трябва да има минимален общ оборот за последните три години.",
+            "content",
+            "proposal_content",
+            "proposal_audit",
+            "qualification_admin",
+        ),
+        (
+            "Индивидуалните експерти се посочват само като квалификация и брой.",
+            "prohibition",
+            "qualification_admin",
+            "proposal_audit",
+            "proposal_format",
+        ),
     ],
 )
 def test_requirement_scope_separates_proposal_from_execution_evaluation(
@@ -198,6 +220,23 @@ def test_requirement_scope_separates_proposal_from_execution_evaluation(
     assert (
         _classify_requirement_scope(text, kind, proposed_scope, origin) == expected
     )
+
+
+def test_team_facts_keep_roles_but_remove_eedop_experience_evidence():
+    team = _sanitize_team_facts([
+        {
+            "role": "Технически ръководител",
+            "count": 1,
+            "requirement": "Пълна проектантска правоспособност",
+            "requirements": ["Специфичен опит в един изпълнен обект"],
+        },
+        "Експертите се посочват само като квалификация и брой.",
+        "Проектантът трябва да има специфичен опит в изпълнен обект.",
+    ])
+
+    assert team[0] == {"role": "Технически ръководител", "count": 1}
+    assert team[1] == "Експертите се посочват само като квалификация и брой."
+    assert len(team) == 2
 
 
 def test_proposal_audit_preserves_hierarchy_and_acceptance_criteria():

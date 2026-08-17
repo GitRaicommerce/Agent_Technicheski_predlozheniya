@@ -1364,7 +1364,15 @@ async def test_unlock_schedule_ok(client, mock_db):
         id=sid,
         project_id=pid,
         schedule_snapshot_id=str(uuid.uuid4()),
-        schedule_json={"tasks": []},
+        schedule_json={
+            "tasks": [
+                {
+                    "uid": "1",
+                    "name": "Проектиране",
+                    "duration_days": 5,
+                }
+            ]
+        },
         status_locked=True,
         version=3,
     )
@@ -1467,7 +1475,15 @@ async def test_lock_schedule_ok(client, mock_db):
         id=sid,
         project_id=pid,
         schedule_snapshot_id=str(uuid.uuid4()),
-        schedule_json={"tasks": []},
+        schedule_json={
+            "tasks": [
+                {
+                    "uid": "1",
+                    "name": "Проектиране",
+                    "duration_days": 5,
+                }
+            ]
+        },
         status_locked=False,
         version=1,
     )
@@ -1486,6 +1502,40 @@ async def test_lock_schedule_ok(client, mock_db):
     assert data["status"] == "locked"
     assert data["schedule_id"] == sid
     assert schedule.status_locked is True
+
+
+@pytest.mark.asyncio
+async def test_lock_schedule_rejects_unreliable_one_block_pdf(client, mock_db):
+    from app.core.models import ScheduleNormalized
+
+    pid = str(uuid.uuid4())
+    sid = str(uuid.uuid4())
+    schedule = ScheduleNormalized(
+        id=sid,
+        project_id=pid,
+        schedule_snapshot_id=str(uuid.uuid4()),
+        schedule_json={
+            "tasks": [{
+                "uid": 1,
+                "name": "ID Вид дейност Срок Начало Край",
+                "note": "extracted_from_pdf_text",
+            }]
+        },
+        status_locked=False,
+        version=1,
+    )
+    result_mock = MagicMock()
+    result_mock.scalar_one_or_none.return_value = schedule
+    mock_db.execute = AsyncMock(return_value=result_mock)
+
+    resp = await client.post(
+        f"/api/v1/agents/{pid}/schedule/lock",
+        params={"schedule_id": sid},
+    )
+
+    assert resp.status_code == 409
+    assert "не е извлечен надеждно" in resp.json()["detail"]
+    assert schedule.status_locked is False
 
 
 # ---------------------------------------------------------------------------

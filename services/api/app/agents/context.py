@@ -7,6 +7,7 @@ from typing import Any, TYPE_CHECKING
 from sqlalchemy import select
 
 from app.core.models import ExtractedChunk, ProjectFile, ScheduleNormalized
+from app.ingestion.schedule_parser import schedule_quality
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -112,7 +113,8 @@ async def build_project_grounding_context(
     )
     schedule = schedule_result.scalar_one_or_none()
     schedule_tasks: list[dict[str, Any]] = []
-    if schedule:
+    quality = schedule_quality(schedule.schedule_json) if schedule else {"reliable": False, "reasons": []}
+    if schedule and quality["reliable"]:
         raw_tasks = schedule.schedule_json.get("tasks", [])
         scored_tasks = [
             (task, _score_text(_task_text(task), keywords))
@@ -176,7 +178,9 @@ async def build_project_grounding_context(
         },
         "tender_chunks": tender_chunks,
         "schedule": {
-            "available": schedule is not None,
+            "available": schedule is not None and quality["reliable"],
+            "reliable": quality["reliable"],
+            "quality_reasons": quality.get("reasons", []),
             "locked": schedule.status_locked if schedule else None,
             "version": schedule.version if schedule else None,
             "tasks": schedule_tasks,

@@ -144,7 +144,7 @@ describe("UnderstandingPanel", () => {
     );
   });
 
-  it("defaults to proposal requirements and can reveal the full register", async () => {
+  it("keeps qualification and execution requirements outside the TP work view", async () => {
     getMock.mockResolvedValueOnce({
       ...workspace,
       requirements: [
@@ -169,10 +169,8 @@ describe("UnderstandingPanel", () => {
 
     expect(await screen.findByDisplayValue("Представяне на график")).toBeInTheDocument();
     expect(screen.queryByDisplayValue("Изпитване на уплътняването")).not.toBeInTheDocument();
-
-    await userEvent.selectOptions(screen.getByLabelText("Обхват на изискванията"), "all");
-
-    expect(screen.getByDisplayValue("Изпитване на уплътняването")).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: /Всички изисквания/ })).not.toBeInTheDocument();
+    expect(screen.getByText(/Критериите за подбор, ЕЕДОП/)).toBeInTheDocument();
   });
 
   it("edits and saves an extracted requirement", async () => {
