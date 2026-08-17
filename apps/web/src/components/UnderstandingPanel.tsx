@@ -402,20 +402,6 @@ function RequirementsEditor({
           <button type="button" disabled={busy || !draft.source_file_id || !draft.source_quote || !draft.normalized_text} onClick={() => act(() => api.understanding.createRequirement(projectId, draft as Omit<UnderstandingRequirement, "id" | "project_id" | "created_at">))} className="w-full rounded border px-2 py-1">Добави</button>
         </div>
       </details>
-      {workspace.probable_gaps.length > 0 && (
-        <details className="rounded border border-amber-300 bg-amber-50 p-2">
-          <summary className="cursor-pointer font-medium text-amber-900">
-            Вероятни пропуски от печелившото ТП ({workspace.probable_gaps.length})
-          </summary>
-          <div className="mt-2 space-y-2">
-            {workspace.probable_gaps.map((gap) => (
-              <p key={gap.snippet_id} className="rounded bg-white p-2 text-[11px] text-gray-700">
-                {gap.text}
-              </p>
-            ))}
-          </div>
-        </details>
-      )}
       <button type="button" disabled={busy || workspace.acceptance.proposal_requirement_count === 0} onClick={() => act(() => api.understanding.confirmRequirements(projectId))} className="w-full rounded bg-green-600 px-2 py-1.5 text-white disabled:opacity-50">Потвърди изискванията към ТП</button>
     </div>
   );

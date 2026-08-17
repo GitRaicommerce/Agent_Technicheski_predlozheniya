@@ -482,12 +482,6 @@ export interface UnderstandingWorkspace {
     goal_missed_rate: number;
     goal_met: boolean;
   };
-  probable_gaps: Array<{
-    snippet_id: string;
-    file_id: string;
-    text: string;
-    best_match_score: number;
-  }>;
 }
 
 export interface DuplicateSelectionResolutionResponse {

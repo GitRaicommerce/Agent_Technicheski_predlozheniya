@@ -10,7 +10,6 @@ import pytest
 
 from app.agents.understanding import (
     _audit_user_message,
-    _backcheck_winning_proposal,
     _checkpoint_snapshot,
     _batch_chunks,
     _classify_requirement_scope,
@@ -390,84 +389,6 @@ async def test_truncated_understanding_batch_splits_and_checkpoints_leaf_results
     resumed_call.assert_not_awaited()
 
 
-def test_winning_proposal_backcheck_returns_only_unmatched_points():
-    snippets = [
-        SimpleNamespace(
-            id="matched", file_id="example", text="Организация за контрол", embedding=[1.0, 0.0]
-        ),
-        SimpleNamespace(
-            id="gap", file_id="example", text="План за мобилизация", embedding=[0.0, 1.0]
-        ),
-    ]
-    requirements = [
-        {
-            "normalized_text": "Контрол",
-            "source_ref": {"chunk_id": "source"},
-        }
-    ]
-    gaps = _backcheck_winning_proposal(
-        requirements,
-        snippets,
-        {"source": {"embedding": [1.0, 0.0]}},
-    )
-    assert [gap["snippet_id"] for gap in gaps] == ["gap"]
-
-
-def test_winning_proposal_backcheck_float32_scores_are_json_serializable():
-    from numpy import float32
-
-    gaps = _backcheck_winning_proposal(
-        [],
-        [
-            SimpleNamespace(
-                id="gap",
-                file_id="example",
-                text="План за мобилизация",
-                embedding=[float32(0.0), float32(1.0)],
-            )
-        ],
-        {},
-    )
-
-    assert type(gaps[0]["best_match_score"]) is float
-    json.dumps(gaps)
-
-
-def test_winning_proposal_backcheck_vectorizes_float32_embeddings():
-    from numpy import float32
-
-    snippets = [
-        SimpleNamespace(
-            id="matched",
-            file_id="example",
-            text="Организация за контрол",
-            embedding=[float32(1.0), float32(0.0)],
-        ),
-        SimpleNamespace(
-            id="gap",
-            file_id="example",
-            text="План за мобилизация",
-            embedding=[float32(0.0), float32(1.0)],
-        ),
-    ]
-    requirements = [
-        {
-            "normalized_text": "Контрол",
-            "source_ref": {"chunk_id": "source"},
-        }
-    ]
-
-    gaps = _backcheck_winning_proposal(
-        requirements,
-        snippets,
-        {"source": {"embedding": [float32(1.0), float32(0.0)]}},
-    )
-
-    assert [gap["snippet_id"] for gap in gaps] == ["gap"]
-    assert type(gaps[0]["best_match_score"]) is float
-    json.dumps(gaps)
-
-
 def test_understanding_job_response_does_not_send_checkpoint_payload_to_ui():
     now = datetime.now(timezone.utc)
     job = SimpleNamespace(
@@ -651,7 +572,7 @@ async def test_understanding_workspace_api_returns_reviewable_artifacts(
     assert payload["acceptance"]["all_requirement_count"] == 1
     assert payload["acceptance"]["proposal_requirement_count"] == 1
     assert payload["acceptance"]["missed_rate"] == 0
-    assert payload["probable_gaps"] == []
+    assert "probable_gaps" not in payload
 
 
 @pytest.mark.asyncio

@@ -18,7 +18,7 @@ from app.agents.requirements import (
     format_requirements_for_prompt,
 )
 from app.core.llm_gateway import llm_gateway
-from app.core.models import ExtractedChunk, ExampleSnippet, TpOutline
+from app.core.models import ExtractedChunk, TpOutline
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -1097,21 +1097,6 @@ async def run_tender_struct(
             )
         )
 
-    examples_result = await db.execute(
-        select(ExampleSnippet)
-        .where(ExampleSnippet.project_id == project_id)
-        .limit(20)
-    )
-    example_snippets = examples_result.scalars().all()
-
-    examples_block = ""
-    if example_snippets:
-        examples_block = "\n\n=== ПРИМЕРНИ ТЕХНИЧЕСКИ ПРЕДЛОЖЕНИЯ (само за структурен ориентир) ===\n" + "\n\n".join(
-            f"[EXAMPLE id={s.id} kind={s.snippet_kind}]\n"
-            f"[UNTRUSTED EXAMPLE CONTENT START]\n{s.text[:1500]}\n[UNTRUSTED EXAMPLE CONTENT END]"
-            for s in example_snippets
-        )
-
     user_message = (
         f"ТРЪЖНА ДОКУМЕНТАЦИЯ за проект {project_id} ({len(chunks)} подбрани чанка от {len(all_chunks)} общо):\n\n"
         f"{priority_requirements_text}"
@@ -1120,7 +1105,6 @@ async def run_tender_struct(
         f"{explicit_outline_text}"
         f"{domain_outline_text}"
         f"{chunks_text}"
-        f"{examples_block}"
     )
 
     llm_result = await llm_gateway.call(

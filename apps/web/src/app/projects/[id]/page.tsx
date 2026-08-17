@@ -16,13 +16,13 @@ import UnderstandingPanel from "@/components/UnderstandingPanel";
 type Module = "examples" | "tender_docs" | "schedule" | "legislation";
 
 const MODULES: { key: Module; label: string; icon: string }[] = [
-  { key: "examples", label: "Примерни ТП", icon: "📄" },
+  { key: "examples", label: "Примерни ТП (по желание)", icon: "📄" },
   { key: "tender_docs", label: "Документация", icon: "📋" },
   { key: "legislation", label: "Законодателство", icon: "⚖️" },
 ];
 
 const WORKFLOW_STEPS = [
-  "Качете тръжна документация и примерни ТП",
+  "Качете тръжната документация; примерните ТП са незадължителни",
   "Чатирайте с AI да анализира документацията и предложи съдържание на ТП",
   "Прегледайте разделите и одобрете съдържанието",
   "Генерирайте текст за всяка секция",

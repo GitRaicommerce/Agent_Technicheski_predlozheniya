@@ -76,7 +76,6 @@ const workspace: UnderstandingWorkspace = {
     goal_missed_rate: 0.05,
     goal_met: false,
   },
-  probable_gaps: [],
 };
 
 const getMock = vi.mocked(api.understanding.get);
@@ -142,6 +141,26 @@ describe("UnderstandingPanel", () => {
     expect(screen.getByLabelText("Fact sheet JSON")).toHaveValue(
       '{\n  "subject": "Проектиране"\n}',
     );
+  });
+
+  it("does not treat legacy example-proposal gaps as current requirements", async () => {
+    getMock.mockResolvedValueOnce({
+      ...workspace,
+      probable_gaps: [
+        {
+          snippet_id: "legacy-example",
+          file_id: "example-file",
+          text: "Точка само от старото техническо предложение",
+          best_match_score: 0.1,
+        },
+      ],
+    } as UnderstandingWorkspace);
+
+    render(<UnderstandingPanel projectId="project-1" />);
+
+    expect(await screen.findByTestId("understanding-acceptance")).toBeInTheDocument();
+    expect(screen.queryByText(/Вероятни пропуски/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Точка само от старото/)).not.toBeInTheDocument();
   });
 
   it("keeps qualification and execution requirements outside the TP work view", async () => {

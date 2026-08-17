@@ -22,7 +22,6 @@ from app.core.config import settings
 from app.core.database import AsyncSessionLocal
 from app.core.llm_gateway import llm_gateway
 from app.core.models import (
-    ExampleSnippet,
     ExtractedChunk,
     GenerationJob,
     Project,
@@ -835,100 +834,6 @@ async def reduce_understanding_maps(
     return {"requirements": requirements, "wbs_items": wbs_items, "facts": facts}
 
 
-def _backcheck_winning_proposal(
-    requirements: list[dict[str, Any]],
-    snippets: list[ExampleSnippet],
-    chunk_lookup: dict[str, dict[str, Any]],
-) -> list[dict[str, Any]]:
-    """Return example-TP points that have no plausible registry counterpart."""
-    vector_scores: dict[int, float] = {}
-    try:
-        import numpy as np
-
-        requirement_vectors = []
-        vector_size: int | None = None
-        for requirement in requirements:
-            ref = requirement.get("source_ref") or {}
-            source = chunk_lookup.get(str(ref.get("chunk_id"))) or {}
-            source_embedding = source.get("embedding") or []
-            if not source_embedding:
-                continue
-            if vector_size is None:
-                vector_size = len(source_embedding)
-            if len(source_embedding) == vector_size:
-                requirement_vectors.append(source_embedding)
-
-        if requirement_vectors and vector_size:
-            requirement_matrix = np.asarray(requirement_vectors, dtype=np.float32)
-            requirement_norms = np.linalg.norm(requirement_matrix, axis=1)
-            valid_requirements = requirement_norms > 0
-            requirement_matrix = requirement_matrix[valid_requirements]
-            requirement_norms = requirement_norms[valid_requirements]
-            if len(requirement_matrix):
-                requirement_matrix = requirement_matrix / requirement_norms[:, None]
-                batch_size = 256
-                for start in range(0, len(snippets), batch_size):
-                    batch = snippets[start : start + batch_size]
-                    rows: list[list[float]] = []
-                    row_indexes: list[int] = []
-                    for offset, snippet in enumerate(batch):
-                        embedding = (
-                            list(snippet.embedding)
-                            if snippet.embedding is not None
-                            else []
-                        )
-                        if len(embedding) == vector_size:
-                            rows.append(embedding)
-                            row_indexes.append(start + offset)
-                    if not rows:
-                        continue
-                    snippet_matrix = np.asarray(rows, dtype=np.float32)
-                    snippet_norms = np.linalg.norm(snippet_matrix, axis=1)
-                    valid_snippets = snippet_norms > 0
-                    normalized = np.zeros_like(snippet_matrix)
-                    normalized[valid_snippets] = (
-                        snippet_matrix[valid_snippets]
-                        / snippet_norms[valid_snippets, None]
-                    )
-                    best_scores = np.max(
-                        normalized @ requirement_matrix.T, axis=1
-                    )
-                    for row_index, score in zip(row_indexes, best_scores):
-                        vector_scores[row_index] = float(score)
-    except Exception as exc:
-        log.warning("understanding_backcheck_vectorization_failed", error=str(exc))
-
-    gaps: list[dict[str, Any]] = []
-    for snippet_index, snippet in enumerate(snippets):
-        text = re.sub(r"\s+", " ", str(snippet.text or "")).strip()
-        if not text:
-            continue
-        if snippet_index in vector_scores:
-            best_score = vector_scores[snippet_index]
-            threshold = 0.55
-        else:
-            best_score = max(
-                (
-                    _token_similarity(
-                        text, requirement.get("normalized_text") or ""
-                    )
-                    for requirement in requirements
-                ),
-                default=0.0,
-            )
-            threshold = 0.18
-        if not requirements or best_score < threshold:
-            gaps.append(
-                {
-                    "snippet_id": str(snippet.id),
-                    "file_id": str(snippet.file_id),
-                    "text": text[:1200],
-                    "best_match_score": round(float(best_score), 4),
-                }
-            )
-    return gaps
-
-
 async def run_understanding(
     project_id: str,
     db,
@@ -986,7 +891,7 @@ async def run_understanding(
     proposal_cache = checkpoint["proposal_results"]
     map_results: list[dict[str, Any]] = []
     completed_steps = 0
-    total_steps = len(batches) * 2 + 2
+    total_steps = len(batches) * 2 + 1
 
     async def on_start(batch_key: str) -> None:
         if progress:
@@ -1064,23 +969,6 @@ async def run_understanding(
         map_results + proposal_results, schedule_tasks
     )
     completed_steps += 1
-
-    examples_result = await db.execute(
-        select(ExampleSnippet)
-        .where(ExampleSnippet.project_id == project_id)
-        .order_by(ExampleSnippet.id)
-    )
-    probable_gaps = _backcheck_winning_proposal(
-        [
-            item
-            for item in reduced["requirements"]
-            if item.get("scope") in PROPOSAL_SCOPES
-        ],
-        examples_result.scalars().all(),
-        chunk_lookup,
-    )
-    if progress:
-        await progress(completed_steps, total_steps, "Обратна проверка през ТП")
 
     await db.execute(
         delete(RequirementRegister).where(
@@ -1164,7 +1052,6 @@ async def run_understanding(
             for item in reduced["requirements"]
             if item.get("scope") in PROPOSAL_SCOPES
         ),
-        "probable_gaps": probable_gaps,
     }
 
 

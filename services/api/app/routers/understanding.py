@@ -158,7 +158,6 @@ class UnderstandingWorkspaceResponse(BaseModel):
     fact_sheet: FactSheetResponse | None
     latest_job: UnderstandingJobResponse | None
     acceptance: dict[str, Any]
-    probable_gaps: list[dict[str, Any]]
 
 
 def _job_response(job: GenerationJob) -> UnderstandingJobResponse:
@@ -285,11 +284,6 @@ async def get_understanding_workspace(
     )
     missed_rate = 1 - recall if recall is not None else None
     review_complete = bool(machine) and all(item.status != "extracted" for item in machine)
-    probable_gaps = (
-        (job.result_json or {}).get("probable_gaps", [])
-        if job and isinstance(job.result_json, dict)
-        else []
-    )
     return UnderstandingWorkspaceResponse(
         sources=[
             {"id": file.id, "filename": file.filename}
@@ -315,7 +309,6 @@ async def get_understanding_workspace(
             and missed_rate is not None
             and missed_rate <= 0.05,
         },
-        probable_gaps=probable_gaps,
     )
 
 

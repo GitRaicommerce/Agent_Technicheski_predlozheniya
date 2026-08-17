@@ -8,10 +8,10 @@ const MODULE_LABELS: Record<
   { label: string; icon: string; accept: string; hint: string }
 > = {
   examples: {
-    label: "Примерни ТП",
+    label: "Примерни ТП (по желание)",
     icon: "📄",
     accept: ".pdf,.docx,.doc",
-    hint: "Качете PDF или DOCX файлове с предишни технически предложения",
+    hint: "Незадължителни образци само за стил и детайлност — не създават изисквания за новата поръчка",
   },
   tender_docs: {
     label: "Тръжна документация",
