@@ -224,6 +224,11 @@ async def _write_sections(
     from app.core.models import Generation
 
     for section in sections:
+        # Phase 2 keeps schedule/formal/control gates in the editable content plan,
+        # but they are not narrative sections of the technical proposal.
+        if section.get("include_in_document") is False:
+            continue
+
         # Support both key names: "section_uid" (old) and "uid" (tender_struct output)
         section_uid = section.get("section_uid") or section.get("uid", "")
         title = section.get("title", "")
@@ -234,29 +239,31 @@ async def _write_sections(
         heading.add_run(f"{numbering} {title}".strip()).bold = True
 
         # Текст от генерацията (ако има)
-        result = await db.execute(
-            select(Generation)
-            .where(
-                Generation.project_id == project_id,
-                Generation.section_uid == section_uid,
-                Generation.selected.is_(True),
+        generation = None
+        if section_uid:
+            result = await db.execute(
+                select(Generation)
+                .where(
+                    Generation.project_id == project_id,
+                    Generation.section_uid == section_uid,
+                    Generation.selected.is_(True),
+                )
+                .order_by(
+                    Generation.revision_number.desc(),
+                    Generation.selected.desc(),   # закрепен от потребителя
+                    Generation.variant.asc(),     # вариант 1 преди 2
+                    Generation.created_at.desc(),
+                )
+                .limit(1)
             )
-            .order_by(
-                Generation.revision_number.desc(),
-                Generation.selected.desc(),   # закрепен от потребителя
-                Generation.variant.asc(),     # вариант 1 преди 2
-                Generation.created_at.desc(),
-            )
-            .limit(1)
-        )
-        generation = result.scalar_one_or_none()
+            generation = result.scalar_one_or_none()
 
         if generation:
             # Evidence НЕ се включва в .docx
             p = doc.add_paragraph(generation.text)
             for run in p.runs:
                 run.font.size = Pt(11)
-        else:
+        elif section_uid:
             p = doc.add_paragraph("[Текстът за тази точка не е генериран.]")
             p.runs[0].font.color.rgb = None  # default gray via style
             p.runs[0].font.italic = True

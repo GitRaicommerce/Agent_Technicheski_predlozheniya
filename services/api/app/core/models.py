@@ -66,6 +66,9 @@ class Project(Base):
     fact_sheets: Mapped[list[ProjectFactSheet]] = relationship(
         back_populates="project", cascade="all, delete-orphan"
     )
+    content_plan_items: Mapped[list[ContentPlanItem]] = relationship(
+        back_populates="project", cascade="all, delete-orphan"
+    )
 
 
 class ProjectFile(Base):
@@ -167,6 +170,47 @@ class TpOutline(Base):
     )
 
     project: Mapped[Project] = relationship(back_populates="tp_outlines")
+    content_plan_items: Mapped[list[ContentPlanItem]] = relationship(
+        back_populates="outline", cascade="all, delete-orphan"
+    )
+
+
+class ContentPlanItem(Base):
+    __tablename__ = "content_plan_items"
+
+    id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), primary_key=True, default=_uuid
+    )
+    project_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("projects.id", ondelete="CASCADE")
+    )
+    outline_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("tp_outlines.id", ondelete="CASCADE")
+    )
+    parent_id: Mapped[Optional[str]] = mapped_column(
+        UUID(as_uuid=False),
+        ForeignKey("content_plan_items.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    uid: Mapped[str] = mapped_column(UUID(as_uuid=False), default=_uuid)
+    number: Mapped[str] = mapped_column(String(32))
+    title: Mapped[str] = mapped_column(String(1024))
+    source_quotes_json: Mapped[list] = mapped_column(JSONB, default=list)
+    acceptance_criteria_json: Mapped[list] = mapped_column(JSONB, default=list)
+    content_kind: Mapped[str] = mapped_column(String(16), default="mixed")
+    linked_wbs_ids: Mapped[list] = mapped_column(JSONB, default=list)
+    linked_fact_keys: Mapped[list] = mapped_column(JSONB, default=list)
+    forlage_section_id: Mapped[Optional[str]] = mapped_column(
+        UUID(as_uuid=False), nullable=True
+    )
+    order_index: Mapped[int] = mapped_column(Integer, default=0)
+    status: Mapped[str] = mapped_column(String(16), default="draft")
+    generation_uid: Mapped[Optional[str]] = mapped_column(
+        UUID(as_uuid=False), nullable=True
+    )
+
+    project: Mapped[Project] = relationship(back_populates="content_plan_items")
+    outline: Mapped[TpOutline] = relationship(back_populates="content_plan_items")
 
 
 class ScheduleSnapshot(Base):

@@ -19,6 +19,7 @@
 
 ## Completed Work
 
+- Implemented rework Phase 2 as a deterministic, no-LLM content-plan workflow: added the `content_plan_items` persistence model and migration, proposal-focused section/subpoint decomposition from confirmed Understanding artifacts, atomic acceptance criteria with source traceability, WBS/fact links, reuse/specific/mixed classification, an editable Bulgarian UI, explicit approval gates, and backward-compatible generation/export mapping. The real Pernik project now has draft plan v8 with 122 visible items, 32 narrative generation units, and 363 criteria across four clear roots; administrative, price-offer, EEDOP qualification, schedule-diagnostic, and control-gate material cannot become generated proposal prose.
 - Unified the overlapping requirements checklist and Understanding navigation into one Bulgarian-first module, “Разбиране на изискванията”, whose working view is limited to proposal content, format, and evaluation requirements while preserving non-proposal records for traceability and manual reclassification.
 - Focused Understanding on technical-proposal applicability: financial/legal/EEDOP and expert qualification evidence are classified outside the proposal register, while mandatory expert role names, counts, responsibilities, and organization remain available for proposal planning. Existing Pernik data was deterministically repaired without another paid LLM run.
 - Fixed PDF schedule ingestion for large one-page Gantt exports: vector tables are now parsed into structured activities, unreliable page-text fallbacks cannot be approved or used for drafting, and drafting prompts cannot turn parser diagnostics into bidder assertions. The real Pernik schedule was repaired from one false page-block to 50 dated/resource-linked activities; six contaminated generations were marked stale.
@@ -270,9 +271,9 @@
 
 ## Next Recommended Steps
 
-1. Implement rework Phase 2 so a confirmed “Разбиране на изискванията” workspace deterministically creates a new content plan; the current Pernik approved outline is a legacy July plan and does not yet consume the completed August Understanding artifacts.
-2. Review and approve the repaired 50-activity Pernik schedule, then regenerate the three selected stale sections before continuing the paused generation job; do not reuse the contaminated variants.
-3. Re-run `Generate all` only after the Phase 2 content plan has been reviewed, confirm all approved sections receive persisted text, and export a new working draft for reference comparison.
+1. In “Разбиране на изискванията”, review and confirm the repaired 50-activity Pernik WBS/schedule and the project fact sheet; then review/edit and approve Phase 2 content plan v8. These approvals remain user decisions and were not performed automatically.
+2. Implement rework Phase 3 so uploaded winning/reference proposals are ingested as complete hierarchical sections and matched to the approved content-plan subpoints.
+3. Re-run `Generate all` only after the Phase 2 plan is approved and Phase 3 matching has been reviewed; do not resume the legacy July outline or reuse contaminated stale variants.
 4. Re-run the Pernik calibration bundle after regeneration and compare the output against the winning proposal, focusing on requirement coverage, section depth, schedule consistency, and role/responsibility coverage without EEDOP qualification prose.
 5. Expand generated documentation with more precise backend endpoint and workflow coverage.
 6. Continue broadening common tender regression coverage with more real-world noisy PDF extraction, DOCX readiness combinations, and operational-action coverage cases across quality, risk, environment, safety, communication, and documentation requirements.

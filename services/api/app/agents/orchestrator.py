@@ -32,6 +32,9 @@ SYSTEM_PROMPT = """Ти си AI оркестратор за съставяне �
 - tender_struct: извлича структура на ТП от тръжната документация
   ИЗВИКВАЙ когато: няма outline (outline.exists=false) ИЛИ потребителят иска нова структура
   params: {}
+- content_plan: създава подробен Phase 2 план от потвърденото „Разбиране на изискванията“
+  ИЗВИКВАЙ когато: потребителят иска подробен план/съдържание от Understanding артефактите
+  params: {}
 - examples: избор на релевантни примерни ТП
   params: {"query": "<тема>"}
 - schedule: анализ на графика
@@ -67,7 +70,7 @@ SYSTEM_PROMPT = """Ти си AI оркестратор за съставяне �
   "trace_id": "<uuid>",
   "assistant_message": "<съобщение към потребителя на български>",
   "ui_actions": [],
-  "agent_called": "examples|tender_struct|schedule|legislation|drafting|verifier|null",
+  "agent_called": "examples|tender_struct|content_plan|schedule|legislation|drafting|verifier|null",
   "agent_params": {},
   "questions_to_user": []
 }"""
@@ -80,6 +83,35 @@ async def run_orchestrator(
     db: "AsyncSession",
 ) -> dict[str, Any]:
     trace_id = str(uuid.uuid4())
+
+    # Building the Phase 2 plan is deterministic and must not spend an LLM call.
+    if _requests_content_plan_build(message):
+        from app.agents.content_plan import build_content_plan
+
+        try:
+            outline = await build_content_plan(project.id, db)
+        except ValueError as exc:
+            return {
+                "schema_version": "v1.3",
+                "status": "needs_user_action",
+                "trace_id": trace_id,
+                "assistant_message": str(exc),
+                "ui_actions": [{"type": "show_outline", "payload": {}}],
+                "agent_called": "content_plan",
+                "questions_to_user": [],
+            }
+        return {
+            "schema_version": "v1.3",
+            "status": "ok",
+            "trace_id": trace_id,
+            "assistant_message": (
+                f"Създадох подробен Phase 2 план v{outline.version} от „Разбиране на изискванията“. "
+                "Прегледайте и одобрете подточките в „Подробен план на ТП“."
+            ),
+            "ui_actions": [{"type": "show_outline", "payload": {}}],
+            "agent_called": "content_plan",
+            "questions_to_user": [],
+        }
 
     # ── Gather real project state from DB ──────────────────────────────────
     from sqlalchemy import select, func
@@ -281,6 +313,18 @@ def _requests_full_regeneration(message: str) -> bool:
         "регенерирай всички",
         "прегенерирай всичко",
         "прегенерирай всички",
+    )
+    return any(phrase in normalized for phrase in phrases)
+
+
+def _requests_content_plan_build(message: str) -> bool:
+    normalized = " ".join(message.casefold().split())
+    phrases = (
+        "създай план от разбиране",
+        "създай подробен план",
+        "подробен план на тп",
+        "phase 2",
+        "фаза 2",
     )
     return any(phrase in normalized for phrase in phrases)
 
@@ -596,6 +640,16 @@ async def _dispatch_agent(
                 db=db,
                 trace_id=trace_id,
             )
+
+        elif agent_name == "content_plan":
+            from app.agents.content_plan import build_content_plan
+
+            outline = await build_content_plan(project_id, db)
+            return {
+                "_agent": "content_plan",
+                "outline_id": outline.id,
+                "outline_version": outline.version,
+            }
 
         elif agent_name == "schedule":
             from app.agents.schedule import run_schedule

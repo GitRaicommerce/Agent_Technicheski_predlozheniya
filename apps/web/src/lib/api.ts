@@ -222,6 +222,54 @@ export interface ScheduleTask {
   note?: string | null;
 }
 
+export interface ContentPlanCriterion {
+  id: string;
+  text: string;
+  kind: string;
+  source_quote?: string;
+  requirement_id?: string;
+  requirement_text?: string;
+}
+
+export interface ContentPlanSourceQuote {
+  requirement_id: string;
+  source_file_id: string;
+  source_page?: number | null;
+  source_quote: string;
+}
+
+export interface ContentPlanItem {
+  id: string;
+  project_id: string;
+  outline_id: string;
+  parent_id?: string | null;
+  uid: string;
+  number: string;
+  title: string;
+  source_quotes_json: ContentPlanSourceQuote[];
+  acceptance_criteria_json: ContentPlanCriterion[];
+  content_kind: "reuse" | "specific" | "mixed";
+  linked_wbs_ids: string[];
+  linked_fact_keys: string[];
+  forlage_section_id?: string | null;
+  order_index: number;
+  status: "draft" | "approved";
+  generation_uid?: string | null;
+}
+
+export interface ContentPlan {
+  outline_id: string;
+  version: number;
+  status_locked: boolean;
+  source: "understanding_content_plan";
+  understanding_status: {
+    requirements_confirmed?: boolean;
+    wbs_confirmed?: boolean;
+    fact_sheet_confirmed?: boolean;
+  };
+  items: ContentPlanItem[];
+}
+
 export interface ScheduleResource {
   id?: string;
   name?: string;
@@ -665,6 +713,31 @@ export const api = {
         `/api/v1/agents/${projectId}/sections/${encodeURIComponent(sectionUid)}/regenerate`,
         { method: "POST" },
       ),
+  },
+  contentPlan: {
+    get: (projectId: string) =>
+      apiFetch<ContentPlan | null>(`/api/v1/content-plan/${projectId}`),
+    build: (projectId: string) =>
+      apiFetch<ContentPlan>(`/api/v1/content-plan/${projectId}/build`, {
+        method: "POST",
+      }),
+    updateItem: (
+      projectId: string,
+      itemId: string,
+      values: Partial<Pick<ContentPlanItem, "title" | "acceptance_criteria_json" | "content_kind" | "linked_wbs_ids" | "linked_fact_keys" | "order_index">>,
+    ) =>
+      apiFetch<ContentPlanItem>(
+        `/api/v1/content-plan/${projectId}/items/${itemId}`,
+        { method: "PUT", body: JSON.stringify(values) },
+      ),
+    approve: (projectId: string) =>
+      apiFetch<ContentPlan>(`/api/v1/content-plan/${projectId}/approve`, {
+        method: "POST",
+      }),
+    unlock: (projectId: string) =>
+      apiFetch<ContentPlan>(`/api/v1/content-plan/${projectId}/unlock`, {
+        method: "POST",
+      }),
   },
   understanding: {
     get: (projectId: string) =>

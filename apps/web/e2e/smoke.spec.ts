@@ -519,17 +519,15 @@ test.describe("smoke", () => {
     expect(createResponse.ok()).toBeTruthy();
     const project = (await createResponse.json()) as { id: string };
     const projectId = project.id;
-    const { sectionUid } = await seedProjectState(projectId, { outlineLocked: true });
+    await seedProjectState(projectId, { outlineLocked: true });
 
     try {
       await page.goto(`/projects/${projectId}`);
       await waitForProjectPage(page, projectName);
 
       await page.getByTestId("outline-panel-toggle").click();
-      await expect(page.getByText("General Requirements")).toBeVisible();
-      await expect(
-        page.getByTestId(`outline-section-${sectionUid}-requirement-count`),
-      ).toHaveText("2");
+      await expect(page.getByTestId("legacy-outline-warning")).toBeVisible();
+      await expect(page.getByTestId("content-plan-build-button")).toBeVisible();
 
       await page.getByTestId("generations-panel-toggle").click();
       await expect(page.getByTestId("generations-panel-toggle")).toBeVisible();
@@ -1098,9 +1096,8 @@ test.describe("smoke", () => {
         page.getByText("Генерирах текстовете и отворих панелите за преглед."),
       ).toBeVisible();
       await expect(page.getByText("Outline е готов за преглед.")).toBeVisible();
-      await expect(
-        page.getByTestId(`outline-section-${sectionUid}`),
-      ).toBeVisible();
+      await expect(page.getByTestId("legacy-outline-warning")).toBeVisible();
+      await expect(page.getByTestId("content-plan-build-button")).toBeVisible();
       await expect(
         page.getByTestId(`generation-section-${sectionUid}`),
       ).toBeVisible();

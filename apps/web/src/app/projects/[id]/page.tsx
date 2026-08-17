@@ -443,14 +443,14 @@ export default function ProjectPage() {
             )}
           </div>
 
-          {/* Съдържание на ТП */}
+          {/* Подробен план на ТП */}
           <div className="border-b">
             <button
               onClick={() => setShowOutline((v) => !v)}
               data-testid="outline-panel-toggle"
               className="w-full px-3 py-2.5 text-left text-sm font-semibold text-gray-700 flex justify-between items-center hover:bg-gray-50 transition"
             >
-              <span>📐 Съдържание на ТП</span>
+              <span>📐 Подробен план на ТП</span>
               <span className="text-gray-400 text-xs">
                 {showOutline ? "▾" : "▸"}
               </span>

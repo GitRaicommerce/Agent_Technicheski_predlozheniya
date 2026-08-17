@@ -1,7 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { api, TpOutline, TpOutlineSection } from "@/lib/api";
+import { useEffect, useMemo, useState } from "react";
+import {
+  api,
+  type ContentPlan,
+  type ContentPlanCriterion,
+  type ContentPlanItem,
+  type TpOutline,
+} from "@/lib/api";
 
 interface Props {
   projectId: string;
@@ -9,235 +15,272 @@ interface Props {
 }
 
 export default function OutlinePanel({ projectId, refreshKey = 0 }: Props) {
-  const [outline, setOutline] = useState<TpOutline | null>(null);
+  const [plan, setPlan] = useState<ContentPlan | null>(null);
+  const [legacyOutline, setLegacyOutline] = useState<TpOutline | null>(null);
   const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [locking, setLocking] = useState(false);
-  const [lockError, setLockError] = useState<string | null>(null);
-  const [confirmRegen, setConfirmRegen] = useState(false);
-  const [regenerating, setRegenerating] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const load = () => {
+  const load = async () => {
     setLoading(true);
-    setLoadError(null);
-    api.agents
-      .getOutline(projectId)
-      .then(setOutline)
-      .catch((err: unknown) => setLoadError(err instanceof Error ? err.message : "Грешка при зареждане на структурата."))
-      .finally(() => setLoading(false));
-  };
-
-  useEffect(() => { load(); }, [projectId, refreshKey]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const handleLock = async () => {
-    if (!outline) return;
-    setLocking(true);
-    setLockError(null);
+    setError(null);
     try {
-      await api.agents.lockOutline(projectId, outline.id);
-      setOutline((o) => (o ? { ...o, status_locked: true } : o));
+      const [contentPlan, outline] = await Promise.all([
+        api.contentPlan.get(projectId),
+        api.agents.getOutline(projectId),
+      ]);
+      setPlan(contentPlan);
+      setLegacyOutline(outline);
     } catch (err: unknown) {
-      setLockError(
-        err instanceof Error ? err.message : "Грешка при одобрение",
-      );
+      setError(err instanceof Error ? err.message : "Грешка при зареждане на плана.");
     } finally {
-      setLocking(false);
+      setLoading(false);
     }
   };
 
-  const handleUnlock = async () => {
-    if (!outline) return;
-    setLocking(true);
-    setLockError(null);
+  useEffect(() => { void load(); }, [projectId, refreshKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const act = async (action: () => Promise<ContentPlan>) => {
+    setBusy(true);
+    setError(null);
     try {
-      await api.agents.unlockOutline(projectId, outline.id);
-      setOutline((o) => (o ? { ...o, status_locked: false } : o));
+      setPlan(await action());
     } catch (err: unknown) {
-      setLockError(
-        err instanceof Error ? err.message : "Грешка при отключване",
-      );
+      setError(err instanceof Error ? err.message : "Операцията не бе изпълнена.");
     } finally {
-      setLocking(false);
+      setBusy(false);
     }
   };
 
-  const handleRegen = async () => {
-    setRegenerating(true);
-    setConfirmRegen(false);
-    try {
-      await api.agents.deleteOutline(projectId);
-      setOutline(null);
-    } catch {
-      // silently ignore
-    } finally {
-      setRegenerating(false);
-    }
-  };
+  if (loading) return <p className="py-2 text-xs text-gray-400 animate-pulse">Зарежда се планът на ТП...</p>;
 
-  if (loading) {
-    return (
-      <p className="text-xs text-gray-400 py-2 animate-pulse">
-        Зарежда структурата...
-      </p>
-    );
-  }
-
-  if (loadError) {
+  if (!plan) {
+    const legacy = legacyOutline && legacyOutline.outline_json.source !== "understanding_content_plan";
     return (
       <div className="space-y-2">
-        <p className="text-xs text-red-500">{loadError}</p>
-        <button onClick={load} className="text-xs text-blue-500 hover:underline">↺ Опитай отново</button>
-      </div>
-    );
-  }
-
-  if (!outline) {
-    return (
-      <div className="space-y-2">
-        {regenerating ? (
-          <p className="text-xs text-blue-500 animate-pulse">Изтрива се старото съдържание...</p>
-        ) : (
-          <>
-            <p className="text-xs text-gray-400 leading-relaxed">
-              Съдържанието на ТП не е генерирано. Качете тръжна документация и напишете в чата
-              &ldquo;Анализирай документацията и предложи съдържание на ТП&rdquo;.
-            </p>
-            <button
-              onClick={load}
-              className="text-xs text-blue-500 hover:underline"
-            >
-              ↺ Опресни
-            </button>
-          </>
+        {legacy && (
+          <p data-testid="legacy-outline-warning" className="rounded bg-amber-50 p-2 text-xs text-amber-800">
+            Съществува стар план v{legacyOutline.version}, който не е създаден от потвърденото „Разбиране на изискванията“. Той няма да бъде използван след създаването на Phase 2 плана.
+          </p>
         )}
+        <p className="text-xs leading-relaxed text-gray-500">
+          Създайте подробен план раздел → подточка от потвърдените изисквания към ТП, WBS и fact sheet. Операцията е детерминистична и не използва API кредити.
+        </p>
+        <button
+          type="button"
+          data-testid="content-plan-build-button"
+          disabled={busy}
+          onClick={() => act(() => api.contentPlan.build(projectId))}
+          className="w-full rounded bg-blue-600 px-3 py-1.5 text-xs text-white disabled:opacity-50"
+        >
+          {busy ? "Създава се..." : "Създай план от Разбиране"}
+        </button>
+        {error && <p className="text-xs text-red-600">{error}</p>}
       </div>
     );
   }
 
-  const sections =
-    outline.outline_json.sections ?? outline.outline_json.outline ?? [];
+  const roots = plan.items.filter((item) => !item.parent_id);
+  const generatableCount = plan.items.filter((item) => item.generation_uid).length;
+  const understandingReady =
+    plan.understanding_status.wbs_confirmed &&
+    plan.understanding_status.fact_sheet_confirmed;
 
   return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between">
-        <span className="text-xs text-gray-400">
-          {sections.length} раздел{sections.length !== 1 ? "а" : ""}
-          {outline.status_locked && <span className="ml-2 text-green-600 font-medium">✓ Одобрено</span>}
+    <div className="space-y-2" data-testid="content-plan-editor">
+      <div className="flex items-center justify-between text-xs">
+        <span className="text-gray-500">
+          Phase 2 · v{plan.version} · {plan.items.length} точки · {generatableCount} работни подточки
         </span>
-        <div className="flex items-center gap-2">
-          {confirmRegen ? (
-            <span className="flex items-center gap-1">
-              <span className="text-xs text-red-600">Изтрий?</span>
-              <button onClick={handleRegen} disabled={regenerating} className="text-xs text-white bg-red-500 hover:bg-red-600 px-1.5 py-0.5 rounded disabled:opacity-50">Да</button>
-              <button onClick={() => setConfirmRegen(false)} className="text-xs text-gray-500 hover:text-gray-700">Не</button>
-            </span>
-          ) : (
-            <button
-              onClick={() => setConfirmRegen(true)}
-              title="Изтрий и генерирай наново"
-              className="text-xs text-gray-400 hover:text-red-500 transition"
-            >
-              🗑
-            </button>
-          )}
-          <button onClick={load} className="text-xs text-gray-400 hover:text-blue-500 transition" title="Опресни">
-            ↺
-          </button>
-        </div>
+        <button type="button" onClick={() => void load()} className="text-gray-400 hover:text-blue-600">↻</button>
       </div>
-
-      {sections.length > 0 && (
-        <ul className="space-y-0.5 max-h-64 overflow-y-auto pr-1">
-          {sections.map((s, i) => (
-            <SectionItem key={s.uid ?? i} section={s} depth={0} />
-          ))}
-        </ul>
+      <p className="rounded bg-blue-50 p-2 text-[11px] text-blue-800">
+        Този план е построен от „Разбиране на изискванията“. Всяка работна подточка има проверими критерии и цитати от документацията.
+      </p>
+      {!understandingReady && (
+        <p data-testid="content-plan-understanding-warning" className="rounded bg-amber-50 p-2 text-[11px] text-amber-800">
+          Планът е наличен за преглед, но преди одобряването му потвърдете „Дейности“ и „Fact sheet“ в модула „Разбиране на изискванията“.
+        </p>
       )}
 
-      {outline.status_locked ? (
-        <div className="flex items-center justify-between pt-1 border-t">
-          <span className="text-xs text-green-700 font-medium">✓ Одобрено (v{outline.version})</span>
+      <ul className="max-h-[34rem] space-y-1 overflow-y-auto pr-1">
+        {roots.map((item) => (
+          <PlanItemEditor
+            key={item.id}
+            item={item}
+            allItems={plan.items}
+            locked={plan.status_locked}
+            busy={busy}
+            onSave={async (itemId, values) => {
+              setBusy(true);
+              setError(null);
+              try {
+                const updated = await api.contentPlan.updateItem(projectId, itemId, values);
+                setPlan((current) => current ? {
+                  ...current,
+                  items: current.items.map((entry) => entry.id === itemId ? updated : entry),
+                } : current);
+              } catch (err: unknown) {
+                setError(err instanceof Error ? err.message : "Промяната не бе записана.");
+              } finally {
+                setBusy(false);
+              }
+            }}
+          />
+        ))}
+      </ul>
+
+      {plan.status_locked ? (
+        <div className="flex items-center justify-between border-t pt-2">
+          <span className="text-xs font-medium text-green-700">✓ Планът е одобрен</span>
           <button
-            onClick={handleUnlock}
-            disabled={locking}
-            data-testid="outline-unlock-button"
-            className="text-xs text-amber-600 hover:underline disabled:opacity-50"
+            type="button"
+            data-testid="content-plan-unlock-button"
+            disabled={busy}
+            onClick={() => act(() => api.contentPlan.unlock(projectId))}
+            className="text-xs text-amber-700 hover:underline disabled:opacity-50"
           >
-            🔓 Редактирай
+            Редактирай
           </button>
         </div>
       ) : (
-        <div className="pt-1 border-t">
-          <p className="text-xs text-gray-400 mb-1.5">
-            Прегледайте разделите и одобрете за да започне генерирането.
-          </p>
-          <button
-            onClick={handleLock}
-            disabled={locking}
-            data-testid="outline-lock-button"
-            className="w-full py-1.5 px-3 bg-green-600 text-white text-xs rounded-lg hover:bg-green-700 disabled:opacity-50 transition"
-          >
-            {locking ? "Одобрява се..." : "✓ Одобри и генерирай"}
-          </button>
-          {lockError && (
-            <p className="text-xs text-red-500 mt-1">{lockError}</p>
-          )}
-        </div>
+        <button
+          type="button"
+          data-testid="content-plan-approve-button"
+          disabled={busy || generatableCount === 0 || !understandingReady}
+          onClick={() => act(() => api.contentPlan.approve(projectId))}
+          className="w-full rounded bg-green-600 px-3 py-1.5 text-xs text-white disabled:opacity-50"
+        >
+          {busy ? "Обработва се..." : "✓ Одобри подробния план"}
+        </button>
       )}
+      {!plan.status_locked && (
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => {
+            if (window.confirm("Да се създаде нова версия от текущите Understanding артефакти?")) {
+              void act(() => api.contentPlan.build(projectId));
+            }
+          }}
+          className="w-full text-[11px] text-gray-500 hover:underline disabled:opacity-50"
+        >
+          Създай нова версия от Разбиране
+        </button>
+      )}
+      {error && <p className="text-xs text-red-600">{error}</p>}
     </div>
   );
 }
 
-function SectionItem({
-  section,
-  depth,
+function PlanItemEditor({
+  item,
+  allItems,
+  locked,
+  busy,
+  onSave,
 }: {
-  section: TpOutlineSection;
-  depth: number;
+  item: ContentPlanItem;
+  allItems: ContentPlanItem[];
+  locked: boolean;
+  busy: boolean;
+  onSave: (itemId: string, values: Partial<ContentPlanItem>) => Promise<void>;
 }) {
-  const [expanded, setExpanded] = useState(false);
-  const children = section.subsections ?? [];
-  const requirementCount = section.requirement_ids?.length ?? 0;
+  const children = useMemo(
+    () => allItems.filter((entry) => entry.parent_id === item.id),
+    [allItems, item.id],
+  );
+  const [expanded, setExpanded] = useState(!item.parent_id);
+  const [editing, setEditing] = useState(false);
+  const [title, setTitle] = useState(item.title);
+  const [kind, setKind] = useState(item.content_kind);
+  const [criteriaText, setCriteriaText] = useState(
+    item.acceptance_criteria_json.map((criterion) => criterion.text).join("\n"),
+  );
+
+  const save = async () => {
+    const lines = criteriaText.split("\n").map((line) => line.trim()).filter(Boolean);
+    const criteria: ContentPlanCriterion[] = lines.map((text, index) => ({
+      ...(item.acceptance_criteria_json[index] || {
+        id: `manual-${item.id}-${index + 1}`,
+        kind: "content",
+      }),
+      text,
+    }));
+    await onSave(item.id, {
+      title: title.trim(),
+      content_kind: kind,
+      acceptance_criteria_json: criteria,
+    });
+    setEditing(false);
+  };
 
   return (
-    <li>
-      <button
-        onClick={() => children.length > 0 && setExpanded((e) => !e)}
-        data-testid={section.uid ? `outline-section-${section.uid}` : undefined}
-        style={{ paddingLeft: `${0.5 + depth * 0.75}rem` }}
-        className="text-left w-full text-xs py-1 pr-2 rounded flex items-start gap-1 hover:bg-gray-100 transition"
-      >
-        {children.length > 0 ? (
-          <span className="text-gray-400 mt-0.5 w-3 shrink-0 text-center">
-            {expanded ? "▾" : "▸"}
-          </span>
-        ) : (
-          <span className="w-3 shrink-0" />
+    <li className="rounded border bg-white p-1.5" data-testid={`content-plan-item-${item.id}`}>
+      <div className="flex items-start gap-1">
+        <button
+          type="button"
+          onClick={() => setExpanded((value) => !value)}
+          className="w-4 shrink-0 text-xs text-gray-400"
+        >
+          {expanded ? "▾" : "▸"}
+        </button>
+        <button type="button" onClick={() => setExpanded((value) => !value)} className="flex-1 text-left text-xs text-gray-800">
+          <span className="mr-1 font-semibold text-gray-500">{item.number}</span>{item.title}
+        </button>
+        {item.generation_uid && (
+          <span className="rounded bg-blue-50 px-1 text-[10px] text-blue-700">{item.acceptance_criteria_json.length}</span>
         )}
-        <span className="flex-1 text-gray-700">{section.title}</span>
-        {requirementCount > 0 && (
-          <span
-            data-testid={
-              section.uid
-                ? `outline-section-${section.uid}-requirement-count`
-                : undefined
-            }
-            title="Покрити изисквания от чеклиста"
-            className="shrink-0 rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-blue-700"
-          >
-            {requirementCount}
-          </span>
+        {!locked && (
+          <button type="button" onClick={() => setEditing((value) => !value)} className="text-[10px] text-blue-600">редакция</button>
         )}
-        {section.required && (
-          <span className="text-red-400 shrink-0 ml-1">*</span>
-        )}
-      </button>
-      {expanded && children.length > 0 && (
-        <ul>
-          {children.map((c, i) => (
-            <SectionItem key={c.uid ?? i} section={c} depth={depth + 1} />
-          ))}
-        </ul>
+      </div>
+
+      {expanded && (
+        <div className="mt-1 space-y-1 pl-5">
+          {editing ? (
+            <div className="space-y-1 rounded bg-gray-50 p-2">
+              <input aria-label="Заглавие на точката" value={title} onChange={(event) => setTitle(event.target.value)} className="w-full rounded border p-1 text-xs" />
+              <select aria-label="Вид съдържание" value={kind} onChange={(event) => setKind(event.target.value as ContentPlanItem["content_kind"])} className="w-full rounded border p-1 text-xs">
+                <option value="reuse">Типова методология</option>
+                <option value="specific">Специфично за поръчката</option>
+                <option value="mixed">Смесено</option>
+              </select>
+              <textarea aria-label="Критерии за приемане" value={criteriaText} onChange={(event) => setCriteriaText(event.target.value)} rows={5} className="w-full rounded border p-1 text-xs" placeholder="Един проверим критерий на ред" />
+              <button type="button" disabled={busy || !title.trim()} onClick={() => void save()} className="rounded bg-blue-600 px-2 py-1 text-[11px] text-white disabled:opacity-50">Запази</button>
+            </div>
+          ) : (
+            <>
+              {item.acceptance_criteria_json.length > 0 && (
+                <ul className="list-disc space-y-0.5 pl-4 text-[10px] text-gray-600">
+                  {item.acceptance_criteria_json.map((criterion) => <li key={criterion.id}>{criterion.text}</li>)}
+                </ul>
+              )}
+              {item.source_quotes_json.length > 0 && (
+                <details className="text-[10px] text-gray-500">
+                  <summary className="cursor-pointer">Цитати-източници ({item.source_quotes_json.length})</summary>
+                  <div className="mt-1 space-y-1">
+                    {item.source_quotes_json.map((source, index) => (
+                      <p key={`${source.requirement_id}-${index}`} className="border-l-2 pl-1">
+                        {source.source_page ? `стр. ${source.source_page}: ` : ""}„{source.source_quote}“
+                      </p>
+                    ))}
+                  </div>
+                </details>
+              )}
+              {(item.linked_wbs_ids.length > 0 || item.linked_fact_keys.length > 0) && (
+                <p className="text-[10px] text-gray-400">Свързано: {item.linked_wbs_ids.length} WBS · {item.linked_fact_keys.join(", ") || "без fact ключ"}</p>
+              )}
+            </>
+          )}
+          {children.length > 0 && (
+            <ul className="space-y-1">
+              {children.map((child) => (
+                <PlanItemEditor key={child.id} item={child} allItems={allItems} locked={locked} busy={busy} onSave={onSave} />
+              ))}
+            </ul>
+          )}
+        </div>
       )}
     </li>
   );

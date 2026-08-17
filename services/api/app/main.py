@@ -8,7 +8,7 @@ from sqlalchemy import text
 
 from app.core.config import settings
 from app.core.database import AsyncSessionLocal
-from app.routers import projects, files, agents, export, understanding
+from app.routers import projects, files, agents, export, understanding, content_plan
 
 limiter = Limiter(key_func=get_remote_address, default_limits=["200/minute"])
 
@@ -41,6 +41,11 @@ app.include_router(
     understanding.router,
     prefix="/api/v1/understanding",
     tags=["understanding"],
+)
+app.include_router(
+    content_plan.router,
+    prefix="/api/v1/content-plan",
+    tags=["content-plan"],
 )
 
 

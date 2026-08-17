@@ -68,7 +68,6 @@ TP AI is a monorepo for an AI-assisted workflow that prepares technical proposal
 - `packages/`
 - `scripts/`
 - `services/`
-- `tmp/`
 - `.env.example`
 - `.gitignore`
 - `Agent.md`
@@ -123,6 +122,7 @@ TP AI is a monorepo for an AI-assisted workflow that prepares technical proposal
   - `apps/web/src/test/setup.ts`
 - `services/api/app/agents/`
   - `services/api/app/agents/__init__.py`
+  - `services/api/app/agents/content_plan.py`
   - `services/api/app/agents/context.py`
   - `services/api/app/agents/drafting.py`
   - `services/api/app/agents/drafting_blueprint.py`
@@ -160,6 +160,7 @@ TP AI is a monorepo for an AI-assisted workflow that prepares technical proposal
 - `services/api/app/routers/`
   - `services/api/app/routers/__init__.py`
   - `services/api/app/routers/agents.py`
+  - `services/api/app/routers/content_plan.py`
   - `services/api/app/routers/export.py`
   - `services/api/app/routers/files.py`
   - `services/api/app/routers/projects.py`
@@ -170,6 +171,7 @@ TP AI is a monorepo for an AI-assisted workflow that prepares technical proposal
 ## Backend API Surface
 
 - `services/api/app/routers/agents.py`
+- `services/api/app/routers/content_plan.py`
 - `services/api/app/routers/export.py`
 - `services/api/app/routers/files.py`
 - `services/api/app/routers/projects.py`
@@ -177,10 +179,11 @@ TP AI is a monorepo for an AI-assisted workflow that prepares technical proposal
 
 ## Test Inventory
 
-- Total backend tests discovered: `245`
+- Total backend tests discovered: `251`
 - `test_agents.py`: `43`
 - `test_common_proposal_scenarios.py`: `19`
 - `test_config.py`: `2`
+- `test_content_plan.py`: `6`
 - `test_drafting_blueprint.py`: `5`
 - `test_export.py`: `15`
 - `test_export_readiness_report.py`: `2`
