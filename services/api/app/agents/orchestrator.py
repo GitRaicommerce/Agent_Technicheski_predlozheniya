@@ -390,7 +390,25 @@ async def _run_drafting_all(
     )
     outline = outline_result.scalar_one_or_none()
     if not outline:
-        return {"error": "Няма налично съдържание (outline). Генерирайте разделите първо.", "_agent": "drafting_all"}
+        latest_result = await db.execute(
+            select(TpOutline)
+            .where(TpOutline.project_id == project.id)
+            .order_by(TpOutline.version.desc())
+            .limit(1)
+        )
+        latest_outline = latest_result.scalar_one_or_none()
+        if latest_outline:
+            error = (
+                f"Подробният план v{latest_outline.version} още не е одобрен. "
+                "Потвърдете WBS и Fact sheet в „Разбиране на изискванията“, "
+                "след което одобрете подробния план."
+            )
+        else:
+            error = (
+                "Няма създаден подробен план на техническото предложение. "
+                "Създайте го в „Разбиране на изискванията“ и го одобрете преди генериране."
+            )
+        return {"error": error, "_agent": "drafting_all"}
 
     # Find already generated section uids (skip them)
     gen_result = await db.execute(

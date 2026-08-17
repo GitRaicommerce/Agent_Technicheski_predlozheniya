@@ -27,6 +27,10 @@ vi.mock("@/lib/api", async () => {
         resolveDuplicateSelectedGenerations: vi.fn(),
         selectGeneration: vi.fn(),
       },
+      contentPlan: {
+        ...actual.api.contentPlan,
+        get: vi.fn(),
+      },
     },
   };
 });
@@ -53,11 +57,13 @@ const resolveDuplicateSelectedGenerationsMock = vi.mocked(
   api.agents.resolveDuplicateSelectedGenerations,
 );
 const selectGenerationMock = vi.mocked(api.agents.selectGeneration);
+const getContentPlanMock = vi.mocked(api.contentPlan.get);
 
 describe("GenerationsPanel", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     latestGenerationJobMock.mockResolvedValue(null);
+    getContentPlanMock.mockResolvedValue(null);
   });
 
   it("renders empty state when there are no generations", async () => {
@@ -69,6 +75,39 @@ describe("GenerationsPanel", () => {
       await screen.findByTestId("generation-complete-missing-button"),
     ).toBeInTheDocument();
     expect(screen.queryByText("Section 1")).not.toBeInTheDocument();
+  });
+
+  it("explains why an unapproved content plan cannot be generated", async () => {
+    listGenerationsMock.mockResolvedValue([
+      {
+        section_uid: "legacy-section",
+        section_title: "Стар раздел",
+        variants: [],
+      },
+    ]);
+    getContentPlanMock.mockResolvedValue({
+      outline_id: "outline-10",
+      version: 10,
+      status_locked: false,
+      source: "understanding_content_plan",
+      understanding_status: {
+        requirements_confirmed: true,
+        wbs_confirmed: false,
+        fact_sheet_confirmed: false,
+      },
+      items: [],
+    });
+
+    render(<GenerationsPanel projectId="project-1" />);
+
+    expect(await screen.findByText(/подробен план v10/)).toHaveTextContent(
+      "Потвърдете WBS и Fact sheet",
+    );
+    expect(
+      screen.queryByTestId("generation-complete-missing-button"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText(/1 раздел от предишната структура/)).toBeInTheDocument();
+    expect(screen.queryByText("Стар раздел")).not.toBeInTheDocument();
   });
 
   it("renders a section and expands its selected text", async () => {

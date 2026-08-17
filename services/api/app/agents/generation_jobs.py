@@ -21,6 +21,42 @@ TERMINAL_JOB_STATUSES = {"done", "error"}
 PAUSABLE_JOB_STATUSES = {"queued", "processing", "pause_requested"}
 
 
+def _missing_approved_outline_message(latest_outline: TpOutline | None) -> str:
+    if latest_outline:
+        return (
+            f"Подробният план v{latest_outline.version} още не е одобрен. "
+            "Потвърдете WBS и Fact sheet в „Разбиране на изискванията“, "
+            "след което одобрете подробния план."
+        )
+    return (
+        "Няма създаден подробен план на техническото предложение. "
+        "Създайте го в „Разбиране на изискванията“ и го одобрете преди генериране."
+    )
+
+
+async def _latest_outline(project_id: str, db) -> TpOutline | None:
+    result = await db.execute(
+        select(TpOutline)
+        .where(TpOutline.project_id == project_id)
+        .order_by(TpOutline.version.desc())
+        .limit(1)
+    )
+    return result.scalar_one_or_none()
+
+
+async def _approved_outline(project_id: str, db) -> TpOutline | None:
+    result = await db.execute(
+        select(TpOutline)
+        .where(
+            TpOutline.project_id == project_id,
+            TpOutline.status_locked.is_(True),
+        )
+        .order_by(TpOutline.version.desc())
+        .limit(1)
+    )
+    return result.scalar_one_or_none()
+
+
 def _section_result(
     uid: str,
     title: str,
@@ -179,21 +215,13 @@ async def create_drafting_all_job(
     *,
     regenerate_existing: bool = False,
 ) -> GenerationJob:
+    outline = await _approved_outline(project.id, db)
+    if not outline:
+        latest_outline = await _latest_outline(project.id, db)
+        raise ValueError(_missing_approved_outline_message(latest_outline))
+
     if not regenerate_existing:
         return await create_drafting_job(project=project, db=db)
-
-    outline_result = await db.execute(
-        select(TpOutline)
-        .where(
-            TpOutline.project_id == project.id,
-            TpOutline.status_locked.is_(True),
-        )
-        .order_by(TpOutline.version.desc())
-        .limit(1)
-    )
-    outline = outline_result.scalar_one_or_none()
-    if not outline:
-        raise ValueError("No approved outline is available for full regeneration.")
 
     all_sections: list[dict[str, Any]] = []
     _collect_sections(outline.outline_json.get("sections", []), all_sections)
@@ -657,19 +685,11 @@ async def _run_drafting_all_job(job: GenerationJob, db) -> None:
         await db.commit()
         return
 
-    outline_result = await db.execute(
-        select(TpOutline)
-        .where(
-            TpOutline.project_id == project.id,
-            TpOutline.status_locked.is_(True),
-        )
-        .order_by(TpOutline.version.desc())
-        .limit(1)
-    )
-    outline = outline_result.scalar_one_or_none()
+    outline = await _approved_outline(project.id, db)
     if not outline:
         job.status = "error"
-        job.error = "Няма налично съдържание (outline). Генерирайте разделите първо."
+        latest_outline = await _latest_outline(project.id, db)
+        job.error = _missing_approved_outline_message(latest_outline)
         job.completed_at = datetime.now(timezone.utc)
         await db.commit()
         return

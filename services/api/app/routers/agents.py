@@ -596,7 +596,10 @@ async def retry_generation_job(
 
     from app.agents.generation_jobs import create_drafting_all_job
 
-    job = await create_drafting_all_job(project=project, db=db)
+    try:
+        job = await create_drafting_all_job(project=project, db=db)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     return _generation_job_response(job)
 
 

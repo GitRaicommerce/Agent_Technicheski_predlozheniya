@@ -173,6 +173,30 @@ async def test_full_regeneration_targets_every_outline_section(mock_db):
 
 
 @pytest.mark.asyncio
+async def test_generation_is_rejected_until_latest_plan_is_approved(mock_db):
+    project = _make_project()
+    draft = TpOutline(
+        id=str(uuid.uuid4()),
+        project_id=project.id,
+        outline_json={"source": "understanding_content_plan", "sections": []},
+        status_locked=False,
+        version=10,
+    )
+    no_approved = MagicMock()
+    no_approved.scalar_one_or_none.return_value = None
+    mock_db.execute = AsyncMock(side_effect=[no_approved, _outline_result(draft)])
+
+    with patch(
+        "app.agents.generation_jobs.create_drafting_job",
+        new=AsyncMock(),
+    ) as create_job:
+        with pytest.raises(ValueError, match="Подробният план v10 още не е одобрен"):
+            await create_drafting_all_job(project, mock_db)
+
+    create_job.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_generation_job_records_failed_section_and_keeps_progress(mock_db):
     project = _make_project()
     section_ok = str(uuid.uuid4())

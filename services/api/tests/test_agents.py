@@ -418,6 +418,25 @@ async def test_retry_generation_job_creates_background_job(client, mock_db):
 
 
 @pytest.mark.asyncio
+async def test_retry_generation_job_explains_unapproved_plan(client, mock_db):
+    project = _make_project()
+    mock_db.get = AsyncMock(return_value=project)
+
+    with patch(
+        "app.agents.generation_jobs.create_drafting_all_job",
+        new=AsyncMock(
+            side_effect=ValueError("Подробният план v10 още не е одобрен.")
+        ),
+    ):
+        resp = await client.post(
+            f"/api/v1/agents/{project.id}/generation-jobs/retry"
+        )
+
+    assert resp.status_code == 409
+    assert resp.json()["detail"] == "Подробният план v10 още не е одобрен."
+
+
+@pytest.mark.asyncio
 async def test_regenerate_all_job_requests_new_versions_for_existing_sections(
     client,
     mock_db,

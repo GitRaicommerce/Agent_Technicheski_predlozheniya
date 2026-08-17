@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   api,
+  ContentPlan,
   Generation,
   GenerationJob,
   ExportQualitySection,
@@ -47,6 +48,7 @@ export default function GenerationsPanel({
   const [resolvingDuplicateSelections, setResolvingDuplicateSelections] =
     useState(false);
   const [generationJob, setGenerationJob] = useState<GenerationJob | null>(null);
+  const [contentPlan, setContentPlan] = useState<ContentPlan | null>(null);
   const hasLoadedRef = useRef(false);
 
   const load = useCallback(async () => {
@@ -57,10 +59,12 @@ export default function GenerationsPanel({
     return Promise.all([
       api.agents.listGenerations(projectId),
       api.agents.latestGenerationJob(projectId),
+      api.contentPlan.get(projectId),
     ])
-      .then(([nextSections, nextJob]) => {
+      .then(([nextSections, nextJob, nextContentPlan]) => {
         setSections(nextSections);
         setGenerationJob(nextJob);
+        setContentPlan(nextContentPlan);
       })
       .catch((e: unknown) =>
         setError(
@@ -294,6 +298,36 @@ export default function GenerationsPanel({
     );
   }
 
+  const planNeedsApproval = contentPlan && !contentPlan.status_locked;
+  if (planNeedsApproval) {
+    const missingUnderstandingReviews = [
+      !contentPlan.understanding_status.wbs_confirmed ? "WBS" : null,
+      !contentPlan.understanding_status.fact_sheet_confirmed ? "Fact sheet" : null,
+    ].filter(Boolean);
+
+    return (
+      <div className="space-y-2" data-testid="generation-plan-not-approved">
+        <p className="text-xs leading-relaxed text-amber-300">
+          За текущия подробен план v{contentPlan.version} още няма генерирани
+          текстове. {missingUnderstandingReviews.length > 0
+            ? `Потвърдете ${missingUnderstandingReviews.join(" и ")} в „Разбиране на изискванията“, а след това одобрете плана.`
+            : "Одобрете плана, след което стартирайте генерирането."}
+        </p>
+        <p className="text-xs leading-relaxed text-gray-400">
+          {sections.length > 0
+            ? `${sections.length} ${sections.length === 1 ? "раздел" : "раздела"} от предишната структура ${sections.length === 1 ? "е запазен" : "са запазени"} като история, но не се прехвърлят автоматично към новия план.`
+            : "Генерациите от предишни версии се пазят отделно и не се прехвърлят автоматично към новата структура."}
+        </p>
+        <button
+          onClick={load}
+          className="text-xs text-blue-500 hover:underline"
+        >
+          Обнови
+        </button>
+      </div>
+    );
+  }
+
   if (sections.length === 0) {
     return (
       <div className="space-y-1">
@@ -317,8 +351,11 @@ export default function GenerationsPanel({
           onRegenerateAll={handleRegenerateAllSections}
         />
         <p className="text-xs leading-relaxed text-gray-400">
-          Все още няма генерирани текстове. Използвайте TP AI, за да
-          генерирате съдържание по одобрения outline.
+          {contentPlan?.status_locked ? (
+            <>План v{contentPlan.version} е одобрен, но по него още няма генерирани текстове. Стартирайте генерирането.</>
+          ) : (
+            <>Все още няма генерирани текстове. Създайте и одобрете подробен план в „Разбиране на изискванията“.</>
+          )}
         </p>
         <button
           onClick={load}
