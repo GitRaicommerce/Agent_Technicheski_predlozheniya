@@ -236,6 +236,7 @@ export interface ContentPlanSourceQuote {
   source_file_id: string;
   source_page?: number | null;
   source_quote: string;
+  source_kind?: "mandatory_heading" | string;
 }
 
 export interface ContentPlanItem {

@@ -2,16 +2,22 @@
 
 from __future__ import annotations
 
+import asyncio
+import io
 import re
 import uuid
 from collections import defaultdict
+from dataclasses import dataclass
 from typing import Any
 
+from pypdf import PdfReader
 from sqlalchemy import func, select, update
 
+from app.core.storage import storage
 from app.core.models import (
     ContentPlanItem,
     ProjectFactSheet,
+    ProjectFile,
     RequirementRegister,
     TpOutline,
     WbsItem,
@@ -56,6 +62,15 @@ CATEGORY_LABELS = {
 }
 
 
+@dataclass(frozen=True)
+class MandatoryHeading:
+    number: str
+    title: str
+    page: int
+    source_quote: str
+    source_file_id: str = ""
+
+
 def _clean(value: Any) -> str:
     return re.sub(r"\s+", " ", str(value or "").replace("\xa0", " ")).strip()
 
@@ -73,6 +88,256 @@ def _tokens(value: Any) -> set[str]:
         token
         for token in re.findall(r"[а-яa-z0-9]{3,}", _normalized(value))
         if token not in STOPWORDS
+    }
+
+
+def _extract_mandatory_headings(
+    pages: list[tuple[int, str]],
+    *,
+    source_file_id: str = "",
+) -> list[MandatoryHeading]:
+    """Extract the tender's explicit minimum numbered programme structure."""
+    marker = "програма за организация и изпълнение на поръчката"
+    found_marker = False
+    headings: list[MandatoryHeading] = []
+    seen_numbers: set[str] = set()
+    last_top = 0
+
+    for page, page_text in pages:
+        lines = [_clean(line) for line in str(page_text or "").splitlines()]
+        index = 0
+        while index < len(lines):
+            line = lines[index]
+            if not found_marker:
+                if marker in _normalized(line):
+                    found_marker = True
+                index += 1
+                continue
+
+            match = re.match(r"^(\d+(?:\.\d+)*)\s*(?:\.\s*|\s+)(.+)$", line)
+            if not match:
+                index += 1
+                continue
+
+            number, title = match.groups()
+            while (
+                index + 1 < len(lines)
+                and lines[index + 1]
+                and lines[index + 1][0].islower()
+                and len(f"{title} {lines[index + 1]}") <= 220
+            ):
+                index += 1
+                title = f"{title} {lines[index]}"
+            title = _clean(title).strip(" .:")
+            top = int(number.split(".", 1)[0])
+
+            if not headings and top != 1:
+                index += 1
+                continue
+            if "." not in number:
+                if top < last_top or top > last_top + 1:
+                    return headings
+                last_top = top
+            elif top != last_top:
+                index += 1
+                continue
+            if number not in seen_numbers and title:
+                headings.append(
+                    MandatoryHeading(
+                        number=number,
+                        title=title,
+                        page=page,
+                        source_quote=f"{number}. {title}",
+                        source_file_id=source_file_id,
+                    )
+                )
+                seen_numbers.add(number)
+            index += 1
+    return headings
+
+
+def _pdf_pages(content: bytes) -> list[tuple[int, str]]:
+    reader = PdfReader(io.BytesIO(content))
+    return [
+        (page_number, page.extract_text() or "")
+        for page_number, page in enumerate(reader.pages, start=1)
+    ]
+
+
+async def _load_mandatory_headings(project_id: str, db) -> list[MandatoryHeading]:
+    result = await db.execute(
+        select(ProjectFile)
+        .where(
+            ProjectFile.project_id == project_id,
+            ProjectFile.module == "tender_docs",
+            ProjectFile.ingest_status == "done",
+        )
+        .order_by(ProjectFile.uploaded_at, ProjectFile.id)
+    )
+    best: list[MandatoryHeading] = []
+    for project_file in result.scalars().all():
+        if not project_file.filename.casefold().endswith(".pdf"):
+            continue
+        try:
+            content = await storage.get_object(project_file.storage_key)
+            pages = await asyncio.to_thread(_pdf_pages, content)
+        except Exception:
+            continue
+        headings = _extract_mandatory_headings(
+            pages,
+            source_file_id=project_file.id,
+        )
+        if len(headings) > len(best):
+            best = headings
+    return best
+
+
+def _heading_anchor(
+    item: RequirementRegister,
+    headings: list[MandatoryHeading],
+) -> MandatoryHeading | None:
+    path = [_clean(part) for part in (item.proposal_path_json or []) if _clean(part)]
+    path_text = _normalized(" ".join(path))
+    if path and _normalized(path[0]) == "предложение за изпълнение на поръчката":
+        return None
+    if any(
+        marker in path_text
+        for marker in (
+            "линеен график", "линеен календарен", "подробен линеен",
+            "документи за предлаганите изделия", "ценово предложение",
+            "доказателства за технически и професионални способности",
+        )
+    ):
+        return None
+
+    by_number = {heading.number: heading for heading in headings}
+    numeric_anchor: MandatoryHeading | None = None
+    for part in path:
+        match = re.match(r"^(\d+(?:\.\d+)*)\s*[.)]?", part)
+        if match and match.group(1) in by_number:
+            numeric_anchor = by_number[match.group(1)]
+    if (
+        item.source_page
+        and item.source_page > max(heading.page for heading in headings)
+        and not numeric_anchor
+        and not any(_normalized(heading.title) in path_text for heading in headings)
+    ):
+        return None
+
+    meaningful_segments = [
+        _title(segment)
+        for segment in path
+        if re.findall(r"[а-яa-z0-9]{3,}", _normalized(_title(segment)))
+        and _normalized(_title(segment)) not in {
+            *GENERIC_ROOTS,
+            _normalized(PROGRAM_ROOT),
+            "основен документ",
+            "раздел",
+        }
+    ]
+
+    def similarity(segment: str, heading: MandatoryHeading) -> float:
+        grammar_words = {"за", "на", "по", "при", "към", "върху", "време", "оглед"}
+        segment_tokens = {
+            token
+            for token in re.findall(r"[а-яa-z0-9]{3,}", _normalized(segment))
+            if token not in grammar_words
+        }
+        heading_tokens = {
+            token
+            for token in re.findall(r"[а-яa-z0-9]{3,}", _normalized(heading.title))
+            if token not in grammar_words
+        }
+        if not segment_tokens or not heading_tokens:
+            return 0.0
+        overlap = len(segment_tokens & heading_tokens)
+        return max(overlap / len(segment_tokens), overlap / len(heading_tokens))
+
+    top_number = numeric_anchor.number.split(".")[0] if numeric_anchor else None
+    if not top_number:
+        distinctive_roots = (
+            (("гаранцион",), "гаранцион"),
+            (("негатив", "смр"), "минимизиране"),
+            (("негатив", "строител"), "минимизиране"),
+            (("околна среда",), "околна среда"),
+            (("еколог",), "околна среда"),
+            (("качеств",), "качеств"),
+            (("управление на риска",), "управление на риска"),
+        )
+        for required_markers, heading_marker in distinctive_roots:
+            if all(marker in path_text for marker in required_markers):
+                matched = next(
+                    (
+                        heading
+                        for heading in headings
+                        if "." not in heading.number
+                        and heading_marker in _normalized(heading.title)
+                    ),
+                    None,
+                )
+                if matched:
+                    top_number = matched.number
+                    break
+    if not top_number:
+        top_headings = [heading for heading in headings if "." not in heading.number]
+        top_scores = [
+            (
+                sum(
+                    max(
+                        (
+                            similarity(segment, candidate)
+                            for candidate in headings
+                            if candidate.number == heading.number
+                            or candidate.number.startswith(f"{heading.number}.")
+                        ),
+                        default=0.0,
+                    )
+                    for segment in meaningful_segments
+                ),
+                heading,
+            )
+            for heading in top_headings
+        ]
+        best_top_score, best_top = max(top_scores, key=lambda pair: pair[0], default=(0.0, None))
+        if best_top and best_top_score >= 0.5:
+            top_number = best_top.number
+    if not top_number:
+        return None
+
+    candidates = [
+        heading
+        for heading in headings
+        if heading.number == top_number or heading.number.startswith(f"{top_number}.")
+    ]
+    scored: list[tuple[float, int, MandatoryHeading]] = []
+    for heading in candidates:
+        best_score = 0.0
+        for index, segment in enumerate(reversed(meaningful_segments)):
+            recency_weight = max(1.0, 1.2 - index * 0.1)
+            best_score = max(best_score, similarity(segment, heading) * recency_weight)
+        if numeric_anchor and heading.number == numeric_anchor.number:
+            best_score = max(best_score, 0.9)
+        scored.append((best_score, heading.number.count("."), heading))
+    best_score, _, best_heading = max(scored, key=lambda value: (value[0], value[1]))
+
+    leaf = _normalized(_title(path[-1])) if path else ""
+    if best_heading.number == top_number and leaf not in {
+        _normalized(best_heading.title), "основен документ", "раздел", "подраздел",
+    }:
+        first_child = by_number.get(f"{top_number}.1")
+        if first_child:
+            return first_child
+    return best_heading if best_score >= 0.5 else numeric_anchor
+
+
+def _is_heading_level_requirement(item: RequirementRegister, heading: MandatoryHeading) -> bool:
+    path = [_title(part) for part in (item.proposal_path_json or []) if _title(part)]
+    leaf = _normalized(path[-1]) if path else ""
+    return leaf in {
+        _normalized(heading.title),
+        "основен документ",
+        "раздел",
+        "подраздел",
     }
 
 
@@ -316,6 +581,157 @@ async def sync_outline_from_content_plan(outline_id: str, db) -> TpOutline:
     return outline
 
 
+async def _populate_from_mandatory_headings(
+    *,
+    project_id: str,
+    outline: TpOutline,
+    headings: list[MandatoryHeading],
+    requirements: list[RequirementRegister],
+    wbs_items: list[WbsItem],
+    facts: dict[str, Any],
+    db,
+) -> None:
+    nodes_by_number: dict[str, ContentPlanItem] = {}
+    all_nodes: list[ContentPlanItem] = []
+    supplemental: dict[tuple[str, str], ContentPlanItem] = {}
+
+    for heading in headings:
+        parent_number = heading.number.rsplit(".", 1)[0] if "." in heading.number else None
+        parent = nodes_by_number.get(parent_number) if parent_number else None
+        item = ContentPlanItem(
+            id=str(uuid.uuid4()),
+            project_id=project_id,
+            outline_id=outline.id,
+            parent_id=parent.id if parent else None,
+            uid=str(uuid.uuid4()),
+            number=heading.number,
+            title=heading.title,
+            source_quotes_json=[{
+                "requirement_id": "",
+                "source_file_id": heading.source_file_id,
+                "source_page": heading.page,
+                "source_quote": heading.source_quote,
+                "source_kind": "mandatory_heading",
+            }],
+            acceptance_criteria_json=[],
+            content_kind="mixed",
+            linked_wbs_ids=[],
+            linked_fact_keys=[],
+            order_index=int(heading.number.split(".")[-1]),
+            status="draft",
+            generation_uid=None,
+        )
+        db.add(item)
+        nodes_by_number[heading.number] = item
+        all_nodes.append(item)
+
+    for requirement in requirements:
+        if requirement.scope != "proposal_content":
+            continue
+        heading = _heading_anchor(requirement, headings)
+        if not heading:
+            continue
+        target = nodes_by_number[heading.number]
+        raw_path = [_clean(part) for part in (requirement.proposal_path_json or []) if _clean(part)]
+        leaf_title = _title(raw_path[-1]) if raw_path else heading.title
+        if not _is_heading_level_requirement(requirement, heading) and leaf_title:
+            key = (target.id, _normalized(leaf_title))
+            child = supplemental.get(key)
+            if child is None:
+                child = ContentPlanItem(
+                    id=str(uuid.uuid4()),
+                    project_id=project_id,
+                    outline_id=outline.id,
+                    parent_id=target.id,
+                    uid=str(uuid.uuid4()),
+                    number="",
+                    title=leaf_title,
+                    source_quotes_json=[],
+                    acceptance_criteria_json=[],
+                    content_kind=_content_kind(requirement, [heading.title, leaf_title]),
+                    linked_wbs_ids=[],
+                    linked_fact_keys=[],
+                    order_index=len(supplemental) + 100,
+                    status="draft",
+                    generation_uid=None,
+                )
+                db.add(child)
+                supplemental[key] = child
+                all_nodes.append(child)
+            target = child
+
+        source_entry = {
+            "requirement_id": requirement.id,
+            "source_file_id": requirement.source_file_id,
+            "source_page": requirement.source_page,
+            "source_quote": requirement.source_quote,
+        }
+        if source_entry not in target.source_quotes_json:
+            target.source_quotes_json = [*target.source_quotes_json, source_entry]
+        criteria_texts = [
+            _clean(value)
+            for value in (requirement.acceptance_criteria_json or [])
+            if _clean(value)
+        ] or [_clean(requirement.normalized_text)]
+        criteria = list(target.acceptance_criteria_json)
+        for index, text in enumerate(criteria_texts, start=1):
+            criterion = {
+                "id": str(uuid.uuid5(uuid.NAMESPACE_URL, f"{requirement.id}:{index}:{text}")),
+                "text": text,
+                "kind": requirement.kind,
+                "source_quote": requirement.source_quote,
+                "requirement_id": requirement.id,
+                "requirement_text": requirement.normalized_text,
+                "scope": requirement.scope,
+            }
+            if not any(existing.get("id") == criterion["id"] for existing in criteria):
+                criteria.append(criterion)
+        target.acceptance_criteria_json = criteria
+        new_kind = _content_kind(requirement, [heading.title, target.title])
+        target.content_kind = new_kind if target.content_kind == "mixed" else (
+            target.content_kind if target.content_kind == new_kind else "mixed"
+        )
+
+    children_by_parent: dict[str | None, list[ContentPlanItem]] = defaultdict(list)
+    for item in all_nodes:
+        children_by_parent[item.parent_id].append(item)
+
+    for parent_id, children in children_by_parent.items():
+        mandatory_children = [child for child in children if child.number]
+        extra_children = [child for child in children if not child.number]
+        if not extra_children:
+            continue
+        parent = next((item for item in all_nodes if item.id == parent_id), None)
+        if not parent:
+            continue
+        next_index = max(
+            [int(child.number.split(".")[-1]) for child in mandatory_children] or [0]
+        )
+        for offset, child in enumerate(extra_children, start=1):
+            child.number = f"{parent.number}.{next_index + offset}"
+            child.order_index = next_index + offset
+
+    for item in all_nodes:
+        criteria = [entry for entry in item.acceptance_criteria_json if isinstance(entry, dict)]
+        item.linked_wbs_ids = _wbs_links(item.title, criteria, wbs_items)
+        item.linked_fact_keys = _fact_links(item.title, criteria, facts)
+        if not children_by_parent.get(item.id):
+            if not criteria:
+                criterion_text = f"Разработена е задължителната точка „{item.title}“ от минималното съдържание."
+                item.acceptance_criteria_json = [{
+                    "id": str(uuid.uuid5(uuid.NAMESPACE_URL, f"mandatory:{outline.id}:{item.number}")),
+                    "text": criterion_text,
+                    "kind": "content",
+                    "source_quote": item.source_quotes_json[0]["source_quote"],
+                    "requirement_id": "",
+                    "requirement_text": criterion_text,
+                    "scope": "proposal_content",
+                }]
+            item.generation_uid = str(uuid.uuid4())
+
+    await db.flush()
+
+
 async def build_content_plan(project_id: str, db) -> TpOutline:
     requirement_result = await db.execute(
         select(RequirementRegister)
@@ -349,6 +765,7 @@ async def build_content_plan(project_id: str, db) -> TpOutline:
         "wbs_confirmed": bool(wbs_items) and all(item.status == "confirmed" for item in wbs_items),
         "fact_sheet_confirmed": bool(fact_sheet and fact_sheet.status == "confirmed"),
     }
+    mandatory_headings = await _load_mandatory_headings(project_id, db)
 
     version_result = await db.execute(
         select(func.max(TpOutline.version)).where(TpOutline.project_id == project_id)
@@ -367,6 +784,25 @@ async def build_content_plan(project_id: str, db) -> TpOutline:
     )
     db.add(outline)
     await db.flush()
+
+    if mandatory_headings:
+        await _populate_from_mandatory_headings(
+            project_id=project_id,
+            outline=outline,
+            headings=mandatory_headings,
+            requirements=requirements,
+            wbs_items=wbs_items,
+            facts=facts,
+            db=db,
+        )
+        await sync_outline_from_content_plan(outline.id, db)
+        outline.outline_json = {
+            **outline.outline_json,
+            "understanding_status": understanding_status,
+            "mandatory_structure_source": "tender_document_numbered_headings",
+        }
+        await db.flush()
+        return outline
 
     nodes: dict[tuple[str | None, str], ContentPlanItem] = {}
     insertion = 0

@@ -95,7 +95,7 @@ export default function OutlinePanel({ projectId, refreshKey = 0 }: Props) {
         <button type="button" onClick={() => void load()} className="text-gray-400 hover:text-blue-600">↻</button>
       </div>
       <p className="rounded bg-blue-50 p-2 text-[11px] text-blue-800">
-        Този план е построен от „Разбиране на изискванията“. Всяка работна подточка има проверими критерии и цитати от документацията.
+        Задължителната номерация и заглавия са възпроизведени директно от минималното съдържание в документацията. Допълнителните подподточки са обосновани с изискванията от „Разбиране“ и имат проверими критерии и цитати.
       </p>
       {!understandingReady && (
         <p data-testid="content-plan-understanding-warning" className="rounded bg-amber-50 p-2 text-[11px] text-amber-800">
@@ -197,6 +197,9 @@ function PlanItemEditor({
   const [criteriaText, setCriteriaText] = useState(
     item.acceptance_criteria_json.map((criterion) => criterion.text).join("\n"),
   );
+  const mandatory = item.source_quotes_json.some(
+    (source) => source.source_kind === "mandatory_heading",
+  );
 
   const save = async () => {
     const lines = criteriaText.split("\n").map((line) => line.trim()).filter(Boolean);
@@ -231,6 +234,9 @@ function PlanItemEditor({
         {item.generation_uid && (
           <span className="rounded bg-blue-50 px-1 text-[10px] text-blue-700">{item.acceptance_criteria_json.length}</span>
         )}
+        {mandatory && (
+          <span className="rounded bg-amber-50 px-1 text-[10px] text-amber-700">задължително</span>
+        )}
         {!locked && (
           <button type="button" onClick={() => setEditing((value) => !value)} className="text-[10px] text-blue-600">редакция</button>
         )}
@@ -240,7 +246,7 @@ function PlanItemEditor({
         <div className="mt-1 space-y-1 pl-5">
           {editing ? (
             <div className="space-y-1 rounded bg-gray-50 p-2">
-              <input aria-label="Заглавие на точката" value={title} onChange={(event) => setTitle(event.target.value)} className="w-full rounded border p-1 text-xs" />
+              <input aria-label="Заглавие на точката" disabled={mandatory} value={title} onChange={(event) => setTitle(event.target.value)} className="w-full rounded border p-1 text-xs disabled:bg-gray-100" />
               <select aria-label="Вид съдържание" value={kind} onChange={(event) => setKind(event.target.value as ContentPlanItem["content_kind"])} className="w-full rounded border p-1 text-xs">
                 <option value="reuse">Типова методология</option>
                 <option value="specific">Специфично за поръчката</option>

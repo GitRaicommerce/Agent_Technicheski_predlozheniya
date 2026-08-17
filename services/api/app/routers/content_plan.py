@@ -153,7 +153,17 @@ async def update_content_plan_item(
     outline = await db.get(TpOutline, item.outline_id)
     if not outline or outline.status_locked:
         raise HTTPException(status_code=409, detail="Одобреният план първо трябва да бъде отключен.")
-    for field, value in data.model_dump(exclude_unset=True).items():
+    changes = data.model_dump(exclude_unset=True)
+    mandatory = any(
+        isinstance(source, dict) and source.get("source_kind") == "mandatory_heading"
+        for source in (item.source_quotes_json or [])
+    )
+    if mandatory and "title" in changes and changes["title"].strip() != item.title:
+        raise HTTPException(
+            status_code=409,
+            detail="Заглавието е задължително и е извлечено дословно от документацията.",
+        )
+    for field, value in changes.items():
         setattr(item, field, value)
     await db.flush()
     await sync_outline_from_content_plan(item.outline_id, db)

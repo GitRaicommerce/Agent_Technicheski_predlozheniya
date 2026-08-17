@@ -124,6 +124,24 @@ describe("OutlinePanel Phase 2", () => {
     expect(screen.getByTestId("content-plan-approve-button")).toBeDisabled();
   });
 
+  it("keeps tender-mandated headings visibly locked", async () => {
+    vi.mocked(api.contentPlan.get).mockResolvedValue({
+      ...plan,
+      items: [{
+        ...plan.items[0],
+        source_quotes_json: [{
+          ...plan.items[0].source_quotes_json[0],
+          source_kind: "mandatory_heading",
+        }],
+      }],
+    });
+    render(<OutlinePanel projectId="project-1" />);
+
+    expect(await screen.findByText("задължително")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "редакция" }));
+    expect(screen.getByLabelText("Заглавие на точката")).toBeDisabled();
+  });
+
   it("edits a point title, classification, and acceptance criteria", async () => {
     vi.mocked(api.contentPlan.get).mockResolvedValue(plan);
     vi.mocked(api.contentPlan.updateItem).mockResolvedValue({
