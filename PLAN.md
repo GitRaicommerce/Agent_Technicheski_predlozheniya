@@ -261,7 +261,7 @@
 - Separated "complete missing sections" from "new version of all sections": explicit full-regeneration intents and the Generations action now create and select a new revision for every approved outline section instead of silently reusing old text.
 - Bound drafting, generation history, verification, and export readiness to the latest approved outline, so a newer unapproved outline draft cannot hide existing text or receive a "new generation" command; legacy jobs that claim completion without persisted text are now shown as incomplete using the actual available section count.
 - Made the empty-generation state plan-aware: an unapproved Phase 2 plan now blocks job creation before any provider call, names the exact plan version and outstanding Understanding reviews, and explains that generations from earlier structures remain separate history rather than being silently reused.
-- Removed the winning/reference-proposal back-check from Understanding: uploaded example proposals are now explicitly optional writing-style/depth references and cannot create requirements, plan structure, project facts, activities, or alleged gaps for the new procurement.
+- Removed the winning/reference-proposal back-check from Understanding: uploaded example proposals are now optional forlage for reusing and adapting applicable texts, technical descriptions and methodologies, but cannot create requirements, plan structure, project facts, activities, or alleged gaps for the new procurement.
 
 ## Active Goals
 

@@ -329,7 +329,12 @@ async def test_drafting_prompt_and_saved_generation_include_grounding_context(mo
             section_uid=section_uid,
             section_title="Разработване на инвестиционен проект",
             section_requirements=[],
-            evidence_snippets=[],
+            evidence_snippets=[
+                {
+                    "snippet_id": "forlage-vik",
+                    "text": "Методология за разработване на проект по част ВиК.",
+                }
+            ],
             schedule_summary=None,
             lex_citations=[],
             db=mock_db,
@@ -338,10 +343,15 @@ async def test_drafting_prompt_and_saved_generation_include_grounding_context(mo
         )
 
     prompt = llm_call.await_args.kwargs["user_message"]
+    system_prompt = llm_call.await_args.kwargs["system_prompt"]
     saved_generation = mock_db.add.call_args.args[0]
 
     assert "PROJECT GROUNDING CONTEXT" in prompt
     assert "DRAFTING BLUEPRINT" in prompt
+    assert "FORLAGE / REUSABLE EXAMPLE TEXTS" in prompt
+    assert "Методология за разработване на проект по част ВиК." in prompt
+    assert "Reuse and adapt relevant passages" in system_prompt
+    assert "cannot create requirements" in system_prompt
     assert "Геодезия" in prompt
     assert "ПУСО" in prompt
     assert saved_generation.used_sources_json["grounding_context"] == grounding_context
