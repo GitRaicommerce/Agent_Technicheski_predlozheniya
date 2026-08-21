@@ -25,8 +25,7 @@ def _missing_approved_outline_message(latest_outline: TpOutline | None) -> str:
     if latest_outline:
         return (
             f"Подробният план v{latest_outline.version} още не е одобрен. "
-            "Потвърдете WBS и Fact sheet в „Разбиране на изискванията“, "
-            "след което одобрете подробния план."
+            "Прегледайте и одобрете подробния план, след което стартирайте генерирането."
         )
     return (
         "Няма създаден подробен план на техническото предложение. "
@@ -600,13 +599,21 @@ async def create_drafting_job(
     target_guidance: dict[str, dict[str, Any]] | None = None,
     job_type: str = "drafting_all",
 ) -> GenerationJob:
+    outline = await _approved_outline(project.id, db)
+    if not outline:
+        latest_outline = await _latest_outline(project.id, db)
+        raise ValueError(_missing_approved_outline_message(latest_outline))
+
     trace_id = str(uuid.uuid4())
-    result_json = None
+    result_json: dict[str, Any] = {
+        "outline_id": outline.id,
+        "outline_version": outline.version,
+    }
     if target_section_uids is not None:
-        result_json = {
+        result_json.update({
             "target_section_uids": target_section_uids,
             "target_reason": target_reason,
-        }
+        })
         if target_guidance is not None:
             result_json["target_guidance"] = target_guidance
 

@@ -18,6 +18,13 @@ from app.core.database import get_db
 from app.core.models import Project
 
 router = APIRouter()
+
+DRAFTING_JOB_TYPES = {
+    "drafting_all",
+    "drafting_stale",
+    "drafting_quality",
+    "drafting_requirements",
+}
 limiter = Limiter(key_func=get_remote_address)
 log = structlog.get_logger()
 
@@ -575,7 +582,10 @@ async def get_latest_generation_job(
 
     result = await db.execute(
         select(GenerationJob)
-        .where(GenerationJob.project_id == project_id)
+        .where(
+            GenerationJob.project_id == project_id,
+            GenerationJob.job_type.in_(DRAFTING_JOB_TYPES),
+        )
         .order_by(GenerationJob.created_at.desc())
         .limit(1)
     )

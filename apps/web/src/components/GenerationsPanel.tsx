@@ -49,6 +49,7 @@ export default function GenerationsPanel({
     useState(false);
   const [generationJob, setGenerationJob] = useState<GenerationJob | null>(null);
   const [contentPlan, setContentPlan] = useState<ContentPlan | null>(null);
+  const [approvingAndStarting, setApprovingAndStarting] = useState(false);
   const hasLoadedRef = useRef(false);
 
   const load = useCallback(async () => {
@@ -62,8 +63,14 @@ export default function GenerationsPanel({
       api.contentPlan.get(projectId),
     ])
       .then(([nextSections, nextJob, nextContentPlan]) => {
+        const jobOutlineId = nextJob?.result_json?.outline_id;
+        const relevantJob =
+          nextContentPlan?.status_locked &&
+          jobOutlineId !== nextContentPlan.outline_id
+            ? null
+            : nextJob;
         setSections(nextSections);
-        setGenerationJob(nextJob);
+        setGenerationJob(relevantJob);
         setContentPlan(nextContentPlan);
       })
       .catch((e: unknown) =>
@@ -188,6 +195,26 @@ export default function GenerationsPanel({
     }
   };
 
+  const handleApproveAndStart = async () => {
+    const confirmed = window.confirm(
+      "Да се одобри ли текущият подробен план и да се стартира LLM генериране на липсващите раздели?",
+    );
+    if (!confirmed) return;
+    setApprovingAndStarting(true);
+    setError(null);
+    try {
+      const approvedPlan = await api.contentPlan.approve(projectId);
+      setContentPlan(approvedPlan);
+      const nextJob = await api.agents.retryGenerationJob(projectId);
+      setGenerationJob(nextJob);
+      await load();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Неуспешно одобряване и стартиране.");
+    } finally {
+      setApprovingAndStarting(false);
+    }
+  };
+
   const handleResumeGenerationJob = async () => {
     if (!generationJob) return;
     setResumingJob(true);
@@ -300,30 +327,20 @@ export default function GenerationsPanel({
 
   const planNeedsApproval = contentPlan && !contentPlan.status_locked;
   if (planNeedsApproval) {
-    const missingUnderstandingReviews = [
-      !contentPlan.understanding_status.wbs_confirmed ? "WBS" : null,
-      !contentPlan.understanding_status.fact_sheet_confirmed ? "Fact sheet" : null,
-    ].filter(Boolean);
-
     return (
       <div className="space-y-2" data-testid="generation-plan-not-approved">
         <p className="text-xs leading-relaxed text-amber-300">
-          За текущия подробен план v{contentPlan.version} още няма генерирани
-          текстове. {missingUnderstandingReviews.length > 0
-            ? `Потвърдете ${missingUnderstandingReviews.join(" и ")} в „Разбиране на изискванията“, а след това одобрете плана.`
-            : "Одобрете плана, след което стартирайте генерирането."}
+          Текущият подробен план v{contentPlan.version} е чернова. Одобрението на плана е достатъчно, за да започне генерирането; WBS и данните за проекта са помощни и не го блокират.
         </p>
         <p className="text-xs leading-relaxed text-gray-400">
           {sections.length > 0
             ? `${sections.length} ${sections.length === 1 ? "раздел" : "раздела"} от предишната структура ${sections.length === 1 ? "е запазен" : "са запазени"} като история, но не се прехвърлят автоматично към новия план.`
             : "Генерациите от предишни версии се пазят отделно и не се прехвърлят автоматично към новата структура."}
         </p>
-        <button
-          onClick={load}
-          className="text-xs text-blue-500 hover:underline"
-        >
-          Обнови
+        <button type="button" disabled={approvingAndStarting} onClick={() => void handleApproveAndStart()} data-testid="generation-approve-and-start-button" className="w-full rounded bg-blue-600 px-3 py-2 text-xs font-medium text-white disabled:opacity-50">
+          {approvingAndStarting ? "Стартира се..." : "Одобри плана и стартирай генерирането"}
         </button>
+        <button onClick={load} className="text-xs text-blue-500 hover:underline">Провери състоянието</button>
       </div>
     );
   }
@@ -349,6 +366,7 @@ export default function GenerationsPanel({
           regeneratingAll={regeneratingAllJob}
           onComplete={handleRetryGenerationJob}
           onRegenerateAll={handleRegenerateAllSections}
+          hasExistingSections={false}
         />
         <p className="text-xs leading-relaxed text-gray-400">
           {contentPlan?.status_locked ? (
@@ -357,12 +375,7 @@ export default function GenerationsPanel({
             <>Все още няма генерирани текстове. Създайте и одобрете подробен план в „Разбиране на изискванията“.</>
           )}
         </p>
-        <button
-          onClick={load}
-          className="text-xs text-blue-500 hover:underline"
-        >
-          Обнови
-        </button>
+        <button onClick={load} className="text-xs text-blue-500 hover:underline">Провери състоянието</button>
       </div>
     );
   }
@@ -405,6 +418,7 @@ export default function GenerationsPanel({
         regeneratingAll={regeneratingAllJob}
         onComplete={handleRetryGenerationJob}
         onRegenerateAll={handleRegenerateAllSections}
+        hasExistingSections={sections.length > 0}
       />
       <StaleRegenerationAction
         staleSectionCount={countStaleSelectedSections(sections)}
@@ -1023,12 +1037,14 @@ function GenerationStartActions({
   regeneratingAll,
   onComplete,
   onRegenerateAll,
+  hasExistingSections,
 }: {
   generationJob: GenerationJob | null;
   completing: boolean;
   regeneratingAll: boolean;
   onComplete: () => void;
   onRegenerateAll: () => void;
+  hasExistingSections: boolean;
 }) {
   const unavailable =
     generationJob?.status === "queued" ||
@@ -1045,7 +1061,7 @@ function GenerationStartActions({
         data-testid="generation-complete-missing-button"
         className="rounded border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
       >
-        {completing ? "Стартира..." : "Довърши липсващите"}
+        {completing ? "Стартира..." : hasExistingSections ? "Довърши липсващите" : "Стартирай генерирането"}
       </button>
       <button
         type="button"

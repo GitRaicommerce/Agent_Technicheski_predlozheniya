@@ -678,11 +678,19 @@ async def test_create_drafting_stale_job_targets_selected_stale_sections(mock_db
     mock_db.flush = AsyncMock()
     mock_db.commit = AsyncMock()
 
-    with patch("app.agents.generation_jobs._enqueue_generation_job") as enqueue:
+    with (
+        patch("app.agents.generation_jobs._enqueue_generation_job") as enqueue,
+        patch(
+            "app.agents.generation_jobs._approved_outline",
+            new=AsyncMock(return_value=SimpleNamespace(id="outline-12", version=12)),
+        ),
+    ):
         job = await create_drafting_stale_job(project, mock_db)
 
     assert job.job_type == "drafting_stale"
     assert job.result_json == {
+        "outline_id": "outline-12",
+        "outline_version": 12,
         "target_section_uids": [stale_uid],
         "target_reason": "stale_selected",
     }
@@ -699,6 +707,10 @@ async def test_create_drafting_quality_job_targets_quality_sections(mock_db):
 
     with (
         patch("app.agents.generation_jobs._enqueue_generation_job") as enqueue,
+        patch(
+            "app.agents.generation_jobs._approved_outline",
+            new=AsyncMock(return_value=SimpleNamespace(id="outline-12", version=12)),
+        ),
         patch(
             "app.routers.export._load_selected_generations",
             new=AsyncMock(return_value=selected_generations),
@@ -755,6 +767,8 @@ async def test_create_drafting_quality_job_targets_quality_sections(mock_db):
 
     assert job.job_type == "drafting_quality"
     assert job.result_json == {
+        "outline_id": "outline-12",
+        "outline_version": 12,
         "target_section_uids": ["sec-quality"],
         "target_reason": "quality_review",
         "target_guidance": {
@@ -830,6 +844,10 @@ async def test_create_drafting_requirements_job_filters_requested_missing_sectio
 
     with (
         patch("app.agents.generation_jobs._enqueue_generation_job") as enqueue,
+        patch(
+            "app.agents.generation_jobs._approved_outline",
+            new=AsyncMock(return_value=SimpleNamespace(id="outline-12", version=12)),
+        ),
         patch(
             "app.routers.export._load_selected_generations",
             new=AsyncMock(return_value=selected_generations),
@@ -927,6 +945,10 @@ async def test_create_drafting_requirements_job_targets_missing_requirement_sect
     with (
         patch("app.agents.generation_jobs._enqueue_generation_job") as enqueue,
         patch(
+            "app.agents.generation_jobs._approved_outline",
+            new=AsyncMock(return_value=SimpleNamespace(id="outline-12", version=12)),
+        ),
+        patch(
             "app.routers.export._load_selected_generations",
             new=AsyncMock(return_value=selected_generations),
         ) as load_selected,
@@ -992,6 +1014,8 @@ async def test_create_drafting_requirements_job_targets_missing_requirement_sect
 
     assert job.job_type == "drafting_requirements"
     assert job.result_json == {
+        "outline_id": "outline-12",
+        "outline_version": 12,
         "target_section_uids": ["sec-missing"],
         "target_reason": "missing_requirements",
         "target_guidance": {

@@ -190,21 +190,6 @@ async def approve_content_plan(project_id: str, db: AsyncSession = Depends(get_d
             status_code=409,
             detail="Липсват критерии за приемане в точки: " + ", ".join(missing),
         )
-    understanding_status = await _understanding_status(project_id, db)
-    missing_reviews = []
-    if not understanding_status["wbs_confirmed"]:
-        missing_reviews.append("дейностите (WBS)")
-    if not understanding_status["fact_sheet_confirmed"]:
-        missing_reviews.append("fact sheet")
-    if missing_reviews:
-        raise HTTPException(
-            status_code=409,
-            detail=(
-                "Преди одобряване на подробния план потвърдете в „Разбиране на изискванията“: "
-                + ", ".join(missing_reviews)
-                + "."
-            ),
-        )
     await db.execute(
         update(TpOutline)
         .where(TpOutline.project_id == project_id, TpOutline.id != outline.id)

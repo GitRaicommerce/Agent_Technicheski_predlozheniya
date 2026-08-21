@@ -361,6 +361,8 @@ async def test_get_latest_generation_job(client, mock_db):
     assert data["status"] == "processing"
     assert data["completed_sections"] == 2
     assert data["skipped_sections"] == 1
+    query = str(mock_db.execute.await_args.args[0]).lower()
+    assert "job_type" in query
 
 
 # ---------------------------------------------------------------------------

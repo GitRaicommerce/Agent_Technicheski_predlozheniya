@@ -98,8 +98,8 @@ export default function OutlinePanel({ projectId, refreshKey = 0 }: Props) {
         Задължителната номерация и заглавия са възпроизведени директно от минималното съдържание в документацията. Допълнителните подподточки са обосновани с изискванията от „Разбиране“ и имат проверими критерии и цитати.
       </p>
       {!understandingReady && (
-        <p data-testid="content-plan-understanding-warning" className="rounded bg-amber-50 p-2 text-[11px] text-amber-800">
-          Планът е наличен за преглед, но преди одобряването му потвърдете „Дейности“ и „Fact sheet“ в модула „Разбиране на изискванията“.
+        <p data-testid="content-plan-understanding-warning" className="rounded bg-blue-50 p-2 text-[11px] text-blue-800">
+          „Дейности“ и „Данни за проекта“ още не са потвърдени. Те са помощни за генерирането, но не блокират Вашето одобрение на подробния план.
         </p>
       )}
 
@@ -147,7 +147,7 @@ export default function OutlinePanel({ projectId, refreshKey = 0 }: Props) {
         <button
           type="button"
           data-testid="content-plan-approve-button"
-          disabled={busy || generatableCount === 0 || !understandingReady}
+          disabled={busy || generatableCount === 0}
           onClick={() => act(() => api.contentPlan.approve(projectId))}
           className="w-full rounded bg-green-600 px-3 py-1.5 text-xs text-white disabled:opacity-50"
         >

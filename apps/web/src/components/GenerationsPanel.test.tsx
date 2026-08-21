@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import GenerationsPanel from "./GenerationsPanel";
-import { api } from "@/lib/api";
+import { api, type ContentPlan } from "@/lib/api";
 
 vi.mock("@/lib/api", async () => {
   const actual = await vi.importActual<typeof import("@/lib/api")>("@/lib/api");
@@ -30,6 +30,7 @@ vi.mock("@/lib/api", async () => {
       contentPlan: {
         ...actual.api.contentPlan,
         get: vi.fn(),
+        approve: vi.fn(),
       },
     },
   };
@@ -58,6 +59,7 @@ const resolveDuplicateSelectedGenerationsMock = vi.mocked(
 );
 const selectGenerationMock = vi.mocked(api.agents.selectGeneration);
 const getContentPlanMock = vi.mocked(api.contentPlan.get);
+const approveContentPlanMock = vi.mocked(api.contentPlan.approve);
 
 describe("GenerationsPanel", () => {
   beforeEach(() => {
@@ -77,7 +79,7 @@ describe("GenerationsPanel", () => {
     expect(screen.queryByText("Section 1")).not.toBeInTheDocument();
   });
 
-  it("explains why an unapproved content plan cannot be generated", async () => {
+  it("approves a draft content plan and starts generation explicitly", async () => {
     listGenerationsMock.mockResolvedValue([
       {
         section_uid: "legacy-section",
@@ -85,7 +87,7 @@ describe("GenerationsPanel", () => {
         variants: [],
       },
     ]);
-    getContentPlanMock.mockResolvedValue({
+    const draftPlan: ContentPlan = {
       outline_id: "outline-10",
       version: 10,
       status_locked: false,
@@ -95,19 +97,62 @@ describe("GenerationsPanel", () => {
         wbs_confirmed: false,
         fact_sheet_confirmed: false,
       },
-      items: [],
+      items: [{
+        id: "item-1",
+        project_id: "project-1",
+        outline_id: "outline-10",
+        parent_id: null,
+        uid: "plan-item-1",
+        number: "1",
+        title: "Section 1",
+        source_quotes_json: [],
+        acceptance_criteria_json: [{
+          id: "criterion-1",
+          text: "Complete section",
+          kind: "content",
+        }],
+        content_kind: "specific",
+        linked_wbs_ids: [],
+        linked_fact_keys: [],
+        forlage_section_id: null,
+        order_index: 1,
+        status: "draft",
+        generation_uid: "generation-uid-1",
+      }],
+    };
+    getContentPlanMock.mockResolvedValue(draftPlan);
+    approveContentPlanMock.mockResolvedValue({ ...draftPlan, status_locked: true });
+    retryGenerationJobMock.mockResolvedValue({
+      id: "job-1",
+      project_id: "project-1",
+      job_type: "drafting_all",
+      status: "queued",
+      total_sections: 1,
+      completed_sections: 0,
+      skipped_sections: 0,
+      current_section_uid: null,
+      current_section_title: null,
+      error: null,
+      result_json: {},
+      trace_id: "trace-1",
+      created_at: "2026-04-20T10:00:00.000Z",
+      updated_at: "2026-04-20T10:00:00.000Z",
+      completed_at: null,
     });
+    vi.spyOn(window, "confirm").mockReturnValue(true);
 
     render(<GenerationsPanel projectId="project-1" />);
 
-    expect(await screen.findByText(/подробен план v10/)).toHaveTextContent(
-      "Потвърдете WBS и Fact sheet",
-    );
+    expect(await screen.findByTestId("generation-plan-not-approved")).toBeInTheDocument();
     expect(
       screen.queryByTestId("generation-complete-missing-button"),
     ).not.toBeInTheDocument();
-    expect(screen.getByText(/1 раздел от предишната структура/)).toBeInTheDocument();
-    expect(screen.queryByText("Стар раздел")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByTestId("generation-approve-and-start-button"));
+
+    await waitFor(() => {
+      expect(approveContentPlanMock).toHaveBeenCalledWith("project-1");
+      expect(retryGenerationJobMock).toHaveBeenCalledWith("project-1");
+    });
   });
 
   it("renders a section and expands its selected text", async () => {

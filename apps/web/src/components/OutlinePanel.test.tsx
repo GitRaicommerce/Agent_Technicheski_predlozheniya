@@ -109,7 +109,7 @@ describe("OutlinePanel Phase 2", () => {
     expect(await screen.findByText("✓ Планът е одобрен")).toBeInTheDocument();
   });
 
-  it("keeps approval disabled until WBS and fact sheet are confirmed", async () => {
+  it("allows explicit approval while WBS and fact sheet remain unconfirmed", async () => {
     vi.mocked(api.contentPlan.get).mockResolvedValue({
       ...plan,
       understanding_status: {
@@ -121,7 +121,7 @@ describe("OutlinePanel Phase 2", () => {
     render(<OutlinePanel projectId="project-1" />);
 
     expect(await screen.findByTestId("content-plan-understanding-warning")).toBeInTheDocument();
-    expect(screen.getByTestId("content-plan-approve-button")).toBeDisabled();
+    expect(screen.getByTestId("content-plan-approve-button")).toBeEnabled();
   });
 
   it("keeps tender-mandated headings visibly locked", async () => {

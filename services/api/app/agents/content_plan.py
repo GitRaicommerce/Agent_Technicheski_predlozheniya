@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from pypdf import PdfReader
-from sqlalchemy import func, select, update
+from sqlalchemy import func, select
 
 from app.core.storage import storage
 from app.core.models import (
@@ -776,11 +776,6 @@ async def build_content_plan(project_id: str, db) -> TpOutline:
         select(func.max(TpOutline.version)).where(TpOutline.project_id == project_id)
     )
     version = int(version_result.scalar_one_or_none() or 0) + 1
-    await db.execute(
-        update(TpOutline)
-        .where(TpOutline.project_id == project_id, TpOutline.status_locked.is_(True))
-        .values(status_locked=False, approved_at=None)
-    )
     outline = TpOutline(
         project_id=project_id,
         outline_json={"source": "understanding_content_plan", "sections": []},
