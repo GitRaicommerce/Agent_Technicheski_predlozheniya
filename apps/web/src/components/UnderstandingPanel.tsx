@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   api,
+  type ContentPlan,
+  type ContentPlanItem,
   type UnderstandingRequirement,
   type UnderstandingRequirementScope,
   type UnderstandingWbsItem,
@@ -50,6 +52,7 @@ const WBS_KINDS = ["etap", "activity", "subactivity", "task"] as const;
 
 export default function UnderstandingPanel({ projectId }: { projectId: string }) {
   const [workspace, setWorkspace] = useState<UnderstandingWorkspace | null>(null);
+  const [contentPlan, setContentPlan] = useState<ContentPlan | null>(null);
   const [tab, setTab] = useState<Tab>("requirements");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -58,8 +61,12 @@ export default function UnderstandingPanel({ projectId }: { projectId: string })
 
   const load = useCallback(async () => {
     try {
-      const result = await api.understanding.get(projectId);
+      const [result, plan] = await Promise.all([
+        api.understanding.get(projectId),
+        api.contentPlan.get(projectId),
+      ]);
       setWorkspace(result);
+      setContentPlan(plan);
       setFactsText(JSON.stringify(result.fact_sheet?.facts_json ?? {}, null, 2));
       setError(null);
     } catch (caught: unknown) {
@@ -164,9 +171,9 @@ export default function UnderstandingPanel({ projectId }: { projectId: string })
 
       <div className="grid grid-cols-3 gap-1" role="tablist" aria-label="Артефакти от анализа">
         {([
-          ["requirements", "Изисквания"],
-          ["wbs", "Дейности"],
-          ["facts", "Fact sheet"],
+          ["requirements", "Фокус и изисквания"],
+          ["wbs", "Дейности за ТП"],
+          ["facts", "Данни за проекта"],
         ] as const).map(([key, label]) => (
           <button
             key={key}
@@ -185,6 +192,7 @@ export default function UnderstandingPanel({ projectId }: { projectId: string })
         <RequirementsEditor
           projectId={projectId}
           workspace={workspace}
+          contentPlan={contentPlan}
           busy={busy}
           act={act}
           updateLocal={(id, values) =>
@@ -259,17 +267,18 @@ export default function UnderstandingPanel({ projectId }: { projectId: string })
 function RequirementsEditor({
   projectId,
   workspace,
+  contentPlan,
   busy,
   act,
   updateLocal,
 }: {
   projectId: string;
   workspace: UnderstandingWorkspace;
+  contentPlan: ContentPlan | null;
   busy: boolean;
   act: (action: () => Promise<unknown>) => Promise<void>;
   updateLocal: (id: string, values: Partial<UnderstandingRequirement>) => void;
 }) {
-  const [scopeFilter, setScopeFilter] = useState<UnderstandingRequirementScope>("proposal_content");
   const [draft, setDraft] = useState<Partial<UnderstandingRequirement>>({
     kind: "content",
     scope: "proposal_content",
@@ -277,115 +286,56 @@ function RequirementsEditor({
     acceptance_criteria_json: [],
     status: "extracted",
   });
-  const visibleRequirements = workspace.requirements.filter((item) => {
-    if (item.status === "rejected") return false;
-    return PROPOSAL_SCOPES.includes(item.scope) && item.scope === scopeFilter;
-  });
+  const proposalRequirements = workspace.requirements.filter(
+    (item) => item.status !== "rejected" && PROPOSAL_SCOPES.includes(item.scope),
+  );
+  const contentRequirements = proposalRequirements.filter((item) => item.scope === "proposal_content");
+  const mandatoryItems = (contentPlan?.items ?? [])
+    .filter((item) => item.source_quotes_json.some((source) => source.source_kind === "mandatory_heading"))
+    .sort((a, b) => compareSectionNumbers(a.number, b.number));
+  const grouped = groupRequirementsByMandatoryHeading(
+    contentRequirements,
+    contentPlan?.items ?? [],
+    mandatoryItems,
+  );
   return (
     <div className="space-y-2">
-      <AcceptanceSummary workspace={workspace} />
-      <div className="rounded border bg-white p-2">
-        <label className="mb-1 block font-medium" htmlFor="understanding-scope-filter">
-          Показвани изисквания
-        </label>
-        <select
-          id="understanding-scope-filter"
-          aria-label="Обхват на изискванията"
-          value={scopeFilter}
-          onChange={(event) => setScopeFilter(event.target.value as typeof scopeFilter)}
-          className="w-full rounded border p-1"
-        >
-          {PROPOSAL_SCOPES.map((scope) => (
-            <option key={scope} value={scope}>{SCOPE_LABELS[scope]}</option>
-          ))}
-        </select>
-        <p className="mt-1 text-[10px] text-gray-500">
-          Показват се само изискванията, които определят съдържанието, формата или оценяването на ТП. Критериите за подбор, ЕЕДОП, финансовите и договорните условия не участват в работния регистър.
+      <ProposalFocus workspace={workspace} mandatoryItems={mandatoryItems} />
+      <div className="rounded border border-blue-200 bg-blue-50 p-2">
+        <h3 className="font-semibold text-blue-950">Работни изисквания по задължителното съдържание</h3>
+        <p className="mt-1 text-[10px] text-blue-800">
+          Изискванията са разпределени под точките от т. 6.2. Отвори само раздела, по който работиш.
         </p>
       </div>
-      {visibleRequirements.map((item) => (
-        <div key={item.id} className="rounded border bg-white p-2 space-y-1">
-          <div className="flex items-center justify-between text-[10px] text-gray-500">
-            <span>{workspace.sources.find((source) => source.id === item.source_file_id)?.filename ?? "Източник"}</span>
-            <span>{item.origin === "proposal_audit" || item.origin === "audit" ? "намерено при одита на ТП" : item.origin === "manual" ? "добавено ръчно" : "първично извличане"}</span>
-          </div>
-          <span className="inline-block rounded bg-blue-50 px-1.5 py-0.5 text-[10px] text-blue-800">
-            {SCOPE_LABELS[item.scope]}
-          </span>
-          <textarea
-            aria-label="Нормализирано изискване"
-            value={item.normalized_text}
-            onChange={(event) => updateLocal(item.id, { normalized_text: event.target.value })}
-            className="w-full rounded border p-1"
+      {mandatoryItems.map((heading) => {
+        const items = grouped.get(heading.id) ?? [];
+        return (
+          <RequirementGroup
+            key={heading.id}
+            title={<><span className="text-blue-800">{heading.number}.</span> {heading.title}</>}
+            items={items}
+            testId={`requirement-group-${heading.number}`}
+            workspace={workspace}
+            projectId={projectId}
+            busy={busy}
+            act={act}
+            updateLocal={updateLocal}
           />
-          {PROPOSAL_SCOPES.includes(item.scope) && (
-            <>
-              <input
-                aria-label="Път в съдържанието на ТП"
-                value={item.proposal_path_json.join(" → ")}
-                placeholder="Раздел → Подточка → Елемент"
-                onChange={(event) =>
-                  updateLocal(item.id, {
-                    proposal_path_json: event.target.value
-                      .split(/→|>/)
-                      .map((part) => part.trim())
-                      .filter(Boolean),
-                  })
-                }
-                className="w-full rounded border p-1 text-[11px]"
-              />
-              <textarea
-                aria-label="Критерии за приемане"
-                value={item.acceptance_criteria_json.join("\n")}
-                placeholder="Едно проверимо условие на ред"
-                onChange={(event) =>
-                  updateLocal(item.id, {
-                    acceptance_criteria_json: event.target.value
-                      .split("\n")
-                      .map((criterion) => criterion.trim())
-                      .filter(Boolean),
-                  })
-                }
-                className="w-full rounded border p-1 text-[11px]"
-              />
-            </>
-          )}
-          <p className="text-[10px] text-gray-500">стр. {item.source_page ?? "—"}: „{item.source_quote}“</p>
-          {item.proposal_path_json.length > 0 && (
-            <p className="text-[10px] font-medium text-blue-700">
-              ТП: {item.proposal_path_json.join(" → ")}
-            </p>
-          )}
-          {item.acceptance_criteria_json.length > 0 && (
-            <ul className="list-disc space-y-0.5 pl-4 text-[10px] text-gray-600">
-              {item.acceptance_criteria_json.map((criterion, index) => (
-                <li key={`${item.id}-criterion-${index}`}>{criterion}</li>
-              ))}
-            </ul>
-          )}
-          <div className="flex gap-1">
-            <select
-              value={item.kind}
-              onChange={(event) => updateLocal(item.id, { kind: event.target.value as UnderstandingRequirement["kind"] })}
-              className="min-w-0 flex-1 rounded border p-1"
-            >
-              {REQUIREMENT_KINDS.map((kind) => <option key={kind} value={kind}>{KIND_LABELS[kind]}</option>)}
-            </select>
-            <select
-              aria-label="Обхват"
-              value={item.scope}
-              onChange={(event) => updateLocal(item.id, { scope: event.target.value as UnderstandingRequirementScope })}
-              className="min-w-0 flex-1 rounded border p-1"
-            >
-              {Object.entries(SCOPE_LABELS).map(([scope, label]) => (
-                <option key={scope} value={scope}>{label}</option>
-              ))}
-            </select>
-            <button type="button" disabled={busy} onClick={() => act(() => api.understanding.updateRequirement(projectId, item.id, item))} className="rounded border px-2">Запази</button>
-            <button type="button" disabled={busy} aria-label="Изтрий изискване" onClick={() => act(() => api.understanding.deleteRequirement(projectId, item.id))} className="rounded border px-2 text-red-600">×</button>
-          </div>
-        </div>
-      ))}
+        );
+      })}
+      {(grouped.get("unassigned") ?? []).length > 0 && (
+        <RequirementGroup title="Общи и допълнителни условия" items={grouped.get("unassigned")!} tone="amber" workspace={workspace} projectId={projectId} busy={busy} act={act} updateLocal={updateLocal} />
+      )}
+      {(["proposal_format", "evaluation_rule"] as UnderstandingRequirementScope[]).map((scope) => {
+        const items = proposalRequirements.filter((item) => item.scope === scope);
+        return (
+          <RequirementGroup key={scope} title={SCOPE_LABELS[scope]} items={items} workspace={workspace} projectId={projectId} busy={busy} act={act} updateLocal={updateLocal} />
+        );
+      })}
+      <details className="rounded border bg-gray-50 p-2">
+        <summary className="cursor-pointer font-medium">Диагностика на извличането</summary>
+        <div className="mt-2"><AcceptanceSummary workspace={workspace} /></div>
+      </details>
       <details className="rounded border bg-gray-50 p-2">
         <summary className="cursor-pointer font-medium">Добави изискване</summary>
         <div className="mt-2 space-y-1">
@@ -405,6 +355,126 @@ function RequirementsEditor({
       <button type="button" disabled={busy || workspace.acceptance.proposal_requirement_count === 0} onClick={() => act(() => api.understanding.confirmRequirements(projectId))} className="w-full rounded bg-green-600 px-2 py-1.5 text-white disabled:opacity-50">Потвърди изискванията към ТП</button>
     </div>
   );
+}
+
+function RequirementCard({ item, workspace, projectId, busy, act, updateLocal }: { item: UnderstandingRequirement; workspace: UnderstandingWorkspace; projectId: string; busy: boolean; act: (action: () => Promise<unknown>) => Promise<void>; updateLocal: (id: string, values: Partial<UnderstandingRequirement>) => void }) {
+  return (
+    <details className="rounded border bg-white p-2">
+      <summary className="cursor-pointer text-[11px] font-medium">{item.normalized_text}</summary>
+      <div className="mt-2 space-y-1">
+        <div className="flex items-center justify-between text-[10px] text-gray-500">
+          <span>{workspace.sources.find((source) => source.id === item.source_file_id)?.filename ?? "Източник"}</span>
+          <span>{item.origin === "proposal_audit" || item.origin === "audit" ? "намерено при одита на ТП" : item.origin === "manual" ? "добавено ръчно" : "първично извличане"}</span>
+        </div>
+        <span className="inline-block rounded bg-blue-50 px-1.5 py-0.5 text-[10px] text-blue-800">{SCOPE_LABELS[item.scope]}</span>
+        <textarea aria-label="Нормализирано изискване" value={item.normalized_text} onChange={(event) => updateLocal(item.id, { normalized_text: event.target.value })} className="w-full rounded border p-1" />
+        {PROPOSAL_SCOPES.includes(item.scope) && <>
+          <input aria-label="Път в съдържанието на ТП" value={item.proposal_path_json.join(" → ")} placeholder="Раздел → Подточка → Елемент" onChange={(event) => updateLocal(item.id, { proposal_path_json: event.target.value.split(/→|>/).map((part) => part.trim()).filter(Boolean) })} className="w-full rounded border p-1 text-[11px]" />
+          <textarea aria-label="Критерии за приемане" value={item.acceptance_criteria_json.join("\n")} placeholder="Едно проверимо условие на ред" onChange={(event) => updateLocal(item.id, { acceptance_criteria_json: event.target.value.split("\n").map((criterion) => criterion.trim()).filter(Boolean) })} className="w-full rounded border p-1 text-[11px]" />
+        </>}
+        <p className="text-[10px] text-gray-500">стр. {item.source_page ?? "—"}: „{item.source_quote}“</p>
+        <div className="flex gap-1">
+          <select value={item.kind} onChange={(event) => updateLocal(item.id, { kind: event.target.value as UnderstandingRequirement["kind"] })} className="min-w-0 flex-1 rounded border p-1">{REQUIREMENT_KINDS.map((kind) => <option key={kind} value={kind}>{KIND_LABELS[kind]}</option>)}</select>
+          <select aria-label="Обхват" value={item.scope} onChange={(event) => updateLocal(item.id, { scope: event.target.value as UnderstandingRequirementScope })} className="min-w-0 flex-1 rounded border p-1">{Object.entries(SCOPE_LABELS).map(([scope, label]) => <option key={scope} value={scope}>{label}</option>)}</select>
+          <button type="button" disabled={busy} onClick={() => act(() => api.understanding.updateRequirement(projectId, item.id, item))} className="rounded border px-2">Запази</button>
+          <button type="button" disabled={busy} aria-label="Изтрий изискване" onClick={() => act(() => api.understanding.deleteRequirement(projectId, item.id))} className="rounded border px-2 text-red-600">×</button>
+        </div>
+      </div>
+    </details>
+  );
+}
+
+function RequirementGroup({ title, items, workspace, projectId, busy, act, updateLocal, testId, tone = "plain" }: { title: React.ReactNode; items: UnderstandingRequirement[]; workspace: UnderstandingWorkspace; projectId: string; busy: boolean; act: (action: () => Promise<unknown>) => Promise<void>; updateLocal: (id: string, values: Partial<UnderstandingRequirement>) => void; testId?: string; tone?: "plain" | "amber" }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <details open={open} onToggle={(event) => setOpen(event.currentTarget.open)} data-testid={testId} className={`rounded border p-2 ${tone === "amber" ? "border-amber-200 bg-amber-50" : "bg-white"}`}>
+      <summary className="cursor-pointer font-medium">{title}<span className="ml-2 text-[10px] font-normal text-gray-500">{items.length} изисквания</span></summary>
+      {open && <div className="mt-2 space-y-2">
+        {items.length === 0 && <p className="text-[10px] text-gray-500">Няма отделно извлечени условия към тази точка.</p>}
+        {items.map((item) => <RequirementCard key={item.id} item={item} workspace={workspace} projectId={projectId} busy={busy} act={act} updateLocal={updateLocal} />)}
+      </div>}
+    </details>
+  );
+}
+
+function ProposalFocus({ workspace, mandatoryItems }: { workspace: UnderstandingWorkspace; mandatoryItems: ContentPlanItem[] }) {
+  const focus = workspace.proposal_focus;
+  return (
+    <section data-testid="proposal-focus" className="rounded-lg border-2 border-blue-300 bg-white p-3">
+      <h2 className="text-sm font-semibold text-blue-950">Фокус за техническото предложение</h2>
+      <p className="mt-1 text-[10px] text-gray-600">Това са водещите точки от документацията. Останалите извлечени данни са помощни.</p>
+      <div className="mt-3">
+        <h3 className="font-semibold">т. 6.2 — задължително минимално съдържание</h3>
+        {mandatoryItems.length ? <ol className="mt-1 space-y-0.5">
+          {mandatoryItems.map((item) => <li key={item.id} style={{ paddingLeft: `${Math.max(0, item.number.split(".").length - 1) * 12}px` }}><span className="font-medium text-blue-800">{item.number}.</span> {item.title}</li>)}
+        </ol> : <p className="mt-1 text-amber-700">Изгради подробния план, за да се визуализира точната задължителна структура.</p>}
+      </div>
+      <div className="mt-3 border-t pt-2">
+        <h3 className="font-semibold">т. {focus.source_clause} — длъжности за организацията на изпълнението</h3>
+        <p className="text-[10px] text-gray-500">Показват се само длъжност и брой. Изискванията за опит, правоспособност и доказване в ЕЕДОП не са част от ТП.</p>
+        <div className="mt-2 grid gap-2 md:grid-cols-2">
+          <RoleList title="Проектантски екип" roles={focus.design_roles} />
+          <RoleList title="Екип за СМР" roles={focus.construction_roles} />
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function RoleList({ title, roles }: { title: string; roles: Array<{ role: string; count: number }> }) {
+  return <div className="rounded bg-gray-50 p-2"><h4 className="font-medium">{title}</h4><ul className="mt-1 list-disc space-y-0.5 pl-4">{roles.map((role) => <li key={role.role}>{role.role} — {role.count} бр.</li>)}</ul>{roles.length === 0 && <p className="text-[10px] text-gray-500">Няма извлечени длъжности.</p>}</div>;
+}
+
+function compareSectionNumbers(left: string, right: string) {
+  const a = left.split(".").map(Number);
+  const b = right.split(".").map(Number);
+  for (let index = 0; index < Math.max(a.length, b.length); index += 1) {
+    const difference = (a[index] ?? -1) - (b[index] ?? -1);
+    if (difference) return difference;
+  }
+  return 0;
+}
+
+function groupRequirementsByMandatoryHeading(requirements: UnderstandingRequirement[], allPlanItems: ContentPlanItem[], mandatoryItems: ContentPlanItem[]) {
+  const groups = new Map<string, UnderstandingRequirement[]>();
+  const mandatoryIds = new Set(mandatoryItems.map((item) => item.id));
+  const byId = new Map(allPlanItems.map((item) => [item.id, item]));
+  const ownerByRequirement = new Map<string, string>();
+  for (const planItem of allPlanItems) {
+    let cursor: ContentPlanItem | undefined = planItem;
+    while (cursor && !mandatoryIds.has(cursor.id)) cursor = cursor.parent_id ? byId.get(cursor.parent_id) : undefined;
+    if (!cursor) continue;
+    for (const criterion of planItem.acceptance_criteria_json) if (criterion.requirement_id) ownerByRequirement.set(criterion.requirement_id, cursor.id);
+  }
+  for (const requirement of requirements) {
+    const fallbackNumber = inferMandatoryHeadingNumber(requirement);
+    const fallbackOwner = mandatoryItems.find((item) => item.number === fallbackNumber)?.id;
+    const owner = ownerByRequirement.get(requirement.id) ?? fallbackOwner ?? "unassigned";
+    groups.set(owner, [...(groups.get(owner) ?? []), requirement]);
+  }
+  return groups;
+}
+
+function inferMandatoryHeadingNumber(requirement: UnderstandingRequirement): string | null {
+  const value = [...requirement.proposal_path_json, requirement.normalized_text]
+    .join(" ")
+    .toLocaleLowerCase("bg-BG");
+  if (/гаранционн.*дефект|отстраняване на гаранционни/.test(value)) return "8";
+  if (/управление на риска|дефиниран риск|времеви риск|технически и организационни рискове/.test(value)) return "5";
+  if (/осигуряване на качеството|контрол върху качеството|контрол на качеството/.test(value)) return "7";
+  if (/опазване на околната среда|екологич|замърсител/.test(value)) return "6";
+  if (/негативното (въздействие|влияние)|засегнатите лица/.test(value)) return "9";
+  if (/авторски надзор/.test(value)) return "3";
+  if (/доставка на материал/.test(value)) return "4.4";
+  if (/комуникац|субординац|йерархична структура/.test(value)) {
+    return /проектиран|проектант|специалист/.test(value) ? "2.3" : "4.3";
+  }
+  if (/организация при изпълнение на проектирането|проектантски (екип|позици)|минимални проектантски/.test(value)) return "2.2";
+  if (/организация на ресурсите|строителн.*екип|екипа за изпълнение на смр|работни звена|инженерно-техническия екип/.test(value)) return "4.2";
+  if (/изпълнение на строително-монтажни работи|строителната програма|технология за строително-монтажните|технология на изпълнение/.test(value)) return "4.1";
+  if (/разработване на инвестиционен проект|за проектирането трябва да бъдат описани/.test(value)) return "2.1";
+  if (/концепция и подход|цялостн(ия|ият|а) (подход|стратегия)/.test(value)) return "1";
+  return null;
 }
 
 function AcceptanceSummary({ workspace }: { workspace: UnderstandingWorkspace }) {

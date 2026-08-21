@@ -11,6 +11,10 @@ vi.mock("@/lib/api", async () => {
     ...actual,
     api: {
       ...actual.api,
+      contentPlan: {
+        ...actual.api.contentPlan,
+        get: vi.fn(),
+      },
       understanding: Object.fromEntries(
         Object.keys(actual.api.understanding).map((key) => [key, vi.fn()]),
       ),
@@ -62,6 +66,11 @@ const workspace: UnderstandingWorkspace = {
     status: "draft",
   },
   latest_job: null,
+  proposal_focus: {
+    source_clause: "4.5.3",
+    design_roles: [{ role: "Проектант по част „ВиК“", count: 1 }],
+    construction_roles: [{ role: "Технически ръководител", count: 1 }],
+  },
   acceptance: {
     machine_total: 1,
     all_requirement_count: 1,
@@ -79,6 +88,7 @@ const workspace: UnderstandingWorkspace = {
 };
 
 const getMock = vi.mocked(api.understanding.get);
+const getContentPlanMock = vi.mocked(api.contentPlan.get);
 const startMock = vi.mocked(api.understanding.start);
 const cancelJobMock = vi.mocked(api.understanding.cancelJob);
 const resumeJobMock = vi.mocked(api.understanding.resumeJob);
@@ -93,6 +103,32 @@ describe("UnderstandingPanel", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     getMock.mockResolvedValue(workspace);
+    getContentPlanMock.mockResolvedValue({
+      outline_id: "outline-1",
+      version: 1,
+      status_locked: false,
+      source: "understanding_content_plan",
+      understanding_status: {},
+      items: [
+        {
+          id: "heading-1",
+          project_id: "project-1",
+          outline_id: "outline-1",
+          parent_id: null,
+          uid: "heading-uid-1",
+          number: "1",
+          title: "Концепция и подход",
+          source_quotes_json: [{ requirement_id: "", source_file_id: "file-1", source_page: 8, source_quote: "1. Концепция и подход", source_kind: "mandatory_heading" }],
+          acceptance_criteria_json: [{ id: "criterion-1", text: "Включва всички дейности", kind: "content", requirement_id: "req-1" }],
+          content_kind: "specific",
+          linked_wbs_ids: [],
+          linked_fact_keys: [],
+          order_index: 1,
+          status: "draft",
+          generation_uid: "generation-1",
+        },
+      ],
+    });
     startMock.mockResolvedValue({
       id: "job-1",
       project_id: "project-1",
@@ -131,13 +167,17 @@ describe("UnderstandingPanel", () => {
   it("shows the three Bulgarian review panels and their source links", async () => {
     render(<UnderstandingPanel projectId="project-1" />);
 
+    await userEvent.click((await screen.findByTestId("requirement-group-1")).querySelector("summary")!);
     expect(await screen.findByText("стр. 8: „Участникът следва да представи график.“"))
       .toBeInTheDocument();
     expect(screen.getByTestId("understanding-acceptance")).toHaveTextContent("100.0%");
-    await userEvent.click(screen.getByRole("tab", { name: "Дейности" }));
+    expect(screen.getByTestId("proposal-focus")).toHaveTextContent("т. 6.2");
+    expect(screen.getByTestId("proposal-focus")).toHaveTextContent("Концепция и подход");
+    expect(screen.getByTestId("proposal-focus")).toHaveTextContent("Проектант по част „ВиК“");
+    await userEvent.click(screen.getByRole("tab", { name: "Дейности за ТП" }));
     expect(screen.getByDisplayValue("Изготвяне на график")).toBeInTheDocument();
     expect(screen.getByText("График: задача 12")).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("tab", { name: "Fact sheet" }));
+    await userEvent.click(screen.getByRole("tab", { name: "Данни за проекта" }));
     expect(screen.getByLabelText("Fact sheet JSON")).toHaveValue(
       '{\n  "subject": "Проектиране"\n}',
     );
@@ -186,15 +226,19 @@ describe("UnderstandingPanel", () => {
     });
     render(<UnderstandingPanel projectId="project-1" />);
 
+    await userEvent.click((await screen.findByTestId("requirement-group-1")).querySelector("summary")!);
     expect(await screen.findByDisplayValue("Представяне на график")).toBeInTheDocument();
     expect(screen.queryByDisplayValue("Изпитване на уплътняването")).not.toBeInTheDocument();
     expect(screen.queryByRole("option", { name: /Всички изисквания/ })).not.toBeInTheDocument();
-    expect(screen.getByText(/Критериите за подбор, ЕЕДОП/)).toBeInTheDocument();
+    expect(screen.getByTestId("proposal-focus")).toHaveTextContent(
+      "Изискванията за опит, правоспособност и доказване в ЕЕДОП не са част от ТП",
+    );
   });
 
   it("edits and saves an extracted requirement", async () => {
     render(<UnderstandingPanel projectId="project-1" />);
 
+    await userEvent.click((await screen.findByTestId("requirement-group-1")).querySelector("summary")!);
     const input = await screen.findByLabelText("Нормализирано изискване");
     await userEvent.clear(input);
     await userEvent.type(input, "Подробен график");
@@ -235,7 +279,7 @@ describe("UnderstandingPanel", () => {
     });
     render(<UnderstandingPanel projectId="project-1" />);
 
-    expect(await screen.findByRole("tab", { name: "Дейности" })).toBeEnabled();
+    expect(await screen.findByRole("tab", { name: "Дейности за ТП" })).toBeEnabled();
     await userEvent.click(screen.getByTestId("understanding-cancel"));
 
     await waitFor(() => {
@@ -269,7 +313,7 @@ describe("UnderstandingPanel", () => {
   it("adds and confirms WBS activities", async () => {
     render(<UnderstandingPanel projectId="project-1" />);
 
-    await userEvent.click(await screen.findByRole("tab", { name: "Дейности" }));
+    await userEvent.click(await screen.findByRole("tab", { name: "Дейности за ТП" }));
     await userEvent.type(screen.getByPlaceholderText("Нова дейност"), "Контрол");
     await userEvent.click(screen.getByRole("button", { name: "Добави" }));
 
@@ -286,10 +330,11 @@ describe("UnderstandingPanel", () => {
   it("deletes requirements and saves edited fact sheet data", async () => {
     render(<UnderstandingPanel projectId="project-1" />);
 
+    await userEvent.click((await screen.findByTestId("requirement-group-1")).querySelector("summary")!);
     await userEvent.click(await screen.findByRole("button", { name: "Изтрий изискване" }));
     expect(deleteRequirementMock).toHaveBeenCalledWith("project-1", "req-1");
 
-    await userEvent.click(screen.getByRole("tab", { name: "Fact sheet" }));
+    await userEvent.click(screen.getByRole("tab", { name: "Данни за проекта" }));
     const editor = screen.getByLabelText("Fact sheet JSON");
     fireEvent.change(editor, { target: { value: '{"subject":"Нов предмет"}' } });
     await userEvent.click(screen.getByRole("button", { name: "Запази" }));

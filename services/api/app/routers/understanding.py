@@ -158,6 +158,48 @@ class UnderstandingWorkspaceResponse(BaseModel):
     fact_sheet: FactSheetResponse | None
     latest_job: UnderstandingJobResponse | None
     acceptance: dict[str, Any]
+    proposal_focus: dict[str, Any]
+
+
+def _proposal_focus_from_facts(facts: dict[str, Any]) -> dict[str, Any]:
+    """Expose only the team facts that belong in the technical proposal.
+
+    Qualification, experience and EEDOP evidence are intentionally not copied here.
+    The understanding reducer already strips those fields from required_roles.
+    """
+    team = facts.get("team") if isinstance(facts, dict) else None
+    if not isinstance(team, dict):
+        return {"source_clause": "4.5.3", "design_roles": [], "construction_roles": []}
+
+    def roles(group_name: str) -> list[dict[str, Any]]:
+        group = team.get(group_name)
+        raw_roles = group.get("required_roles") if isinstance(group, dict) else None
+        if not isinstance(raw_roles, list):
+            return []
+        result: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        for entry in raw_roles:
+            if not isinstance(entry, dict):
+                continue
+            role = str(entry.get("role") or "").strip()
+            key = role.casefold()
+            if not role or key in seen:
+                continue
+            seen.add(key)
+            result.append(
+                {
+                    "role": role,
+                    "count": entry.get("count") or entry.get("positions") or 1,
+                    "source_chunk_id": entry.get("source_chunk_id"),
+                }
+            )
+        return result
+
+    return {
+        "source_clause": "4.5.3",
+        "design_roles": roles("project_design_team"),
+        "construction_roles": roles("construction_team"),
+    }
 
 
 def _job_response(job: GenerationJob) -> UnderstandingJobResponse:
@@ -284,6 +326,8 @@ async def get_understanding_workspace(
     )
     missed_rate = 1 - recall if recall is not None else None
     review_complete = bool(machine) and all(item.status != "extracted" for item in machine)
+    fact_sheet = fact_result.scalar_one_or_none()
+    facts = fact_sheet.facts_json if fact_sheet and isinstance(fact_sheet.facts_json, dict) else {}
     return UnderstandingWorkspaceResponse(
         sources=[
             {"id": file.id, "filename": file.filename}
@@ -291,7 +335,7 @@ async def get_understanding_workspace(
         ],
         requirements=requirements,
         wbs_items=wbs_result.scalars().all(),
-        fact_sheet=fact_result.scalar_one_or_none(),
+        fact_sheet=fact_sheet,
         latest_job=_job_response(job) if job else None,
         acceptance={
             "machine_total": len(machine),
@@ -309,6 +353,7 @@ async def get_understanding_workspace(
             and missed_rate is not None
             and missed_rate <= 0.05,
         },
+        proposal_focus=_proposal_focus_from_facts(facts),
     )
 
 

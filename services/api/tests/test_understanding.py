@@ -22,7 +22,7 @@ from app.agents.understanding import (
     reduce_understanding_maps,
 )
 from app.core.models import ProjectFactSheet, RequirementRegister, WbsItem
-from app.routers.understanding import _job_response
+from app.routers.understanding import _job_response, _proposal_focus_from_facts
 from tests.conftest import _make_project
 
 
@@ -236,6 +236,42 @@ def test_team_facts_keep_roles_but_remove_eedop_experience_evidence():
     assert team[0] == {"role": "Технически ръководител", "count": 1}
     assert team[1] == "Експертите се посочват само като квалификация и брой."
     assert len(team) == 2
+
+
+def test_proposal_focus_keeps_only_role_and_count_from_team_facts():
+    focus = _proposal_focus_from_facts({
+        "team": {
+            "project_design_team": {
+                "required_roles": [{
+                    "role": "Проектант по част „ВиК“",
+                    "positions": 1,
+                    "source_chunk_id": "chunk-1",
+                    "experience": "минимум пет години",
+                }]
+            },
+            "construction_team": {
+                "required_roles": [{
+                    "role": "Технически ръководител",
+                    "count": 1,
+                    "eedop_evidence": "декларира се в ЕЕДОП",
+                }]
+            },
+        }
+    })
+
+    assert focus == {
+        "source_clause": "4.5.3",
+        "design_roles": [{
+            "role": "Проектант по част „ВиК“",
+            "count": 1,
+            "source_chunk_id": "chunk-1",
+        }],
+        "construction_roles": [{
+            "role": "Технически ръководител",
+            "count": 1,
+            "source_chunk_id": None,
+        }],
+    }
 
 
 def test_proposal_audit_preserves_hierarchy_and_acceptance_criteria():
