@@ -469,9 +469,7 @@ export interface UnderstandingWorkspace {
   fact_sheet?: UnderstandingFactSheet | null;
   latest_job?: UnderstandingJob | null;
   proposal_focus: {
-    source_clause: string;
-    design_roles: Array<{ role: string; count: number; source_chunk_id?: string | null }>;
-    construction_roles: Array<{ role: string; count: number; source_chunk_id?: string | null }>;
+    roles: Array<{ role: string; count: number; source_chunk_id?: string | null }>;
   };
   acceptance: {
     machine_total: number;

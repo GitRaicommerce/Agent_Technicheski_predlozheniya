@@ -304,7 +304,7 @@ function RequirementsEditor({
       <div className="rounded border border-blue-200 bg-blue-50 p-2">
         <h3 className="font-semibold text-blue-950">Работни изисквания по задължителното съдържание</h3>
         <p className="mt-1 text-[10px] text-blue-800">
-          Изискванията са разпределени под точките от т. 6.2. Отвори само раздела, по който работиш.
+          Изискванията са разпределени под структурата, открита в текущата документация. Отвори само раздела, по който работиш.
         </p>
       </div>
       {mandatoryItems.map((heading) => {
@@ -399,30 +399,32 @@ function RequirementGroup({ title, items, workspace, projectId, busy, act, updat
 
 function ProposalFocus({ workspace, mandatoryItems }: { workspace: UnderstandingWorkspace; mandatoryItems: ContentPlanItem[] }) {
   const focus = workspace.proposal_focus;
+  const sourceLabels = Array.from(new Set(mandatoryItems.flatMap((item) => item.source_quotes_json.map((source) => {
+    const filename = workspace.sources.find((entry) => entry.id === source.source_file_id)?.filename ?? "Документация";
+    return source.source_page ? `${filename}, стр. ${source.source_page}` : filename;
+  }))));
   return (
     <section data-testid="proposal-focus" className="rounded-lg border-2 border-blue-300 bg-white p-3">
       <h2 className="text-sm font-semibold text-blue-950">Фокус за техническото предложение</h2>
       <p className="mt-1 text-[10px] text-gray-600">Това са водещите точки от документацията. Останалите извлечени данни са помощни.</p>
       <div className="mt-3">
-        <h3 className="font-semibold">т. 6.2 — задължително минимално съдържание</h3>
+        <h3 className="font-semibold">Задължително съдържание, извлечено от документацията</h3>
+        {sourceLabels.length > 0 && <p className="text-[10px] text-gray-500">Източник: {sourceLabels.join("; ")}</p>}
         {mandatoryItems.length ? <ol className="mt-1 space-y-0.5">
           {mandatoryItems.map((item) => <li key={item.id} style={{ paddingLeft: `${Math.max(0, item.number.split(".").length - 1) * 12}px` }}><span className="font-medium text-blue-800">{item.number}.</span> {item.title}</li>)}
         </ol> : <p className="mt-1 text-amber-700">Изгради подробния план, за да се визуализира точната задължителна структура.</p>}
       </div>
       <div className="mt-3 border-t pt-2">
-        <h3 className="font-semibold">т. {focus.source_clause} — длъжности за организацията на изпълнението</h3>
+        <h3 className="font-semibold">Роли, които трябва да бъдат отразени в организацията</h3>
         <p className="text-[10px] text-gray-500">Показват се само длъжност и брой. Изискванията за опит, правоспособност и доказване в ЕЕДОП не са част от ТП.</p>
-        <div className="mt-2 grid gap-2 md:grid-cols-2">
-          <RoleList title="Проектантски екип" roles={focus.design_roles} />
-          <RoleList title="Екип за СМР" roles={focus.construction_roles} />
-        </div>
+        <RoleList roles={focus.roles} />
       </div>
     </section>
   );
 }
 
-function RoleList({ title, roles }: { title: string; roles: Array<{ role: string; count: number }> }) {
-  return <div className="rounded bg-gray-50 p-2"><h4 className="font-medium">{title}</h4><ul className="mt-1 list-disc space-y-0.5 pl-4">{roles.map((role) => <li key={role.role}>{role.role} — {role.count} бр.</li>)}</ul>{roles.length === 0 && <p className="text-[10px] text-gray-500">Няма извлечени длъжности.</p>}</div>;
+function RoleList({ roles }: { roles: Array<{ role: string; count: number }> }) {
+  return <div className="mt-2 rounded bg-gray-50 p-2"><ul className="grid list-disc gap-x-6 gap-y-0.5 pl-4 md:grid-cols-2">{roles.map((role) => <li key={role.role}>{role.role} — {role.count} бр.</li>)}</ul>{roles.length === 0 && <p className="text-[10px] text-gray-500">Няма извлечени роли, които да влияят върху съдържанието на ТП.</p>}</div>;
 }
 
 function compareSectionNumbers(left: string, right: string) {
@@ -447,34 +449,64 @@ function groupRequirementsByMandatoryHeading(requirements: UnderstandingRequirem
     for (const criterion of planItem.acceptance_criteria_json) if (criterion.requirement_id) ownerByRequirement.set(criterion.requirement_id, cursor.id);
   }
   for (const requirement of requirements) {
-    const fallbackNumber = inferMandatoryHeadingNumber(requirement);
-    const fallbackOwner = mandatoryItems.find((item) => item.number === fallbackNumber)?.id;
+    const fallbackOwner = inferMandatoryHeadingOwner(requirement, mandatoryItems, byId);
     const owner = ownerByRequirement.get(requirement.id) ?? fallbackOwner ?? "unassigned";
     groups.set(owner, [...(groups.get(owner) ?? []), requirement]);
   }
   return groups;
 }
 
-function inferMandatoryHeadingNumber(requirement: UnderstandingRequirement): string | null {
-  const value = [...requirement.proposal_path_json, requirement.normalized_text]
-    .join(" ")
-    .toLocaleLowerCase("bg-BG");
-  if (/гаранционн.*дефект|отстраняване на гаранционни/.test(value)) return "8";
-  if (/управление на риска|дефиниран риск|времеви риск|технически и организационни рискове/.test(value)) return "5";
-  if (/осигуряване на качеството|контрол върху качеството|контрол на качеството/.test(value)) return "7";
-  if (/опазване на околната среда|екологич|замърсител/.test(value)) return "6";
-  if (/негативното (въздействие|влияние)|засегнатите лица/.test(value)) return "9";
-  if (/авторски надзор/.test(value)) return "3";
-  if (/доставка на материал/.test(value)) return "4.4";
-  if (/комуникац|субординац|йерархична структура/.test(value)) {
-    return /проектиран|проектант|специалист/.test(value) ? "2.3" : "4.3";
+function inferMandatoryHeadingOwner(requirement: UnderstandingRequirement, mandatoryItems: ContentPlanItem[], byId: Map<string, ContentPlanItem>): string | null {
+  const requirementText = [...requirement.proposal_path_json, requirement.normalized_text].join(" ");
+  const requirementTokens = semanticTokens(requirementText);
+  const requirementTopics = semanticTopics(requirementText);
+  let best: { id: string; score: number; depth: number } | null = null;
+  for (const heading of mandatoryItems) {
+    const lineage: ContentPlanItem[] = [];
+    let cursor: ContentPlanItem | undefined = heading;
+    while (cursor) {
+      lineage.unshift(cursor);
+      cursor = cursor.parent_id ? byId.get(cursor.parent_id) : undefined;
+    }
+    const headingText = lineage.map((item) => item.title).join(" ");
+    const headingTokens = semanticTokens(headingText);
+    const headingTopics = semanticTopics(headingText);
+    const tokenOverlap = [...headingTokens].filter((token) => requirementTokens.has(token)).length;
+    const topicOverlap = [...headingTopics].filter((topic) => requirementTopics.has(topic)).length;
+    const score = tokenOverlap / Math.max(headingTokens.size, 1) + topicOverlap * 0.8;
+    const candidate = { id: heading.id, score, depth: lineage.length };
+    if (!best || candidate.score > best.score || (candidate.score === best.score && candidate.depth > best.depth)) best = candidate;
   }
-  if (/организация при изпълнение на проектирането|проектантски (екип|позици)|минимални проектантски/.test(value)) return "2.2";
-  if (/организация на ресурсите|строителн.*екип|екипа за изпълнение на смр|работни звена|инженерно-техническия екип/.test(value)) return "4.2";
-  if (/изпълнение на строително-монтажни работи|строителната програма|технология за строително-монтажните|технология на изпълнение/.test(value)) return "4.1";
-  if (/разработване на инвестиционен проект|за проектирането трябва да бъдат описани/.test(value)) return "2.1";
-  if (/концепция и подход|цялостн(ия|ият|а) (подход|стратегия)/.test(value)) return "1";
-  return null;
+  return best && best.score >= 0.45 ? best.id : null;
+}
+
+const SEMANTIC_STOPWORDS = new Set(["техническ", "предлож", "изпълнен", "поръчк", "трябва", "следва", "участник", "дейност", "раздел", "точк"]);
+
+function semanticTokens(value: string) {
+  return new Set((value.toLocaleLowerCase("bg-BG").match(/[а-яa-z0-9]{4,}/g) ?? [])
+    .map((token) => token.length > 7 ? token.slice(0, 7) : token)
+    .filter((token) => !SEMANTIC_STOPWORDS.has(token)));
+}
+
+function semanticTopics(value: string) {
+  const normalized = value.toLocaleLowerCase("bg-BG");
+  const definitions: Array<[string, RegExp]> = [
+    ["design", /проектиран|проектант|инвестиционен проект/],
+    ["construction", /строител|смр|монтажн/],
+    ["supervision", /авторски надзор/],
+    ["resources", /ресурс|персонал|екип|експерт|работни звена|ръководител/],
+    ["communication", /комуникац|координац|субординац|взаимодейств/],
+    ["delivery", /доставк|материал/],
+    ["risk", /риск/],
+    ["environment", /околна среда|еколог|замърс|отпадък/],
+    ["quality", /качеств|контрол/],
+    ["warranty", /гаранцион|дефект/],
+    ["impact", /негатив|засегнат|влияние|въздействие/],
+    ["approach", /концепц|подход|стратег/],
+    ["schedule", /график|срок|последователност/],
+    ["safety", /безопасност|здраве/],
+  ];
+  return new Set(definitions.filter(([, pattern]) => pattern.test(normalized)).map(([topic]) => topic));
 }
 
 function AcceptanceSummary({ workspace }: { workspace: UnderstandingWorkspace }) {

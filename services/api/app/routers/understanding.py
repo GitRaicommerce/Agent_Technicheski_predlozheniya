@@ -168,38 +168,43 @@ def _proposal_focus_from_facts(facts: dict[str, Any]) -> dict[str, Any]:
     The understanding reducer already strips those fields from required_roles.
     """
     team = facts.get("team") if isinstance(facts, dict) else None
-    if not isinstance(team, dict):
-        return {"source_clause": "4.5.3", "design_roles": [], "construction_roles": []}
+    result: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    role_keys = ("role", "position", "job_title", "длъжност", "роля")
+    count_keys = ("count", "positions", "quantity", "number", "брой")
 
-    def roles(group_name: str) -> list[dict[str, Any]]:
-        group = team.get(group_name)
-        raw_roles = group.get("required_roles") if isinstance(group, dict) else None
-        if not isinstance(raw_roles, list):
-            return []
-        result: list[dict[str, Any]] = []
-        seen: set[str] = set()
-        for entry in raw_roles:
-            if not isinstance(entry, dict):
-                continue
-            role = str(entry.get("role") or "").strip()
-            key = role.casefold()
-            if not role or key in seen:
-                continue
-            seen.add(key)
-            result.append(
-                {
-                    "role": role,
-                    "count": entry.get("count") or entry.get("positions") or 1,
-                    "source_chunk_id": entry.get("source_chunk_id"),
-                }
-            )
-        return result
+    def visit(value: Any) -> None:
+        if isinstance(value, list):
+            for entry in value:
+                visit(entry)
+            return
+        if not isinstance(value, dict):
+            return
+        role = next(
+            (str(value.get(key) or "").strip() for key in role_keys if value.get(key)),
+            "",
+        )
+        if role:
+            normalized = role.casefold()
+            if normalized not in seen:
+                seen.add(normalized)
+                count = next(
+                    (value.get(key) for key in count_keys if value.get(key) not in (None, "")),
+                    1,
+                )
+                result.append(
+                    {
+                        "role": role,
+                        "count": count,
+                        "source_chunk_id": value.get("source_chunk_id"),
+                    }
+                )
+            return
+        for entry in value.values():
+            visit(entry)
 
-    return {
-        "source_clause": "4.5.3",
-        "design_roles": roles("project_design_team"),
-        "construction_roles": roles("construction_team"),
-    }
+    visit(team)
+    return {"roles": result}
 
 
 def _job_response(job: GenerationJob) -> UnderstandingJobResponse:

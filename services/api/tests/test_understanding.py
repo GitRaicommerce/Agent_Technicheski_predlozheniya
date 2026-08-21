@@ -256,19 +256,27 @@ def test_proposal_focus_keeps_only_role_and_count_from_team_facts():
                     "eedop_evidence": "декларира се в ЕЕДОП",
                 }]
             },
+            "service_delivery_unit": {
+                "members": [{
+                    "position": "Координатор на услугата",
+                    "quantity": 2,
+                }]
+            },
         }
     })
 
     assert focus == {
-        "source_clause": "4.5.3",
-        "design_roles": [{
+        "roles": [{
             "role": "Проектант по част „ВиК“",
             "count": 1,
             "source_chunk_id": "chunk-1",
-        }],
-        "construction_roles": [{
+        }, {
             "role": "Технически ръководител",
             "count": 1,
+            "source_chunk_id": None,
+        }, {
+            "role": "Координатор на услугата",
+            "count": 2,
             "source_chunk_id": None,
         }],
     }

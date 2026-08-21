@@ -67,9 +67,10 @@ const workspace: UnderstandingWorkspace = {
   },
   latest_job: null,
   proposal_focus: {
-    source_clause: "4.5.3",
-    design_roles: [{ role: "Проектант по част „ВиК“", count: 1 }],
-    construction_roles: [{ role: "Технически ръководител", count: 1 }],
+    roles: [
+      { role: "Проектант по част „ВиК“", count: 1 },
+      { role: "Технически ръководител", count: 1 },
+    ],
   },
   acceptance: {
     machine_total: 1,
@@ -171,7 +172,7 @@ describe("UnderstandingPanel", () => {
     expect(await screen.findByText("стр. 8: „Участникът следва да представи график.“"))
       .toBeInTheDocument();
     expect(screen.getByTestId("understanding-acceptance")).toHaveTextContent("100.0%");
-    expect(screen.getByTestId("proposal-focus")).toHaveTextContent("т. 6.2");
+    expect(screen.getByTestId("proposal-focus")).toHaveTextContent("Задължително съдържание, извлечено от документацията");
     expect(screen.getByTestId("proposal-focus")).toHaveTextContent("Концепция и подход");
     expect(screen.getByTestId("proposal-focus")).toHaveTextContent("Проектант по част „ВиК“");
     await userEvent.click(screen.getByRole("tab", { name: "Дейности за ТП" }));
@@ -181,6 +182,41 @@ describe("UnderstandingPanel", () => {
     expect(screen.getByLabelText("Fact sheet JSON")).toHaveValue(
       '{\n  "subject": "Проектиране"\n}',
     );
+  });
+
+  it("uses the current tender hierarchy instead of fixed clause numbers", async () => {
+    getContentPlanMock.mockResolvedValueOnce({
+      outline_id: "outline-other",
+      version: 1,
+      status_locked: false,
+      source: "understanding_content_plan",
+      understanding_status: {},
+      items: [{
+        id: "heading-other",
+        project_id: "project-1",
+        outline_id: "outline-other",
+        parent_id: null,
+        uid: "heading-other-uid",
+        number: "7.4",
+        title: "Методика, етапи и график за услугата",
+        source_quotes_json: [{ requirement_id: "", source_file_id: "file-1", source_page: 42, source_quote: "7.4 Методика, етапи и график за услугата", source_kind: "mandatory_heading" }],
+        acceptance_criteria_json: [],
+        content_kind: "specific",
+        linked_wbs_ids: [],
+        linked_fact_keys: [],
+        order_index: 1,
+        status: "draft",
+        generation_uid: "generation-other",
+      }],
+    });
+
+    render(<UnderstandingPanel projectId="project-1" />);
+
+    const focus = await screen.findByTestId("proposal-focus");
+    expect(focus).toHaveTextContent("7.4. Методика, етапи и график за услугата");
+    expect(focus).toHaveTextContent("tender.pdf, стр. 42");
+    expect(focus).not.toHaveTextContent("6.2");
+    expect(focus).not.toHaveTextContent("4.5.3");
   });
 
   it("does not treat legacy example-proposal gaps as current requirements", async () => {

@@ -97,7 +97,11 @@ def _extract_mandatory_headings(
     source_file_id: str = "",
 ) -> list[MandatoryHeading]:
     """Extract the tender's explicit minimum numbered programme structure."""
-    marker = "програма за организация и изпълнение на поръчката"
+    contract_markers = (
+        re.compile(r"програма\s+за\s+организация\s+и\s+изпълнение"),
+        re.compile(r"(?:минималн|задължителн).{0,80}(?:съдържани|структур).{0,80}(?:техническ|предложени|методик|програм)"),
+        re.compile(r"(?:техническ.{0,30}предлож|предложени.{0,30}изпълнен|работн.{0,20}програм|методик).{0,80}(?:трябва|следва).{0,30}(?:съдържа|включва|разработи)"),
+    )
     found_marker = False
     headings: list[MandatoryHeading] = []
     seen_numbers: set[str] = set()
@@ -109,7 +113,8 @@ def _extract_mandatory_headings(
         while index < len(lines):
             line = lines[index]
             if not found_marker:
-                if marker in _normalized(line):
+                normalized_line = _normalized(line)
+                if any(pattern.search(normalized_line) for pattern in contract_markers):
                     found_marker = True
                 index += 1
                 continue

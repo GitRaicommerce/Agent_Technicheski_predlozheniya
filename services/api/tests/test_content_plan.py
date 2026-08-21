@@ -123,6 +123,22 @@ def test_extracts_exact_minimum_numbered_structure_from_tender_pages():
     assert headings[-1].title == "Мерки за минимизиране на негативното влияние при изпълнението на строителството"
 
 
+def test_extracts_a_differently_named_proposal_contract_without_pernik_markers():
+    pages = [
+        (41, "7.3 Административни условия\n1. Чуждо заглавие"),
+        (42, "МИНИМАЛНО СЪДЪРЖАНИЕ НА ТЕХНИЧЕСКАТА ОФЕРТА\n1. Методика за услугата\n1.1 Етапи и задачи\n1.2 Организация на екипа\n2. График и контрол"),
+    ]
+
+    headings = _extract_mandatory_headings(pages, source_file_id="file-other")
+
+    assert [(item.number, item.title, item.page) for item in headings] == [
+        ("1", "Методика за услугата", 42),
+        ("1.1", "Етапи и задачи", 42),
+        ("1.2", "Организация на екипа", 42),
+        ("2", "График и контрол", 42),
+    ]
+
+
 def test_semantic_heading_corrects_a_misnested_communication_path():
     headings = [
         MandatoryHeading("2.2", "Организация при изпълнение на проектирането с оглед предвидените човешки ресурси", 27, "2.2"),
