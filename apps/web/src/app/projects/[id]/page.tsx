@@ -8,7 +8,6 @@ import { useToast } from "@/components/ToastProvider";
 import ChatPanel from "@/components/ChatPanel";
 import ExportButton from "@/components/ExportButton";
 import FileUploadPanel from "@/components/FileUploadPanel";
-import ForlagePanel from "@/components/ForlagePanel";
 import OutlinePanel from "@/components/OutlinePanel";
 import SchedulePanel from "@/components/SchedulePanel";
 import GenerationsPanel from "@/components/GenerationsPanel";
@@ -535,9 +534,6 @@ export default function ProjectPage() {
                 module={activeModule}
                 onFileStatusChange={handleFileStatusChange}
               />
-              {activeModule === "examples" && (
-                <ForlagePanel projectId={project.id} />
-              )}
             </div>
           )}
 

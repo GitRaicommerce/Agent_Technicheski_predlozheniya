@@ -19,7 +19,7 @@
 
 ## Completed Work
 
-- Implemented rework Phase 3 as a review-gated forlage workflow: uploaded example proposals are reconstructed into complete deterministic hierarchical sections, conservatively matched to current approved content-plan work items, and exposed in the Bulgarian UI for replacement, exclusion, preview, and explicit confirmation. Only confirmed links are supplied directly to drafting; forlage remains unable to create current requirements or structure. The real Pernik project produced 804 reusable sections and 29 conservative matches across 31 generation points, left pending user review without starting an LLM job.
+- Corrected Phase 3 to an automatic drafting-time forlage workflow: uploaded example proposals are reconstructed into complete hierarchical sections, the retrieval agent searches their full library from each approved plan section plus its understood requirements and drafting guidance, and an LLM selects only genuinely reusable passages before drafting. Manual plan-to-forlage mappings, per-section approval, and the generation gate were removed; forlage can enrich wording and methodology but cannot define the current tender's requirements or structure.
 - Restored the approved-plan generation flow: building a newer content-plan draft no longer silently revokes the prior approval, WBS/fact-sheet review is informative rather than an approval blocker, generation jobs are scoped to drafting and the approved outline version, and the Generations panel now separates state refresh from an explicit confirmed start action. The real Pernik plan v12 approval was restored without starting a paid LLM job.
 - Reorganized the Understanding workspace around a universal technical-proposal contract extracted from each current tender: explicit minimum-content markers and AI-derived proposal paths determine the hierarchy without fixed clause numbers, semantic lineage groups requirements after re-analysis, arbitrary team structures contribute only proposal-relevant role names/counts, and bulky editors, format/evaluation records, and extraction diagnostics remain collapsed until explicitly opened.
 - Implemented rework Phase 2 as a deterministic, no-LLM content-plan workflow: the mandatory numbered programme structure is extracted directly from the tender PDF and remains the immutable source of truth, while Understanding requirements only supply traceable criteria and justified child points. The real Pernik draft plan v9 reproduces all 16 mandatory headings (`1–9`, `2.1–2.3`, and `4.1–4.4`) exactly, with 28 narrative generation units and 44 visible items total; schedule, formal, evaluation, price-offer, and EEDOP material cannot become competing narrative roots.
@@ -275,11 +275,11 @@
 
 ## Next Recommended Steps
 
-1. Review the 29 proposed Phase 3 mappings for the approved Pernik plan v12, explicitly remove or replace unsuitable forlage sections, and confirm the review in “Форлаге / примерни ТП”; the two low-confidence plan points intentionally remain unmapped.
-2. Re-run `Generate all` only after the Phase 3 matching has been confirmed; do not resume the legacy July outline or reuse generations from the previous structure.
-3. Re-run the Pernik calibration bundle after regeneration and compare the output against the winning proposal, focusing on requirement coverage, section depth, schedule consistency, and role/responsibility coverage without EEDOP qualification prose.
+1. Re-run `Generate all` for the approved Pernik plan v12 so every section automatically searches and reuses only relevant forlage passages; do not resume the legacy July outline or reuse generations from the previous structure.
+2. Re-run the Pernik calibration bundle after regeneration and compare the output against the winning proposal, focusing on requirement coverage, section depth, schedule consistency, and role/responsibility coverage without EEDOP qualification prose.
+3. Inspect generation traces to calibrate automatic forlage retrieval precision and recall across quality, risk, environment, safety, communication, design disciplines, and construction methodologies.
 4. Expand generated documentation with more precise backend endpoint and workflow coverage.
-5. Continue broadening common tender regression coverage with more real-world noisy PDF extraction, DOCX readiness combinations, and operational-action coverage cases across quality, risk, environment, safety, communication, and documentation requirements.
+5. Continue broadening common tender regression coverage with more real-world noisy PDF extraction, DOCX readiness combinations, and operational-action coverage cases.
 
 ## Notes
 

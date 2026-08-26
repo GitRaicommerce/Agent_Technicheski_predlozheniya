@@ -460,7 +460,9 @@ async def _run_drafting_all(
             db=db,
             max_snippets=5,
             trace_id=trace_id,
-            content_plan_item_id=section.get("content_plan_item_id"),
+            section_requirements=requirements,
+            section_requirement_items=requirement_items,
+            section_drafting_guidance=drafting_guidance,
         )
         evidence_snippets = examples_result.get("selected_snippets", [])
 
@@ -547,7 +549,9 @@ async def _run_drafting_pipeline(
         db=db,
         max_snippets=5,
         trace_id=trace_id,
-        content_plan_item_id=params.get("content_plan_item_id"),
+        section_requirements=section_requirements,
+        section_requirement_items=section_requirement_items,
+        section_drafting_guidance=section_drafting_guidance,
     )
     evidence_snippets = examples_result.get("selected_snippets", [])
     pipeline_trace["examples"] = {"total_found": examples_result.get("total_found", 0)}

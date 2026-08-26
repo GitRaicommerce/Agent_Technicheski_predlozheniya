@@ -5,11 +5,23 @@ import pytest
 
 from app.agents.examples import run_examples
 from app.agents.forlage import (
-    candidate_matches,
-    confirmed_forlage_for_item,
     extract_forlage_sections,
-    score_forlage_match,
+    rank_forlage_for_query,
+    score_forlage_query,
 )
+
+
+def _snippet(snippet_id: str, title: str, text: str):
+    return SimpleNamespace(
+        id=snippet_id,
+        text=text,
+        snippet_kind="forlage_section",
+        source_group="hierarchical_section",
+        topics_json={
+            "section_title": title,
+            "section_path": ["Работна програма", title],
+        },
+    )
 
 
 def test_extract_forlage_sections_preserves_numbered_hierarchy_and_content():
@@ -34,118 +46,78 @@ def test_extract_forlage_sections_preserves_numbered_hierarchy_and_content():
     assert sections[2]["page_start"] == 3
 
 
-def test_forlage_matching_prefers_relevant_methodology_section():
-    item = SimpleNamespace(
-        id="item-quality",
-        title="Мерки за осигуряване на качеството",
-        acceptance_criteria_json=[
-            {"text": "Описват се проверки, контролни точки, протоколи и записи за качество."}
-        ],
+def test_automatic_retrieval_uses_full_section_context():
+    quality = _snippet(
+        "section-quality",
+        "Контрол на качеството",
+        "Контролът включва проверки, контролни точки, протоколи и записи.",
     )
-    quality = SimpleNamespace(
-        id="section-quality",
-        text="Контролът на качеството включва проверки, протоколи и записи.",
-        topics_json={
-            "section_title": "Контрол на качеството",
-            "section_path": ["Работна програма", "Контрол на качеството"],
-        },
+    finance = _snippet(
+        "section-finance",
+        "Финансови възможности",
+        "Финансов оборот и банкови документи на участника.",
     )
-    finance = SimpleNamespace(
-        id="section-finance",
-        text="Финансов оборот и банкови документи на участника.",
-        topics_json={"section_title": "Финансови възможности", "section_path": []},
+    duplicate = _snippet("section-quality-copy", quality.topics_json["section_title"], quality.text)
+    query = (
+        "Мерки за осигуряване на качеството\n"
+        "Изискват се проверки, контролни точки, протоколи и записи."
     )
 
-    quality_score, _ = score_forlage_match(item, quality)
-    finance_score, _ = score_forlage_match(item, finance)
-    candidates = candidate_matches(item, [finance, quality])
+    quality_score, _ = score_forlage_query(query, quality)
+    finance_score, _ = score_forlage_query(query, finance)
+    ranked = rank_forlage_for_query(query, [finance, quality, duplicate])
 
     assert quality_score > finance_score
-    assert candidates[0]["section_id"] == "section-quality"
+    assert [snippet.id for snippet in ranked] == ["section-quality"]
 
 
 @pytest.mark.asyncio
-async def test_pending_forlage_review_is_not_used_for_drafting():
+async def test_examples_agent_searches_and_selects_forlage_automatically():
     project_id = "11111111-1111-1111-1111-111111111111"
-    item = SimpleNamespace(
-        project_id=project_id,
-        outline_id="22222222-2222-2222-2222-222222222222",
-        forlage_section_id="33333333-3333-3333-3333-333333333333",
+    quality = _snippet(
+        "section-quality",
+        "Контрол на качеството",
+        "Пълна методология с проверки, контролни точки, протоколи и записи.",
     )
-    outline = SimpleNamespace(outline_json={"forlage_review": {"status": "pending"}})
-    db = AsyncMock()
-    db.get = AsyncMock(side_effect=[item, outline])
-
-    result = await confirmed_forlage_for_item(
-        project_id=project_id,
-        content_plan_item_id="44444444-4444-4444-4444-444444444444",
-        db=db,
+    finance = _snippet(
+        "section-finance",
+        "Финансови възможности",
+        "Финансов оборот и банкови документи.",
     )
-
-    assert result is None
-
-
-@pytest.mark.asyncio
-async def test_examples_agent_uses_confirmed_phase3_section_without_llm():
-    project_id = "11111111-1111-1111-1111-111111111111"
-    item = SimpleNamespace(
-        id="22222222-2222-2222-2222-222222222222",
-        project_id=project_id,
-        outline_id="44444444-4444-4444-4444-444444444444",
-        forlage_section_id="33333333-3333-3333-3333-333333333333",
-    )
-    snippet = SimpleNamespace(
-        id=item.forlage_section_id,
-        project_id=project_id,
-        text="Пълна методология за контрол на качеството.",
-        snippet_kind="forlage_section",
-        source_group="hierarchical_section",
-        topics_json={
-            "section_title": "Контрол на качеството",
-            "section_path": ["Работна програма", "Контрол на качеството"],
-        },
-    )
-    outline = SimpleNamespace(
-        outline_json={"forlage_review": {"status": "confirmed"}},
+    rows = SimpleNamespace(
+        scalars=lambda: SimpleNamespace(all=lambda: [finance, quality])
     )
     db = AsyncMock()
-    db.get = AsyncMock(side_effect=[item, outline, snippet])
+    db.execute = AsyncMock(return_value=rows)
+    llm_result = {
+        "selected_snippets": [{
+            "snippet_id": quality.id,
+            "relevance_note": "Подходяща методология за адаптиране.",
+        }]
+    }
 
-    with patch("app.agents.examples.llm_gateway.call", new=AsyncMock()) as llm_call:
+    with (
+        patch("app.core.embedding.embed_query", new=AsyncMock(return_value=None)),
+        patch("app.agents.examples.llm_gateway.call", new=AsyncMock(return_value=llm_result)) as llm_call,
+    ):
         result = await run_examples(
             project_id=project_id,
-            query="Качество",
+            query="Мерки за осигуряване на качеството",
+            section_requirements=["Да се опишат проверки и контролни точки."],
+            section_requirement_items=[{"text": "Да се водят протоколи и записи."}],
+            section_drafting_guidance={
+                "required_subtopics": ["Входящ контрол"],
+                "instructions": ["Текстът да следва текущата техническа спецификация."],
+            },
             db=db,
-            content_plan_item_id=item.id,
         )
 
-    llm_call.assert_not_awaited()
-    assert result["selection_mode"] == "confirmed_phase3_match"
-    assert result["selected_snippets"][0]["text"] == snippet.text
-
-
-@pytest.mark.asyncio
-async def test_confirmed_no_forlage_choice_does_not_fall_back_to_llm_search():
-    project_id = "11111111-1111-1111-1111-111111111111"
-    item = SimpleNamespace(
-        project_id=project_id,
-        outline_id="22222222-2222-2222-2222-222222222222",
-        forlage_section_id=None,
-    )
-    outline = SimpleNamespace(
-        outline_json={"forlage_review": {"status": "confirmed"}},
-    )
-    db = AsyncMock()
-    db.get = AsyncMock(side_effect=[item, outline])
-
-    with patch("app.agents.examples.llm_gateway.call", new=AsyncMock()) as llm_call:
-        result = await run_examples(
-            project_id=project_id,
-            query="Риск",
-            db=db,
-            content_plan_item_id="33333333-3333-3333-3333-333333333333",
-        )
-
-    llm_call.assert_not_awaited()
-    assert result["selection_mode"] == "confirmed_phase3_no_match"
-    assert result["selected_snippets"] == []
+    prompt = llm_call.await_args.kwargs["user_message"]
+    assert "проверки и контролни точки" in prompt
+    assert "протоколи и записи" in prompt
+    assert "Входящ контрол" in prompt
+    assert "Пълна методология" in prompt
+    assert "Финансов оборот" not in prompt
+    assert result["selected_snippets"][0]["text"] == quality.text
+    assert result["total_found"] == 1
+    assert result["selection_mode"] == "automatic_drafting_search"

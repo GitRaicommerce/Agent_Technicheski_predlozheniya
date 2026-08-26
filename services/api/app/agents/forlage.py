@@ -1,4 +1,4 @@
-"""Deterministic Phase 3 hierarchy and matching for reusable proposal forlage."""
+"""Deterministic hierarchy and retrieval helpers for reusable proposal forlage."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from typing import Any
 
 from sqlalchemy import delete, select
 
-from app.core.models import ContentPlanItem, ExampleSnippet, TpOutline
+from app.core.models import ExampleSnippet
 
 
 _NUMBERED_HEADING_RE = re.compile(
@@ -22,7 +22,6 @@ _STOPWORDS = {
     "при", "по", "поръчката", "предложение", "със", "съответствие", "техническо",
     "това", "част", "чрез", "ще", "and", "for", "the", "with",
 }
-AUTO_MATCH_MIN_SCORE = 0.35
 
 
 def _clean_heading(value: str) -> str:
@@ -186,15 +185,9 @@ def _snippet_title(snippet: ExampleSnippet) -> str:
     return str(topics.get("section_title") or snippet.text.splitlines()[0][:220]).strip()
 
 
-def _target_features(item: ContentPlanItem) -> tuple[set[str], set[str], str]:
-    criteria_text = " ".join(
-        str(entry.get("text") or entry.get("requirement_text") or "")
-        for entry in (item.acceptance_criteria_json or [])
-        if isinstance(entry, dict)
-    )
-    target_title = _tokens(item.title)
-    target_all = _tokens(f"{item.title} {criteria_text}")
-    return target_title, target_all, _clean_heading(item.title).lower()
+def _query_features(query: str) -> tuple[set[str], set[str], str]:
+    title = next((line.strip() for line in query.splitlines() if line.strip()), query)
+    return _tokens(title), _tokens(query), _clean_heading(title).lower()
 
 
 def _snippet_features(snippet: ExampleSnippet) -> tuple[set[str], set[str], str]:
@@ -224,91 +217,35 @@ def _score_features(
     return round(score, 4), visible_shared
 
 
-def score_forlage_match(item: ContentPlanItem, snippet: ExampleSnippet) -> tuple[float, list[str]]:
-    return _score_features(_target_features(item), _snippet_features(snippet))
+def score_forlage_query(query: str, snippet: ExampleSnippet) -> tuple[float, list[str]]:
+    """Score a stored section against the complete context of one drafting task."""
+    return _score_features(_query_features(query), _snippet_features(snippet))
 
 
-def candidate_matches(
-    item: ContentPlanItem,
+def rank_forlage_for_query(
+    query: str,
     snippets: list[ExampleSnippet],
     *,
-    limit: int = 3,
-) -> list[dict[str, Any]]:
-    ranked = []
+    limit: int = 15,
+    min_score: float = 0.04,
+) -> list[ExampleSnippet]:
+    """Build a cheap shortlist for the LLM without requiring manual mappings."""
+    target = _query_features(query)
+    ranked: list[tuple[float, ExampleSnippet]] = []
     for snippet in snippets:
-        score, shared = score_forlage_match(item, snippet)
-        if score < 0.08:
-            continue
-        ranked.append((score, snippet, shared))
+        score, _shared = _score_features(target, _snippet_features(snippet))
+        if score >= min_score:
+            ranked.append((score, snippet))
     ranked.sort(key=lambda row: (-row[0], _snippet_title(row[1]).lower()))
-    return [
-        {
-            "section_id": snippet.id,
-            "score": score,
-            "reason": "Общи понятия: " + ", ".join(shared) if shared else "Сходно заглавие и тематичен контекст",
-        }
-        for score, snippet, shared in ranked[:limit]
-    ]
-
-
-def candidate_match_map(
-    items: list[ContentPlanItem],
-    snippets: list[ExampleSnippet],
-    *,
-    limit: int = 3,
-) -> dict[str, list[dict[str, Any]]]:
-    """Rank all mappings while tokenizing each large forlage section only once."""
-    snippet_features = [(snippet, _snippet_features(snippet)) for snippet in snippets]
-    result: dict[str, list[dict[str, Any]]] = {}
-    for item in items:
-        target = _target_features(item)
-        ranked = []
-        for snippet, source in snippet_features:
-            score, shared = _score_features(target, source)
-            if score >= 0.08:
-                ranked.append((score, snippet, shared))
-        ranked.sort(key=lambda row: (-row[0], _snippet_title(row[1]).lower()))
-        result[item.id] = [
-            {
-                "section_id": snippet.id,
-                "score": score,
-                "reason": "Общи понятия: " + ", ".join(shared) if shared else "Сходно заглавие и тематичен контекст",
-            }
-            for score, snippet, shared in ranked[:limit]
-        ]
-    return result
-
-
-async def confirmed_forlage_for_item(
-    *, project_id: str, content_plan_item_id: str | None, db
-) -> ExampleSnippet | None:
-    _reviewed, snippet = await reviewed_forlage_for_item(
-        project_id=project_id,
-        content_plan_item_id=content_plan_item_id,
-        db=db,
-    )
-    return snippet
-
-
-async def reviewed_forlage_for_item(
-    *, project_id: str, content_plan_item_id: str | None, db
-) -> tuple[bool, ExampleSnippet | None]:
-    if not content_plan_item_id:
-        return False, None
-    item = await db.get(ContentPlanItem, content_plan_item_id)
-    if not item or item.project_id != project_id:
-        return False, None
-    outline = await db.get(TpOutline, item.outline_id)
-    review = (
-        outline.outline_json.get("forlage_review", {})
-        if outline and isinstance(outline.outline_json, dict)
-        else {}
-    )
-    if review.get("status") != "confirmed":
-        return False, None
-    if not item.forlage_section_id:
-        return True, None
-    snippet = await db.get(ExampleSnippet, item.forlage_section_id)
-    if not snippet or snippet.project_id != project_id:
-        return True, None
-    return True, snippet
+    selected: list[ExampleSnippet] = []
+    seen: set[str] = set()
+    for _score, snippet in ranked:
+        normalized_text = re.sub(r"\s+", " ", snippet.text).strip().casefold()
+        signature = f"{_snippet_title(snippet).casefold()}|{normalized_text[:1000]}"
+        if signature in seen:
+            continue
+        seen.add(signature)
+        selected.append(snippet)
+        if len(selected) >= limit:
+            break
+    return selected

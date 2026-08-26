@@ -79,29 +79,6 @@ describe("GenerationsPanel", () => {
     expect(screen.queryByText("Section 1")).not.toBeInTheDocument();
   });
 
-  it("blocks generation until Phase 3 forlage review is confirmed", async () => {
-    listGenerationsMock.mockResolvedValue([]);
-    getContentPlanMock.mockResolvedValue({
-      outline_id: "outline-12",
-      version: 12,
-      status_locked: true,
-      source: "understanding_content_plan",
-      understanding_status: {},
-      forlage_status: {
-        analyzed: true,
-        review_confirmed: false,
-        mapped_count: 29,
-      },
-      items: [],
-    });
-
-    render(<GenerationsPanel projectId="project-1" />);
-
-    expect(await screen.findByTestId("generation-forlage-review-pending")).toBeInTheDocument();
-    expect(screen.getByTestId("generation-complete-missing-button")).toBeDisabled();
-    expect(screen.getByTestId("generation-regenerate-all-button")).toBeDisabled();
-  });
-
   it("approves a draft content plan and starts generation explicitly", async () => {
     listGenerationsMock.mockResolvedValue([
       {
@@ -137,7 +114,6 @@ describe("GenerationsPanel", () => {
         content_kind: "specific",
         linked_wbs_ids: [],
         linked_fact_keys: [],
-        forlage_section_id: null,
         order_index: 1,
         status: "draft",
         generation_uid: "generation-uid-1",

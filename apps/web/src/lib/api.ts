@@ -252,7 +252,6 @@ export interface ContentPlanItem {
   content_kind: "reuse" | "specific" | "mixed";
   linked_wbs_ids: string[];
   linked_fact_keys: string[];
-  forlage_section_id?: string | null;
   order_index: number;
   status: "draft" | "approved";
   generation_uid?: string | null;
@@ -268,51 +267,7 @@ export interface ContentPlan {
     wbs_confirmed?: boolean;
     fact_sheet_confirmed?: boolean;
   };
-  forlage_status?: {
-    analyzed?: boolean;
-    review_confirmed?: boolean;
-    mapped_count?: number;
-  };
   items: ContentPlanItem[];
-}
-
-export interface ForlageSection {
-  id: string;
-  file_id: string;
-  filename: string;
-  number?: string | null;
-  title: string;
-  path: string[];
-  order_index: number;
-  page_start?: number | null;
-  page_end?: number | null;
-  text_preview: string;
-}
-
-export interface ForlageCandidate {
-  section_id: string;
-  score: number;
-  reason: string;
-}
-
-export interface ForlageMapping {
-  item_id: string;
-  item_number: string;
-  item_title: string;
-  selected_section_id?: string | null;
-  candidates: ForlageCandidate[];
-}
-
-export interface ForlageWorkspace {
-  project_id: string;
-  outline_id?: string | null;
-  outline_version?: number | null;
-  analyzed: boolean;
-  section_count: number;
-  mapped_count: number;
-  review_confirmed: boolean;
-  sections: ForlageSection[];
-  mappings: ForlageMapping[];
 }
 
 export interface ScheduleResource {
@@ -780,23 +735,6 @@ export const api = {
       apiFetch<ContentPlan>(`/api/v1/content-plan/${projectId}/unlock`, {
         method: "POST",
       }),
-  },
-  forlage: {
-    get: (projectId: string) =>
-      apiFetch<ForlageWorkspace>(`/api/v1/forlage/${projectId}`),
-    analyze: (projectId: string) =>
-      apiFetch<ForlageWorkspace>(`/api/v1/forlage/${projectId}/analyze`, {
-        method: "POST",
-      }),
-    confirm: (projectId: string) =>
-      apiFetch<ForlageWorkspace>(`/api/v1/forlage/${projectId}/confirm`, {
-        method: "POST",
-      }),
-    updateLink: (projectId: string, itemId: string, sectionId: string | null) =>
-      apiFetch<ForlageWorkspace>(
-        `/api/v1/forlage/${projectId}/items/${itemId}`,
-        { method: "PUT", body: JSON.stringify({ section_id: sectionId }) },
-      ),
   },
   understanding: {
     get: (projectId: string) =>

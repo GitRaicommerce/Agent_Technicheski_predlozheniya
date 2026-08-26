@@ -535,7 +535,6 @@ def _item_outline_payload(item: ContentPlanItem, children: list[dict[str, Any]])
         "content_kind": item.content_kind,
         "linked_wbs_ids": item.linked_wbs_ids or [],
         "linked_fact_keys": item.linked_fact_keys or [],
-        "forlage_section_id": getattr(item, "forlage_section_id", None),
         "subsections": children,
         "include_in_document": bool(
             item.generation_uid
@@ -572,7 +571,6 @@ async def sync_outline_from_content_plan(outline_id: str, db) -> TpOutline:
         "source": "understanding_content_plan",
         "content_plan_version": 1,
         "understanding_status": (outline.outline_json or {}).get("understanding_status", {}),
-        "forlage_review": (outline.outline_json or {}).get("forlage_review", {}),
         "sections": build(None),
         "coverage_summary": {
             "content_plan_items": len(items),

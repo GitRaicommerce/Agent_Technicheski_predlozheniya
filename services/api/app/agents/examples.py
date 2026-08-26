@@ -49,60 +49,59 @@ SYSTEM_PROMPT = """Ти си агент за избор на примерни т
 }}"""
 
 
+def _retrieval_guidance_text(guidance: Any) -> str:
+    if isinstance(guidance, str):
+        return guidance.strip()
+    if not isinstance(guidance, dict):
+        return ""
+    values: list[str] = []
+    title = str(guidance.get("section_title") or "").strip()
+    if title:
+        values.append(title)
+    for key in ("required_subtopics", "instructions"):
+        values.extend(
+            str(item).strip()
+            for item in (guidance.get(key) or [])
+            if str(item).strip()
+        )
+    return "\n".join(values)
+
+
 async def run_examples(
     project_id: str,
     query: str,
     db: "AsyncSession",
     max_snippets: int = 5,
     trace_id: str | None = None,
-    content_plan_item_id: str | None = None,
+    section_requirements: list[str] | None = None,
+    section_requirement_items: list[dict[str, Any]] | None = None,
+    section_drafting_guidance: dict[str, Any] | str | None = None,
 ) -> dict[str, Any]:
     trace_id = trace_id or str(uuid.uuid4())
     log.info("agent_examples_start", project_id=project_id, trace_id=trace_id)
 
-    from app.agents.forlage import reviewed_forlage_for_item
-
-    forlage_reviewed, confirmed = await reviewed_forlage_for_item(
-        project_id=project_id,
-        content_plan_item_id=content_plan_item_id,
-        db=db,
+    requirement_text = "\n".join(str(value) for value in (section_requirements or []) if value)
+    checklist_text = "\n".join(
+        str(item.get("text") or item.get("requirement_text") or "")
+        for item in (section_requirement_items or [])
+        if isinstance(item, dict)
     )
-    if confirmed:
-        topics = confirmed.topics_json if isinstance(confirmed.topics_json, dict) else {}
-        title = str(topics.get("section_title") or confirmed.text.splitlines()[0][:220])
-        return {
-            "selected_snippets": [{
-                "snippet_id": confirmed.id,
-                "relevance_note": (
-                    f"Одобрен Phase 3 раздел „{title}“. Използвай само приложимата "
-                    "методология и я адаптирай към текущата документация."
-                ),
-                "text": confirmed.text,
-                "snippet_kind": confirmed.snippet_kind,
-                "source_group": confirmed.source_group,
-                "section_path": topics.get("section_path") or [],
-            }],
-            "total_found": 1,
-            "selection_mode": "confirmed_phase3_match",
-            "_agent": "examples",
-            "_trace_id": trace_id,
-        }
-    if forlage_reviewed:
-        return {
-            "selected_snippets": [],
-            "total_found": 0,
-            "selection_mode": "confirmed_phase3_no_match",
-            "message": "За тази точка е потвърдено да не се използва форлаге.",
-            "_agent": "examples",
-            "_trace_id": trace_id,
-        }
+    retrieval_query = "\n".join(
+        part for part in (
+            query.strip(),
+            requirement_text,
+            checklist_text,
+            _retrieval_guidance_text(section_drafting_guidance),
+        ) if part
+    )
 
-    # Try vector similarity search first; fall back to LIMIT if embeddings unavailable
+    # Try semantic retrieval first. It is optional; deterministic lexical
+    # retrieval below keeps the workflow available when embeddings are absent.
     snippets = []
     try:
         from app.core.embedding import embed_query
 
-        query_vec = await embed_query(query)
+        query_vec = await embed_query(retrieval_query)
         if query_vec:
             result = await db.execute(
                 select(ExampleSnippet)
@@ -122,20 +121,36 @@ async def run_examples(
     except Exception as e:
         log.warning("agent_examples_vector_search_failed", error=str(e), trace_id=trace_id)
 
-    # Fallback: naive fetch when no embeddings exist yet
-    if not snippets:
-        result = await db.execute(
-            select(ExampleSnippet)
-            .where(ExampleSnippet.project_id == project_id)
-            .limit(50)
-        )
-        snippets = result.scalars().all()
+    # Always inspect the complete local library. Hierarchical sections rebuilt
+    # without embeddings must not be hidden behind an arbitrary LIMIT 50.
+    result = await db.execute(
+        select(ExampleSnippet).where(ExampleSnippet.project_id == project_id)
+    )
+    all_snippets = list(result.scalars().all())
+
+    from app.agents.forlage import rank_forlage_for_query
+
+    retrieval_limit = max(max_snippets * 3, 15)
+    lexical = rank_forlage_for_query(
+        retrieval_query,
+        all_snippets,
+        limit=max(max_snippets * 2, 10),
+    )
+    candidate_by_id = {str(snippet.id): snippet for snippet in lexical}
+    for snippet in snippets:
+        candidate_by_id.setdefault(str(snippet.id), snippet)
+    snippets = list(candidate_by_id.values())[:retrieval_limit]
 
     if not snippets:
         return {
             "selected_snippets": [],
             "total_found": 0,
-            "message": "Няма качени примерни ТП за този проект.",
+            "message": (
+                "Няма качени примерни ТП за този проект."
+                if not all_snippets
+                else "Не са открити достатъчно релевантни текстове във форлагето."
+            ),
+            "selection_mode": "automatic_drafting_search",
             "_agent": "examples",
             "_trace_id": trace_id,
         }
@@ -148,7 +163,7 @@ async def run_examples(
     )
 
     user_message = (
-        f"ЗАЯВКА: {query}\n\n"
+        f"КОНТЕКСТ НА ТЕКУЩАТА СЕКЦИЯ:\n{retrieval_query}\n\n"
         f"НАЛИЧНИ ФРАГМЕНТИ ({len(snippets)} бр.):\n{snippets_text}\n\n"
         f"Избери до {max_snippets} най-релевантни."
     )
@@ -164,6 +179,7 @@ async def run_examples(
         llm_result.get("selected_snippets"), snippets, max_snippets
     )
     llm_result["total_found"] = len(llm_result["selected_snippets"])
+    llm_result["selection_mode"] = "automatic_drafting_search"
     llm_result["_agent"] = "examples"
     llm_result["_trace_id"] = trace_id
     return llm_result

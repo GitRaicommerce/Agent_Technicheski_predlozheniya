@@ -198,27 +198,6 @@ async def test_generation_is_rejected_until_latest_plan_is_approved(mock_db):
 
 
 @pytest.mark.asyncio
-async def test_generation_is_rejected_while_phase3_review_is_pending(mock_db):
-    project = _make_project()
-    outline = TpOutline(
-        id=str(uuid.uuid4()),
-        project_id=project.id,
-        outline_json={"forlage_review": {"status": "pending"}, "sections": []},
-        status_locked=True,
-        version=12,
-    )
-
-    with patch(
-        "app.agents.generation_jobs._approved_outline",
-        new=AsyncMock(return_value=outline),
-    ):
-        with pytest.raises(ValueError, match="потвърдете Phase 3"):
-            await create_drafting_job(project, mock_db)
-
-    mock_db.add.assert_not_called()
-
-
-@pytest.mark.asyncio
 async def test_generation_job_records_failed_section_and_keeps_progress(mock_db):
     project = _make_project()
     section_ok = str(uuid.uuid4())

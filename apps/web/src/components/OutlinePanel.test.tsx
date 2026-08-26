@@ -58,7 +58,6 @@ const plan: ContentPlan = {
       content_kind: "specific",
       linked_wbs_ids: ["wbs-1"],
       linked_fact_keys: ["stages"],
-      forlage_section_id: null,
       order_index: 1,
       status: "draft",
       generation_uid: "generation-uid-1",

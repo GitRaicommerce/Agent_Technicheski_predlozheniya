@@ -8,7 +8,7 @@ from sqlalchemy import text
 
 from app.core.config import settings
 from app.core.database import AsyncSessionLocal
-from app.routers import projects, files, agents, export, understanding, content_plan, forlage
+from app.routers import projects, files, agents, export, understanding, content_plan
 
 limiter = Limiter(key_func=get_remote_address, default_limits=["200/minute"])
 
@@ -47,9 +47,6 @@ app.include_router(
     prefix="/api/v1/content-plan",
     tags=["content-plan"],
 )
-app.include_router(forlage.router, prefix="/api/v1/forlage", tags=["forlage"])
-
-
 @app.get("/health")
 async def health():
     checks: dict = {"status": "ok", "db": "ok", "redis": "ok"}

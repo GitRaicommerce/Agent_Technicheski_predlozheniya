@@ -38,7 +38,6 @@ class ContentPlanItemResponse(BaseModel):
     content_kind: Literal["reuse", "specific", "mixed"]
     linked_wbs_ids: list[str]
     linked_fact_keys: list[str]
-    forlage_section_id: str | None
     order_index: int
     status: Literal["draft", "approved"]
     generation_uid: str | None
@@ -52,7 +51,6 @@ class ContentPlanResponse(BaseModel):
     status_locked: bool
     source: str
     understanding_status: dict[str, bool] = Field(default_factory=dict)
-    forlage_status: dict[str, Any] = Field(default_factory=dict)
     items: list[ContentPlanItemResponse]
 
 
@@ -90,11 +88,6 @@ async def _response(outline: TpOutline, db: AsyncSession) -> ContentPlanResponse
         status_locked=outline.status_locked,
         source="understanding_content_plan",
         understanding_status=understanding_status,
-        forlage_status={
-            "analyzed": bool((outline.outline_json or {}).get("forlage_review")),
-            "review_confirmed": (outline.outline_json or {}).get("forlage_review", {}).get("status") == "confirmed",
-            "mapped_count": int((outline.outline_json or {}).get("forlage_review", {}).get("mapped_count") or 0),
-        },
         items=list(result.scalars().all()),
     )
 
