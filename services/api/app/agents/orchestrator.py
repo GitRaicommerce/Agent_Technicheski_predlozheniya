@@ -455,7 +455,12 @@ async def _run_drafting_all(
         # Fetch examples relevant to this section
         from app.agents.examples import run_examples
         examples_result = await run_examples(
-            project_id=project.id, query=title, db=db, max_snippets=5, trace_id=trace_id
+            project_id=project.id,
+            query=title,
+            db=db,
+            max_snippets=5,
+            trace_id=trace_id,
+            content_plan_item_id=section.get("content_plan_item_id"),
         )
         evidence_snippets = examples_result.get("selected_snippets", [])
 
@@ -542,6 +547,7 @@ async def _run_drafting_pipeline(
         db=db,
         max_snippets=5,
         trace_id=trace_id,
+        content_plan_item_id=params.get("content_plan_item_id"),
     )
     evidence_snippets = examples_result.get("selected_snippets", [])
     pipeline_trace["examples"] = {"total_found": examples_result.get("total_found", 0)}

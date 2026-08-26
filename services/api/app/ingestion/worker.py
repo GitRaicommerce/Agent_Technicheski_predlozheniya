@@ -178,7 +178,8 @@ async def _process_file_async(file_id: str):
 
 async def _ingest_examples(file, content: bytes, db):
     from app.ingestion.parsers import extract_chunks_with_audit
-    from app.core.models import ExtractedChunk, ExampleSnippet
+    from app.agents.forlage import replace_forlage_sections
+    from app.core.models import ExtractedChunk
     from app.core.embedding import embed_texts
     import uuid
 
@@ -204,6 +205,8 @@ async def _ingest_examples(file, content: bytes, db):
 
     for i, chunk in enumerate(chunks):
         emb = embeddings[i] if i < len(embeddings) and embeddings[i] else None
+        storage_meta = _chunk_storage_meta(chunk, emb)
+        storage_meta["chunk_index"] = i
         extracted = ExtractedChunk(
             project_id=file.project_id,
             file_id=file.id,
@@ -212,22 +215,18 @@ async def _ingest_examples(file, content: bytes, db):
             page=chunk.get("page"),
             section_path=chunk.get("section_path"),
             embedding=emb,
-            meta_json=_chunk_storage_meta(chunk, emb),
+            meta_json=storage_meta,
         )
         db.add(extracted)
         await db.flush()  # ensure extracted.id is populated
 
-        # Тагване: basic snippet detection (без LLM)
-        snippet = ExampleSnippet(
-            project_id=file.project_id,
-            file_id=file.id,
-            chunk_id=extracted.id,
-            text=chunk["text"],
-            snippet_kind="generic_boilerplate",  # детерминирано тагване — ще се разшири
-            source_group=chunk.get("source_group", "unknown"),
-            embedding=emb,
-        )
-        db.add(snippet)
+    await replace_forlage_sections(
+        project_id=file.project_id,
+        file_id=file.id,
+        chunks=chunks,
+        embeddings=embeddings,
+        db=db,
+    )
 
 
 async def _ingest_tender_docs(file, content: bytes, db):

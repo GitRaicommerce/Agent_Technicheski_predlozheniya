@@ -345,6 +345,11 @@ export default function GenerationsPanel({
     );
   }
 
+  const forlageReviewPending = Boolean(
+    contentPlan?.forlage_status?.analyzed &&
+    !contentPlan.forlage_status.review_confirmed,
+  );
+
   if (sections.length === 0) {
     return (
       <div className="space-y-1">
@@ -360,6 +365,11 @@ export default function GenerationsPanel({
             resuming={resumingJob}
           />
         )}
+        {forlageReviewPending && (
+          <p className="rounded bg-amber-50 p-2 text-xs text-amber-800" data-testid="generation-forlage-review-pending">
+            Прегледайте и потвърдете Phase 3 съпоставянето във „Форлаге / примерни ТП“ преди генериране.
+          </p>
+        )}
         <GenerationStartActions
           generationJob={generationJob}
           completing={retryingJob}
@@ -367,9 +377,12 @@ export default function GenerationsPanel({
           onComplete={handleRetryGenerationJob}
           onRegenerateAll={handleRegenerateAllSections}
           hasExistingSections={false}
+          blocked={forlageReviewPending}
         />
         <p className="text-xs leading-relaxed text-gray-400">
-          {contentPlan?.status_locked ? (
+          {forlageReviewPending ? (
+            <>Планът е одобрен, но Phase 3 съпоставянето още не е потвърдено.</>
+          ) : contentPlan?.status_locked ? (
             <>План v{contentPlan.version} е одобрен, но по него още няма генерирани текстове. Стартирайте генерирането.</>
           ) : (
             <>Все още няма генерирани текстове. Създайте и одобрете подробен план в „Разбиране на изискванията“.</>
@@ -412,6 +425,11 @@ export default function GenerationsPanel({
           resuming={resumingJob}
         />
       )}
+      {forlageReviewPending && (
+        <p className="rounded bg-amber-50 p-2 text-xs text-amber-800" data-testid="generation-forlage-review-pending">
+          Прегледайте и потвърдете Phase 3 съпоставянето във „Форлаге / примерни ТП“ преди ново генериране.
+        </p>
+      )}
       <GenerationStartActions
         generationJob={generationJob}
         completing={retryingJob}
@@ -419,6 +437,7 @@ export default function GenerationsPanel({
         onComplete={handleRetryGenerationJob}
         onRegenerateAll={handleRegenerateAllSections}
         hasExistingSections={sections.length > 0}
+        blocked={forlageReviewPending}
       />
       <StaleRegenerationAction
         staleSectionCount={countStaleSelectedSections(sections)}
@@ -1038,6 +1057,7 @@ function GenerationStartActions({
   onComplete,
   onRegenerateAll,
   hasExistingSections,
+  blocked,
 }: {
   generationJob: GenerationJob | null;
   completing: boolean;
@@ -1045,6 +1065,7 @@ function GenerationStartActions({
   onComplete: () => void;
   onRegenerateAll: () => void;
   hasExistingSections: boolean;
+  blocked: boolean;
 }) {
   const unavailable =
     generationJob?.status === "queued" ||
@@ -1057,7 +1078,7 @@ function GenerationStartActions({
       <button
         type="button"
         onClick={onComplete}
-        disabled={unavailable || completing || regeneratingAll}
+        disabled={blocked || unavailable || completing || regeneratingAll}
         data-testid="generation-complete-missing-button"
         className="rounded border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
       >
@@ -1066,7 +1087,7 @@ function GenerationStartActions({
       <button
         type="button"
         onClick={onRegenerateAll}
-        disabled={unavailable || completing || regeneratingAll}
+        disabled={blocked || unavailable || completing || regeneratingAll}
         data-testid="generation-regenerate-all-button"
         className="rounded border border-blue-300 bg-blue-50 px-2.5 py-1.5 text-xs font-medium text-blue-800 transition hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50"
       >

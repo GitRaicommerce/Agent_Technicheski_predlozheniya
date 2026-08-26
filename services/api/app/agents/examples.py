@@ -55,9 +55,47 @@ async def run_examples(
     db: "AsyncSession",
     max_snippets: int = 5,
     trace_id: str | None = None,
+    content_plan_item_id: str | None = None,
 ) -> dict[str, Any]:
     trace_id = trace_id or str(uuid.uuid4())
     log.info("agent_examples_start", project_id=project_id, trace_id=trace_id)
+
+    from app.agents.forlage import reviewed_forlage_for_item
+
+    forlage_reviewed, confirmed = await reviewed_forlage_for_item(
+        project_id=project_id,
+        content_plan_item_id=content_plan_item_id,
+        db=db,
+    )
+    if confirmed:
+        topics = confirmed.topics_json if isinstance(confirmed.topics_json, dict) else {}
+        title = str(topics.get("section_title") or confirmed.text.splitlines()[0][:220])
+        return {
+            "selected_snippets": [{
+                "snippet_id": confirmed.id,
+                "relevance_note": (
+                    f"Одобрен Phase 3 раздел „{title}“. Използвай само приложимата "
+                    "методология и я адаптирай към текущата документация."
+                ),
+                "text": confirmed.text,
+                "snippet_kind": confirmed.snippet_kind,
+                "source_group": confirmed.source_group,
+                "section_path": topics.get("section_path") or [],
+            }],
+            "total_found": 1,
+            "selection_mode": "confirmed_phase3_match",
+            "_agent": "examples",
+            "_trace_id": trace_id,
+        }
+    if forlage_reviewed:
+        return {
+            "selected_snippets": [],
+            "total_found": 0,
+            "selection_mode": "confirmed_phase3_no_match",
+            "message": "За тази точка е потвърдено да не се използва форлаге.",
+            "_agent": "examples",
+            "_trace_id": trace_id,
+        }
 
     # Try vector similarity search first; fall back to LIMIT if embeddings unavailable
     snippets = []

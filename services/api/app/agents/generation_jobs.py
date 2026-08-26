@@ -33,6 +33,19 @@ def _missing_approved_outline_message(latest_outline: TpOutline | None) -> str:
     )
 
 
+def _require_forlage_review(outline: TpOutline) -> None:
+    outline_json = getattr(outline, "outline_json", None)
+    review = (
+        outline_json.get("forlage_review", {})
+        if isinstance(outline_json, dict)
+        else {}
+    )
+    if review.get("status") == "pending":
+        raise ValueError(
+            "Прегледайте и потвърдете Phase 3 съпоставянето във „Форлаге / примерни ТП“ преди генериране."
+        )
+
+
 async def _latest_outline(project_id: str, db) -> TpOutline | None:
     result = await db.execute(
         select(TpOutline)
@@ -218,6 +231,7 @@ async def create_drafting_all_job(
     if not outline:
         latest_outline = await _latest_outline(project.id, db)
         raise ValueError(_missing_approved_outline_message(latest_outline))
+    _require_forlage_review(outline)
 
     if not regenerate_existing:
         return await create_drafting_job(project=project, db=db)
@@ -603,6 +617,7 @@ async def create_drafting_job(
     if not outline:
         latest_outline = await _latest_outline(project.id, db)
         raise ValueError(_missing_approved_outline_message(latest_outline))
+    _require_forlage_review(outline)
 
     trace_id = str(uuid.uuid4())
     result_json: dict[str, Any] = {
@@ -793,6 +808,7 @@ async def _run_drafting_all_job(job: GenerationJob, db) -> None:
                 db=db,
                 max_snippets=5,
                 trace_id=job.trace_id,
+                content_plan_item_id=section.get("content_plan_item_id"),
             )
             try:
                 lex_result = await run_legislation(
