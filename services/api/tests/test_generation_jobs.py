@@ -9,6 +9,7 @@ import pytest
 from app.agents.generation_jobs import (
     _pause_job_if_requested,
     _run_drafting_all_job,
+    _run_drafting_v2_job,
     _set_job_result,
     _sections_pending_generation,
     create_drafting_quality_job,
@@ -45,6 +46,129 @@ def test_sections_pending_generation_retries_stale_sections():
     pending = _sections_pending_generation(sections, generation_statuses)
 
     assert [section["uid"] for section in pending] == ["stale", "missing"]
+
+
+@pytest.mark.asyncio
+async def test_v2_job_generates_subpoints_then_assembles_their_section(mock_db):
+    project = _make_project()
+    first_uid = str(uuid.uuid4())
+    second_uid = str(uuid.uuid4())
+    root_uid = str(uuid.uuid4())
+    outline = TpOutline(
+        id=str(uuid.uuid4()),
+        project_id=project.id,
+        outline_json={
+            "sections": [{
+                "content_plan_uid": root_uid,
+                "title": "Универсален раздел",
+                "subsections": [
+                    {
+                        "uid": first_uid,
+                        "title": "Подход",
+                        "requirements": ["Опиши подхода."],
+                        "requirement_checklist_items": [],
+                        "linked_wbs_ids": [],
+                        "linked_fact_keys": [],
+                        "subsections": [],
+                    },
+                    {
+                        "uid": second_uid,
+                        "title": "Контрол",
+                        "requirements": ["Опиши контрола."],
+                        "requirement_checklist_items": [],
+                        "linked_wbs_ids": [],
+                        "linked_fact_keys": [],
+                        "subsections": [],
+                    },
+                ],
+            }]
+        },
+        status_locked=True,
+        version=1,
+    )
+    job = SimpleNamespace(
+        id=str(uuid.uuid4()),
+        project_id=project.id,
+        trace_id=str(uuid.uuid4()),
+        job_type="drafting_all",
+        status="queued",
+        total_sections=0,
+        completed_sections=0,
+        skipped_sections=0,
+        current_section_uid=None,
+        current_section_title=None,
+        result_json={"outline_id": outline.id, "outline_version": 1},
+        error=None,
+        completed_at=None,
+        updated_at=None,
+    )
+    selected_result = MagicMock()
+    selected_result.scalars.return_value.all.return_value = []
+    mock_db.get = AsyncMock(return_value=project)
+    mock_db.execute = AsyncMock(
+        side_effect=[_outline_result(outline), [], selected_result]
+    )
+    first_generation_id = str(uuid.uuid4())
+    second_generation_id = str(uuid.uuid4())
+    assembly_generation_id = str(uuid.uuid4())
+
+    with (
+        patch(
+            "app.agents.schedule.run_schedule",
+            new=AsyncMock(return_value={"status": "ok", "tp_section_text": "График"}),
+        ),
+        patch(
+            "app.agents.examples.run_examples",
+            new=AsyncMock(return_value={"selected_snippets": []}),
+        ),
+        patch(
+            "app.agents.legislation.run_legislation",
+            new=AsyncMock(return_value={"citations": []}),
+        ),
+        patch(
+            "app.agents.context.build_project_grounding_context_v2",
+            new=AsyncMock(return_value={"tender_chunks": []}),
+        ),
+        patch(
+            "app.agents.drafting.run_drafting",
+            new=AsyncMock(side_effect=[
+                {"generation_ids": {"variant_1": first_generation_id}, "variant_1": {"text": "Подход — пълен текст."}},
+                {"generation_ids": {"variant_1": second_generation_id}, "variant_1": {"text": "Контрол — пълен текст."}},
+            ]),
+        ) as run_drafting,
+        patch(
+            "app.agents.drafting_v2.run_section_assembly",
+            new=AsyncMock(return_value={
+                "generation_id": assembly_generation_id,
+                "text": "Сглобен текст.",
+                "assembly_quality": {"passed": True},
+            }),
+        ) as run_assembly,
+    ):
+        await _run_drafting_v2_job(job, mock_db)
+
+    assert job.status == "done"
+    assert job.total_sections == 3
+    assert job.completed_sections == 3
+    assert job.skipped_sections == 0
+    assert run_drafting.await_count == 2
+    assembly_uid = run_drafting.await_args_list[0].kwargs["parent_section_uid"]
+    assert assembly_uid == run_drafting.await_args_list[1].kwargs["parent_section_uid"]
+    assert all(
+        call.kwargs["generation_kind"] == "subpoint"
+        for call in run_drafting.await_args_list
+    )
+    assert all(
+        call.kwargs["use_drafting_blueprint"] is False
+        for call in run_drafting.await_args_list
+    )
+    assert all("section_source_quotes" in call.kwargs for call in run_drafting.await_args_list)
+    assert run_assembly.await_args.kwargs["section_uid"] == assembly_uid
+    assert [item["unit_kind"] for item in job.result_json["sections"]] == [
+        "subpoint",
+        "subpoint",
+        "section_assembly",
+    ]
 
 
 def test_set_job_result_snapshots_progress_lists():
@@ -126,6 +250,45 @@ async def test_resume_targeted_job_only_enqueues_remaining_sections(mock_db):
         target_reason="quality_review",
         target_guidance={"section-2": {"instructions": ["expand"]}},
         job_type="drafting_quality",
+    )
+
+
+@pytest.mark.asyncio
+async def test_resume_v2_job_can_continue_with_assembly_only(mock_db):
+    project = _make_project()
+    job = SimpleNamespace(
+        status="paused",
+        job_type="drafting_all",
+        result_json={
+            "target_section_uids": ["subpoint-1", "subpoint-2"],
+            "target_assembly_uids": ["assembly-1"],
+            "target_reason": "regenerate_all",
+            "sections": [
+                {"section_uid": "subpoint-1", "unit_kind": "subpoint"},
+                {"section_uid": "subpoint-2", "unit_kind": "subpoint"},
+            ],
+        },
+    )
+    next_job = SimpleNamespace(id="next-v2-job")
+
+    with (
+        patch("app.agents.generation_jobs.settings.generation_pipeline", "v2"),
+        patch(
+            "app.agents.generation_jobs.create_drafting_job",
+            new=AsyncMock(return_value=next_job),
+        ) as create_job,
+    ):
+        result = await resume_generation_job(job, project, mock_db)
+
+    assert result is next_job
+    create_job.assert_awaited_once_with(
+        project=project,
+        db=mock_db,
+        target_section_uids=[],
+        target_assembly_uids=["assembly-1"],
+        target_reason="regenerate_all",
+        target_guidance=None,
+        job_type="drafting_all",
     )
 
 

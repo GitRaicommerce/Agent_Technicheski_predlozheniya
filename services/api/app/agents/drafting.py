@@ -43,6 +43,7 @@ You are a Bulgarian technical proposal drafting specialist for public procuremen
 You receive:
 - SECTION and REQUIREMENTS: what the text must cover.
 - SECTION REQUIREMENT CHECKLIST: atomic tender requirements for this section.
+- SOURCE QUOTES: exact traceable excerpts supporting the current subpoint.
 - PROJECT GROUNDING CONTEXT: selected tender excerpts and schedule tasks.
 - EXAMPLE blocks: optional reusable forlage from older proposals, including technical
   descriptions, execution methods, control procedures and organization texts.
@@ -53,10 +54,8 @@ Task:
 Write one exhaustive, concrete section text in Bulgarian.
 
 Requirements:
-- Target length: usually 900-1500 words for a main section and 1200-2500
-  words for a complex work-program section when the provided sources support
-  that depth. Shorter answers are acceptable only when the tender sources and
-  requirements are genuinely narrow.
+- Match the justified depth of the requirements and applicable forlage. Do not
+  impose an artificial word ceiling and do not add filler merely to increase length.
 - Cover every requirement from the section.
 - Cover every item in SECTION REQUIREMENT CHECKLIST explicitly. Do not merge
   several checklist items into a vague generic paragraph.
@@ -84,11 +83,9 @@ Grounding rules:
 - Before writing, read PROJECT GROUNDING CONTEXT and extract the concrete scope,
   project parts, schedule tasks, phases, deliverables, documents and obligations
   that relate to this section.
-- If the section concerns investment/design project development, explicitly cover
-  every project part found in the tender documents or schedule, including Geodesy,
-  Structural, Water supply, PBZ, PUSO, cost estimate documentation, bills of
-  quantities, and any other listed parts. Do not describe only one part when the
-  sources list more.
+- When the current sources define project disciplines, stages, deliverables or
+  activities, explicitly cover every applicable item found there. Never assume a
+  fixed discipline list or structure from another procurement.
 - Integrate schedule tasks as execution logic: sequence, dependencies,
   deliverables, review/approval steps and timing where provided.
 - Avoid generic promises. Requirements and project-specific claims must be grounded
@@ -697,6 +694,10 @@ async def run_drafting(
     project_grounding_context: dict[str, Any] | None = None,
     section_requirement_items: list[dict[str, Any]] | None = None,
     section_drafting_guidance: dict[str, Any] | None = None,
+    generation_kind: str = "section",
+    parent_section_uid: str | None = None,
+    use_drafting_blueprint: bool = True,
+    section_source_quotes: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     trace_id = trace_id or str(uuid.uuid4())
     section_uid = _safe_section_uuid(section_uid)
@@ -752,16 +753,29 @@ async def run_drafting(
         normalized_requirement_items
     )
     grounding_context_text = format_grounding_context(project_grounding_context)
-    drafting_blueprint = build_drafting_blueprint(
-        section_title=section_title,
-        requirement_items=normalized_requirement_items,
-        project_grounding_context=project_grounding_context,
+    drafting_blueprint = (
+        build_drafting_blueprint(
+            section_title=section_title,
+            requirement_items=normalized_requirement_items,
+            project_grounding_context=project_grounding_context,
+        )
+        if use_drafting_blueprint
+        else {"groups": [], "additional_groups": [], "context_cues": []}
     )
-    drafting_blueprint_text = format_drafting_blueprint_for_prompt(
-        drafting_blueprint
+    drafting_blueprint_text = (
+        format_drafting_blueprint_for_prompt(drafting_blueprint)
+        if use_drafting_blueprint
+        else ""
     )
     section_guidance_text = _format_section_drafting_guidance(
         section_drafting_guidance
+    )
+    source_quotes_text = "\n".join(
+        f"- file={quote.get('source_file_id') or quote.get('file_id') or '?'} "
+        f"page={quote.get('source_page') or quote.get('page') or '?'}: "
+        f"{quote.get('source_quote') or quote.get('quote') or quote.get('text') or ''}"
+        for quote in (section_source_quotes or [])
+        if isinstance(quote, dict)
     )
     depth_target = build_generation_depth_target(
         requirement_coverage={
@@ -794,6 +808,12 @@ async def run_drafting(
                 )
             ),
             requirement_checklist_text,
+            (
+                "SOURCE QUOTES:\n[UNTRUSTED DATA START]\n"
+                f"{source_quotes_text}\n[UNTRUSTED DATA END]"
+                if source_quotes_text
+                else None
+            ),
             section_guidance_text,
             drafting_blueprint_text,
             depth_target_text,
@@ -922,6 +942,7 @@ async def run_drafting(
             )
             flags_payload = {
                 "flags": llm_result.get("flags", []),
+                "generation_kind": generation_kind,
                 "requirement_coverage": requirement_coverage,
                 "llm_requirement_coverage": variant_data.get("requirement_coverage", []),
                 "generation_depth": depth_assessment,
@@ -937,6 +958,8 @@ async def run_drafting(
                 used_sources["section_requirement_items"] = normalized_requirement_items
             if section_drafting_guidance:
                 used_sources["section_drafting_guidance"] = section_drafting_guidance
+            if section_source_quotes:
+                used_sources["section_source_quotes"] = section_source_quotes
             if (
                 drafting_blueprint.get("groups")
                 or drafting_blueprint.get("additional_groups")
@@ -947,6 +970,12 @@ async def run_drafting(
                 id=str(uuid.uuid4()),
                 project_id=project_id,
                 section_uid=section_uid,
+                generation_kind=generation_kind,
+                parent_section_uid=(
+                    _safe_section_uuid(parent_section_uid)
+                    if parent_section_uid
+                    else None
+                ),
                 variant=variant_key.replace("variant_", ""),
                 revision_number=revision_number,
                 change_summary=_change_summary(variant_data, revision_number),

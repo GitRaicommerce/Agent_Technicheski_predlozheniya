@@ -441,6 +441,8 @@ async def get_requirements_checklist(
 class GenerationResponse(BaseModel):
     id: str
     section_uid: str
+    generation_kind: str = "section"
+    parent_section_uid: str | None = None
     variant: int
     revision_number: int
     change_summary: str | None = None
@@ -516,6 +518,18 @@ async def list_generations(project_id: str, db: AsyncSession = Depends(get_db)):
                 _collect(s.get("subsections", s.get("children", [])))
 
         _collect(sections)
+        from app.agents.generation_structure import build_generation_groups
+
+        assembly_order: list[str] = []
+        for group in build_generation_groups(sections):
+            if not group["requires_assembly"]:
+                continue
+            assembly_uid = group["assembly_uid"]
+            section_title_map[assembly_uid] = (
+                f"{group['root'].get('title', '')} — сглобен раздел"
+            )
+            assembly_order.append(assembly_uid)
+        section_order = assembly_order + section_order
 
     gen_result = await db.execute(
         select(Generation)
@@ -551,6 +565,8 @@ async def list_generations(project_id: str, db: AsyncSession = Depends(get_db)):
                     GenerationResponse(
                         id=v.id,
                         section_uid=v.section_uid,
+                        generation_kind=v.generation_kind or "section",
+                        parent_section_uid=v.parent_section_uid,
                         variant=v.variant,
                         revision_number=v.revision_number or 1,
                         change_summary=v.change_summary,
@@ -1071,20 +1087,50 @@ async def regenerate_section(
     section_title = section_uid
     section_requirements: list[str] = []
     section_requirement_items: list[dict] = []
-    content_plan_item_id: str | None = None
+    section_drafting_guidance: dict | None = None
+    section_source_quotes: list[dict] = []
+    linked_wbs_ids: list[str] = []
+    linked_fact_keys: list[str] = []
+    parent_assembly_uid: str | None = None
+    assembly_subpoints: list[dict] = []
+    assembly_section_title: str | None = None
 
     if outline:
-        def _find(secs: list) -> bool:
+        from app.agents.generation_structure import section_assembly_uid
+
+        def _find(secs: list, root: dict | None = None) -> bool:
             for s in secs:
+                current_root = root or s
                 uid = s.get("uid") or s.get("section_uid", "")
                 if uid == section_uid:
-                    nonlocal section_title, section_requirements, section_requirement_items, content_plan_item_id
+                    nonlocal section_title, section_requirements, section_requirement_items
+                    nonlocal section_drafting_guidance, section_source_quotes
+                    nonlocal linked_wbs_ids, linked_fact_keys, parent_assembly_uid
+                    nonlocal assembly_subpoints
+                    nonlocal assembly_section_title
                     section_title = s.get("title", section_uid)
                     section_requirements = s.get("requirements", [])
                     section_requirement_items = s.get("requirement_checklist_items", [])
-                    content_plan_item_id = s.get("content_plan_item_id")
+                    section_drafting_guidance = s.get("drafting_guidance")
+                    section_source_quotes = s.get("source_quotes", [])
+                    linked_wbs_ids = s.get("linked_wbs_ids", [])
+                    linked_fact_keys = s.get("linked_fact_keys", [])
+                    if current_root is not s or current_root.get("subsections") or current_root.get("children"):
+                        parent_assembly_uid = section_assembly_uid(current_root)
+                        assembly_section_title = str(current_root.get("title") or section_title)
+                        def _units(node: dict) -> None:
+                            node_uid = node.get("uid") or node.get("section_uid")
+                            if node_uid:
+                                assembly_subpoints.append({
+                                    "section_uid": str(node_uid),
+                                    "title": node.get("title") or str(node_uid),
+                                })
+                            for child in node.get("subsections") or node.get("children") or []:
+                                if isinstance(child, dict):
+                                    _units(child)
+                        _units(current_root)
                     return True
-                if _find(s.get("subsections", s.get("children", []))):
+                if _find(s.get("subsections", s.get("children", [])), current_root):
                     return True
             return False
 
@@ -1103,7 +1149,13 @@ async def regenerate_section(
             "section_title": section_title,
             "section_requirements": section_requirements,
             "section_requirement_items": section_requirement_items,
-            "content_plan_item_id": content_plan_item_id,
+            "section_drafting_guidance": section_drafting_guidance,
+            "section_source_quotes": section_source_quotes,
+            "linked_wbs_ids": linked_wbs_ids,
+            "linked_fact_keys": linked_fact_keys,
+            "parent_assembly_uid": parent_assembly_uid,
+            "assembly_subpoints": assembly_subpoints,
+            "assembly_section_title": assembly_section_title,
         },
         db=db,
         trace_id=trace_id,

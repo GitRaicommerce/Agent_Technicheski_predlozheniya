@@ -6,7 +6,13 @@ from typing import Any, TYPE_CHECKING
 
 from sqlalchemy import select
 
-from app.core.models import ExtractedChunk, ProjectFile, ScheduleNormalized
+from app.core.models import (
+    ExtractedChunk,
+    ProjectFactSheet,
+    ProjectFile,
+    ScheduleNormalized,
+    WbsItem,
+)
 from app.ingestion.schedule_parser import schedule_quality
 
 if TYPE_CHECKING:
@@ -192,3 +198,123 @@ def format_grounding_context(context: dict[str, Any] | None) -> str:
     if not context:
         return ""
     return json.dumps(context, ensure_ascii=False, indent=2)
+
+
+async def build_project_grounding_context_v2(
+    project_id: str,
+    section_title: str,
+    section_requirements: list[str],
+    db: "AsyncSession",
+    *,
+    linked_wbs_ids: list[str] | None = None,
+    linked_fact_keys: list[str] | None = None,
+    max_tender_chunks: int = 18,
+    max_schedule_tasks: int = 24,
+) -> dict[str, Any]:
+    """Build Phase 4 context with semantic tender retrieval and linked artifacts."""
+    base = await build_project_grounding_context(
+        project_id=project_id,
+        section_title=section_title,
+        section_requirements=section_requirements,
+        db=db,
+        max_tender_chunks=max_tender_chunks,
+        max_schedule_tasks=max_schedule_tasks,
+    )
+    query = "\n".join([section_title, *section_requirements]).strip()
+
+    semantic_chunks: list[ExtractedChunk] = []
+    semantic_warning: str | None = None
+    try:
+        from app.core.embedding import embed_query
+
+        query_embedding = await embed_query(query)
+        if query_embedding:
+            semantic_result = await db.execute(
+                select(ExtractedChunk)
+                .join(ProjectFile, ProjectFile.id == ExtractedChunk.file_id)
+                .where(
+                    ExtractedChunk.project_id == project_id,
+                    ProjectFile.module == "tender_docs",
+                    ExtractedChunk.embedding.is_not(None),
+                )
+                .order_by(ExtractedChunk.embedding.cosine_distance(query_embedding))
+                .limit(max_tender_chunks)
+            )
+            semantic_chunks = list(semantic_result.scalars().all())
+    except Exception as exc:
+        semantic_chunks = []
+        semantic_warning = str(exc)
+
+    merged_chunks: list[dict[str, Any]] = []
+    seen_chunk_ids: set[str] = set()
+    for chunk in semantic_chunks:
+        chunk_id = str(chunk.id)
+        if chunk_id in seen_chunk_ids:
+            continue
+        seen_chunk_ids.add(chunk_id)
+        merged_chunks.append(
+            {
+                "chunk_id": chunk_id,
+                "page": chunk.page,
+                "section_path": chunk.section_path,
+                "text": (chunk.text or "")[:3000],
+                "retrieval": "semantic",
+            }
+        )
+    for chunk in base.get("tender_chunks") or []:
+        chunk_id = str(chunk.get("chunk_id") or "")
+        if not chunk_id or chunk_id in seen_chunk_ids:
+            continue
+        seen_chunk_ids.add(chunk_id)
+        merged_chunks.append({**chunk, "retrieval": "keyword"})
+    base["tender_chunks"] = merged_chunks[:max_tender_chunks]
+    base["retrieval_mode"] = "semantic_plus_keyword" if semantic_chunks else "keyword_fallback"
+    if semantic_warning:
+        base["retrieval_warning"] = semantic_warning
+
+    wbs_result = await db.execute(
+        select(WbsItem)
+        .where(WbsItem.project_id == project_id, WbsItem.status != "rejected")
+        .order_by(WbsItem.order_index, WbsItem.id)
+    )
+    all_wbs = list(wbs_result.scalars().all())
+    linked = {str(item) for item in linked_wbs_ids or [] if item}
+    keywords = _keyword_set(section_title, section_requirements)
+    selected_wbs = [item for item in all_wbs if str(item.id) in linked]
+    if not selected_wbs:
+        selected_wbs = [
+            item
+            for item in all_wbs
+            if _score_text(f"{item.title} {item.description or ''}", keywords) > 0
+        ][:20]
+    base["wbs_items"] = [
+        {
+            "id": item.id,
+            "parent_id": item.parent_id,
+            "level": item.level,
+            "kind": item.kind,
+            "title": item.title,
+            "description": item.description,
+            "schedule_task_uid": item.schedule_task_uid,
+            "source_refs": item.source_refs_json or [],
+        }
+        for item in selected_wbs
+    ]
+
+    fact_result = await db.execute(
+        select(ProjectFactSheet)
+        .where(ProjectFactSheet.project_id == project_id)
+        .order_by(ProjectFactSheet.version.desc())
+        .limit(1)
+    )
+    fact_sheet = fact_result.scalar_one_or_none()
+    facts = fact_sheet.facts_json if fact_sheet and isinstance(fact_sheet.facts_json, dict) else {}
+    requested_keys = [str(key) for key in linked_fact_keys or [] if key]
+    if requested_keys:
+        facts = {key: facts[key] for key in requested_keys if key in facts}
+    base["project_fact_sheet"] = {
+        "version": fact_sheet.version if fact_sheet else None,
+        "status": fact_sheet.status if fact_sheet else None,
+        "facts": facts,
+    }
+    return base

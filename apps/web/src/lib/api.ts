@@ -353,6 +353,8 @@ export interface RequirementCoverage {
 export interface Generation {
   id: string;
   section_uid: string;
+  generation_kind?: "section" | "subpoint" | "section_assembly" | string;
+  parent_section_uid?: string | null;
   variant: number | string;
   revision_number?: number;
   change_summary?: string | null;

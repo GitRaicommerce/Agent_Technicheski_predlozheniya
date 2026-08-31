@@ -7,7 +7,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from sqlalchemy.sql.dml import Update
 
-from app.agents.context import build_project_grounding_context
+from app.agents.context import (
+    build_project_grounding_context,
+    build_project_grounding_context_v2,
+)
 from app.agents.drafting import (
     _format_section_drafting_guidance,
     _quality_repair_feedback,
@@ -40,6 +43,74 @@ def _varied_operational_text(topics: list[str], repeats: int = 8) -> str:
                 "interface. "
             )
     return "".join(sentences)
+
+
+@pytest.mark.asyncio
+async def test_v2_grounding_combines_semantic_tender_wbs_and_linked_facts(mock_db):
+    semantic_chunk = SimpleNamespace(
+        id="semantic-1",
+        page=8,
+        section_path="Специфични изисквания",
+        text="Специфична процедура за текущата поръчка.",
+    )
+    linked_wbs = SimpleNamespace(
+        id="wbs-linked",
+        parent_id=None,
+        level=1,
+        kind="activity",
+        title="Произволна дейност",
+        description="Описание",
+        schedule_task_uid="task-7",
+        source_refs_json=["chunk-7"],
+    )
+    semantic_result = _scalar_result([semantic_chunk])
+    wbs_result = _scalar_result([linked_wbs])
+    fact_sheet = SimpleNamespace(
+        version=4,
+        status="confirmed",
+        facts_json={"object": "Текущ обект", "unrelated": "Да не се подава"},
+    )
+    mock_db.execute = AsyncMock(
+        side_effect=[semantic_result, wbs_result, _one_result(fact_sheet)]
+    )
+    base = {
+        "section": {"title": "Нова секция", "requirements": ["Изискване"]},
+        "tender_chunks": [{
+            "chunk_id": "keyword-1",
+            "page": 2,
+            "section_path": "Документация",
+            "text": "Лексикално намерен цитат.",
+        }],
+        "schedule": {"available": False, "tasks": []},
+    }
+
+    with (
+        patch(
+            "app.agents.context.build_project_grounding_context",
+            new=AsyncMock(return_value=base),
+        ),
+        patch("app.core.embedding.embed_query", new=AsyncMock(return_value=[0.1] * 1536)),
+    ):
+        context = await build_project_grounding_context_v2(
+            project_id="project-new",
+            section_title="Нова секция",
+            section_requirements=["Изискване"],
+            linked_wbs_ids=["wbs-linked"],
+            linked_fact_keys=["object"],
+            db=mock_db,
+        )
+
+    assert context["retrieval_mode"] == "semantic_plus_keyword"
+    assert [item["chunk_id"] for item in context["tender_chunks"]] == [
+        "semantic-1",
+        "keyword-1",
+    ]
+    assert context["wbs_items"][0]["id"] == "wbs-linked"
+    assert context["project_fact_sheet"] == {
+        "version": 4,
+        "status": "confirmed",
+        "facts": {"object": "Текущ обект"},
+    }
 
 
 def test_quality_repair_feedback_names_missing_distinctive_requirement_details():
@@ -352,6 +423,8 @@ async def test_drafting_prompt_and_saved_generation_include_grounding_context(mo
     assert "Методология за разработване на проект по част ВиК." in prompt
     assert "Reuse and adapt relevant passages" in system_prompt
     assert "cannot create requirements" in system_prompt
+    assert "fixed discipline list" in system_prompt
+    assert "including Geodesy" not in system_prompt
     assert "Геодезия" in prompt
     assert "ПУСО" in prompt
     assert saved_generation.used_sources_json["grounding_context"] == grounding_context

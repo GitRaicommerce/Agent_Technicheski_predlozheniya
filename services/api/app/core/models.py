@@ -379,6 +379,12 @@ class Generation(Base):
         UUID(as_uuid=False), ForeignKey("projects.id", ondelete="CASCADE")
     )
     section_uid: Mapped[str] = mapped_column(UUID(as_uuid=False))
+    generation_kind: Mapped[str] = mapped_column(
+        String(24), default="section", server_default="section"
+    )
+    parent_section_uid: Mapped[Optional[str]] = mapped_column(
+        UUID(as_uuid=False), nullable=True
+    )
     variant: Mapped[str] = mapped_column(String(16))  # 1|2
     revision_number: Mapped[int] = mapped_column(
         Integer, default=1, server_default="1"

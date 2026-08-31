@@ -221,6 +221,7 @@ async def _write_sections(
 ):
     from sqlalchemy import select
     from docx.shared import Pt
+    from app.agents.generation_structure import section_assembly_uid
     from app.core.models import Generation
 
     for section in sections:
@@ -233,6 +234,7 @@ async def _write_sections(
         section_uid = section.get("section_uid") or section.get("uid", "")
         title = section.get("title", "")
         numbering = section.get("display_numbering", "")
+        children = section.get("children") or section.get("subsections", [])
 
         heading = doc.add_heading(level=min(level, 9))
         heading.clear()
@@ -240,23 +242,39 @@ async def _write_sections(
 
         # Текст от генерацията (ако има)
         generation = None
-        if section_uid:
-            result = await db.execute(
+        assembled = False
+        if children:
+            assembly_result = await db.execute(
                 select(Generation)
                 .where(
                     Generation.project_id == project_id,
-                    Generation.section_uid == section_uid,
+                    Generation.section_uid == section_assembly_uid(section),
+                    Generation.generation_kind == "section_assembly",
                     Generation.selected.is_(True),
                 )
-                .order_by(
-                    Generation.revision_number.desc(),
-                    Generation.selected.desc(),   # закрепен от потребителя
-                    Generation.variant.asc(),     # вариант 1 преди 2
-                    Generation.created_at.desc(),
-                )
+                .order_by(Generation.revision_number.desc(), Generation.created_at.desc())
                 .limit(1)
             )
-            generation = result.scalar_one_or_none()
+            generation = assembly_result.scalar_one_or_none()
+            assembled = generation is not None
+        if section_uid:
+            if generation is None:
+                result = await db.execute(
+                    select(Generation)
+                    .where(
+                        Generation.project_id == project_id,
+                        Generation.section_uid == section_uid,
+                        Generation.selected.is_(True),
+                    )
+                    .order_by(
+                        Generation.revision_number.desc(),
+                        Generation.selected.desc(),   # закрепен от потребителя
+                        Generation.variant.asc(),     # вариант 1 преди 2
+                        Generation.created_at.desc(),
+                    )
+                    .limit(1)
+                )
+                generation = result.scalar_one_or_none()
 
         if generation:
             # Evidence НЕ се включва в .docx
@@ -269,6 +287,5 @@ async def _write_sections(
             p.runs[0].font.italic = True
 
         # Support both key names: "children" (old) and "subsections" (tender_struct output)
-        children = section.get("children") or section.get("subsections", [])
-        if children:
+        if children and not assembled:
             await _write_sections(doc, children, project_id, db, level=level + 1)

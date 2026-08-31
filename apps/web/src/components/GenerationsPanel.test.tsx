@@ -163,6 +163,7 @@ describe("GenerationsPanel", () => {
           {
             id: "gen-1",
             section_uid: "sec-1",
+            generation_kind: "section_assembly",
             variant: 1,
             revision_number: 1,
             change_summary: "Първоначална редакция на раздела.",
@@ -182,6 +183,7 @@ describe("GenerationsPanel", () => {
 
     expect(await screen.findByText("Selected generation text")).toBeInTheDocument();
     expect(screen.getByText("Версия 1")).toBeInTheDocument();
+    expect(screen.getByText("Сглобен раздел")).toBeInTheDocument();
     expect(
       screen.getByTestId("generation-change-summary-gen-1"),
     ).toHaveTextContent(
@@ -582,6 +584,7 @@ describe("GenerationsPanel", () => {
           {
             id: "gen-1",
             section_uid: "sec-1",
+            generation_kind: "section_assembly",
             variant: 1,
             revision_number: 1,
             change_summary: null,

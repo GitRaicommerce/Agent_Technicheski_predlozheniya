@@ -19,6 +19,7 @@
 
 ## Completed Work
 
+- Implemented Phase 4 hierarchical drafting without tender-specific assumptions: the approved content plan is grouped dynamically, every narrative subpoint is generated and persisted independently with semantic current-tender retrieval, linked WBS/fact-sheet grounding and automatic forlage reuse, then a guarded assembly pass produces the complete parent section without dropping headings or materially shortening content. Background jobs now report, pause, resume and retry at subpoint/assembly granularity; single-section regeneration updates the assembly when all siblings exist; DOCX export prefers the selected assembled section. The database migration is applied locally and automated/manual checks were completed without spending API credits; the paid full-generation calibration remains deferred to the user's later test.
 - Corrected Phase 3 to an automatic drafting-time forlage workflow: uploaded example proposals are reconstructed into complete hierarchical sections, the retrieval agent searches their full library from each approved plan section plus its understood requirements and drafting guidance, and an LLM selects only genuinely reusable passages before drafting. Manual plan-to-forlage mappings, per-section approval, and the generation gate were removed; forlage can enrich wording and methodology but cannot define the current tender's requirements or structure.
 - Restored the approved-plan generation flow: building a newer content-plan draft no longer silently revokes the prior approval, WBS/fact-sheet review is informative rather than an approval blocker, generation jobs are scoped to drafting and the approved outline version, and the Generations panel now separates state refresh from an explicit confirmed start action. The real Pernik plan v12 approval was restored without starting a paid LLM job.
 - Reorganized the Understanding workspace around a universal technical-proposal contract extracted from each current tender: explicit minimum-content markers and AI-derived proposal paths determine the hierarchy without fixed clause numbers, semantic lineage groups requirements after re-analysis, arbitrary team structures contribute only proposal-relevant role names/counts, and bulky editors, format/evaluation records, and extraction diagnostics remain collapsed until explicitly opened.
@@ -275,10 +276,10 @@
 
 ## Next Recommended Steps
 
-1. Re-run `Generate all` for the approved Pernik plan v12 so every section automatically searches and reuses only relevant forlage passages; do not resume the legacy July outline or reuse generations from the previous structure.
-2. Re-run the Pernik calibration bundle after regeneration and compare the output against the winning proposal, focusing on requirement coverage, section depth, schedule consistency, and role/responsibility coverage without EEDOP qualification prose.
-3. Inspect generation traces to calibrate automatic forlage retrieval precision and recall across quality, risk, environment, safety, communication, design disciplines, and construction methodologies.
-4. Expand generated documentation with more precise backend endpoint and workflow coverage.
+1. When the user is ready to spend API credits, run a new full Phase 4 generation for the approved Pernik plan v12; do not resume the legacy July outline or reuse generations from the previous structure.
+2. Re-run the Pernik calibration bundle and compare the hierarchical output against the reference proposal, focusing on requirement coverage, section depth, assembly preservation, schedule consistency, and role/responsibility coverage without EEDOP qualification prose.
+3. Inspect the new subpoint and assembly traces to calibrate semantic tender retrieval and automatic forlage precision/recall across different content kinds.
+4. Begin Phase 5: criterion-level verification and project-wide consistency checks against the schedule and fact sheet.
 5. Continue broadening common tender regression coverage with more real-world noisy PDF extraction, DOCX readiness combinations, and operational-action coverage cases.
 
 ## Notes

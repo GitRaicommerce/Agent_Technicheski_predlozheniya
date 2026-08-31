@@ -840,6 +840,16 @@ function GenerationVariantSelector({
                   <span className="font-medium text-gray-700">
                     Версия {variant.revision_number ?? variant.variant}
                   </span>
+                  {variant.generation_kind === "section_assembly" && (
+                    <span className="rounded bg-purple-100 px-1.5 py-0.5 text-[11px] font-medium text-purple-700">
+                      Сглобен раздел
+                    </span>
+                  )}
+                  {variant.generation_kind === "subpoint" && (
+                    <span className="rounded bg-blue-100 px-1.5 py-0.5 text-[11px] font-medium text-blue-700">
+                      Подточка
+                    </span>
+                  )}
                   {variant.selected && (
                     <span className="rounded bg-green-100 px-1.5 py-0.5 text-[11px] font-medium text-green-700">
                       Избрана
@@ -1118,6 +1128,9 @@ function GenerationJobProgress({
         : 0;
   const currentTitle = repairLikelyMojibake(job.current_section_title ?? "");
   const error = repairLikelyMojibake(job.error ?? "");
+  const hierarchicalV2 = Array.isArray(
+    job.result_json?.target_assembly_uids,
+  );
   const isActive =
     job.status === "queued" ||
     job.status === "processing" ||
@@ -1170,7 +1183,9 @@ function GenerationJobProgress({
       )}
       {job.status === "pause_requested" && (
         <p className="mt-1 text-[11px] opacity-90">
-          Текущата секция ще бъде записана преди спирането.
+          {hierarchicalV2
+            ? "Текущата подточка ще бъде записана преди спирането. Сглобяването на раздела ще продължи след възобновяване."
+            : "Текущата секция ще бъде записана преди спирането."}
         </p>
       )}
       {isPaused && (
@@ -1181,7 +1196,8 @@ function GenerationJobProgress({
       {isIncompleteDoneJob && (
         <p className="mt-1 text-[11px] opacity-90">
           Последната задача е отчетена като завършена, но са налични само{" "}
-          {availableSectionCount} от {job.total_sections} раздела. Използвайте
+          {availableSectionCount} от {job.total_sections}{" "}
+          {hierarchicalV2 ? "генерационни стъпки" : "раздела"}. Използвайте
           „Довърши липсващите“ или „Нова версия на всички“.
         </p>
       )}

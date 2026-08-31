@@ -530,6 +530,11 @@ async def _run_drafting_pipeline(
     section_requirements = params.get("section_requirements", [])
     section_requirement_items = params.get("section_requirement_items", [])
     section_drafting_guidance = params.get("section_drafting_guidance")
+    section_source_quotes = params.get("section_source_quotes", [])
+    linked_wbs_ids = params.get("linked_wbs_ids", [])
+    linked_fact_keys = params.get("linked_fact_keys", [])
+    parent_assembly_uid = params.get("parent_assembly_uid")
+    assembly_subpoints = params.get("assembly_subpoints", [])
 
     log.info(
         "drafting_pipeline_start",
@@ -588,14 +593,27 @@ async def _run_drafting_pipeline(
 
     # 4. Run drafting agent with gathered evidence
     from app.agents.drafting import run_drafting
-    from app.agents.context import build_project_grounding_context
+    from app.core.config import settings
+    if settings.generation_pipeline == "v2":
+        from app.agents.context import build_project_grounding_context_v2
 
-    project_grounding_context = await build_project_grounding_context(
-        project_id=project_id,
-        section_title=section_title,
-        section_requirements=section_requirements,
-        db=db,
-    )
+        project_grounding_context = await build_project_grounding_context_v2(
+            project_id=project_id,
+            section_title=section_title,
+            section_requirements=section_requirements,
+            db=db,
+            linked_wbs_ids=linked_wbs_ids,
+            linked_fact_keys=linked_fact_keys,
+        )
+    else:
+        from app.agents.context import build_project_grounding_context
+
+        project_grounding_context = await build_project_grounding_context(
+            project_id=project_id,
+            section_title=section_title,
+            section_requirements=section_requirements,
+            db=db,
+        )
 
     drafting_result = await run_drafting(
         project_id=project_id,
@@ -610,6 +628,10 @@ async def _run_drafting_pipeline(
         project_grounding_context=project_grounding_context,
         section_requirement_items=section_requirement_items,
         section_drafting_guidance=section_drafting_guidance,
+        generation_kind=("subpoint" if settings.generation_pipeline == "v2" else "section"),
+        parent_section_uid=parent_assembly_uid,
+        use_drafting_blueprint=settings.generation_pipeline != "v2",
+        section_source_quotes=section_source_quotes,
     )
     pipeline_trace["drafting"] = {
         "status": "ok" if "error" not in drafting_result else "error"
@@ -633,6 +655,78 @@ async def _run_drafting_pipeline(
             "verdict": verify_result.get("verdict"),
             "flags_count": len(verify_result.get("flags", [])),
         }
+
+    if (
+        settings.generation_pipeline == "v2"
+        and parent_assembly_uid
+        and assembly_subpoints
+    ):
+        from sqlalchemy import select, update
+        from app.agents.drafting_v2 import run_section_assembly
+        from app.core.models import Generation
+
+        await db.execute(
+            update(Generation)
+            .where(
+                Generation.project_id == project_id,
+                Generation.section_uid == parent_assembly_uid,
+                Generation.generation_kind == "section_assembly",
+            )
+            .values(evidence_status="stale")
+        )
+        sibling_uids = [
+            str(item.get("section_uid"))
+            for item in assembly_subpoints
+            if isinstance(item, dict) and item.get("section_uid")
+        ]
+        selected_result = await db.execute(
+            select(Generation).where(
+                Generation.project_id == project_id,
+                Generation.section_uid.in_(sibling_uids),
+                Generation.selected.is_(True),
+            )
+        )
+        selected_by_uid = {
+            str(generation.section_uid): generation
+            for generation in selected_result.scalars().all()
+            if generation.generation_kind in {"subpoint", "section"}
+        }
+        if all(uid in selected_by_uid for uid in sibling_uids):
+            assembled = await run_section_assembly(
+                project_id=project_id,
+                section_uid=parent_assembly_uid,
+                section_title=str(params.get("assembly_section_title") or section_title),
+                subpoints=[
+                    {
+                        "section_uid": uid,
+                        "generation_id": selected_by_uid[uid].id,
+                        "title": next(
+                            (
+                                str(item.get("title") or uid)
+                                for item in assembly_subpoints
+                                if str(item.get("section_uid")) == uid
+                            ),
+                            uid,
+                        ),
+                        "text": selected_by_uid[uid].text,
+                    }
+                    for uid in sibling_uids
+                ],
+                db=db,
+                trace_id=trace_id,
+            )
+            generation_ids["assembly"] = assembled["generation_id"]
+            pipeline_trace["assembly"] = {
+                "status": "ok",
+                "generation_id": assembled["generation_id"],
+            }
+        else:
+            pipeline_trace["assembly"] = {
+                "status": "pending",
+                "missing_subpoint_uids": [
+                    uid for uid in sibling_uids if uid not in selected_by_uid
+                ],
+            }
 
     drafting_result["_pipeline_trace"] = pipeline_trace
     drafting_result["_agent"] = "drafting_pipeline"
