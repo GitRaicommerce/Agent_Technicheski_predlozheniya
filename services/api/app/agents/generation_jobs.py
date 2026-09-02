@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import uuid
 from datetime import datetime, timezone
+from types import SimpleNamespace
 from typing import Any
 
 import structlog
@@ -970,30 +971,46 @@ async def _run_drafting_v2_job(job: GenerationJob, db) -> None:
     from app.agents.legislation import run_legislation
     from app.agents.schedule import run_schedule
 
-    project = await db.get(Project, job.project_id)
+    # Rollbacks expire ORM instances, including their scalar attributes. Keep the
+    # identifiers needed by the recovery path as plain values so an exception is
+    # never replaced by SQLAlchemy's MissingGreenlet lazy-load error.
+    job_id = str(job.id)
+    project_id = str(job.project_id)
+    trace_id = str(job.trace_id) if job.trace_id else None
+
+    project = await db.get(Project, project_id)
     if not project:
         job.status = "error"
         job.error = "Project not found"
         job.completed_at = datetime.now(timezone.utc)
         await db.commit()
         return
-    outline = await _approved_outline(project.id, db)
+    outline = await _approved_outline(project_id, db)
     if not outline:
         job.status = "error"
-        job.error = _missing_approved_outline_message(await _latest_outline(project.id, db))
+        job.error = _missing_approved_outline_message(await _latest_outline(project_id, db))
         job.completed_at = datetime.now(timezone.utc)
         await db.commit()
         return
 
     groups = build_generation_groups(outline.outline_json.get("sections", []))
+    outline_snapshot = SimpleNamespace(id=str(outline.id), version=outline.version)
     all_units = [unit for group in groups for unit in group["units"]]
     status_result = await db.execute(
         select(Generation.section_uid, Generation.evidence_status).where(
-            Generation.project_id == project.id,
+            Generation.project_id == project_id,
             Generation.generation_kind.in_(("subpoint", "section")),
         )
     )
     statuses = _generation_statuses_by_section(list(status_result))
+    assembly_status_result = await db.execute(
+        select(Generation.section_uid, Generation.evidence_status).where(
+            Generation.project_id == project_id,
+            Generation.generation_kind == "section_assembly",
+            Generation.selected.is_(True),
+        )
+    )
+    assembly_statuses = _generation_statuses_by_section(list(assembly_status_result))
     requested_units = _target_section_uids(job)
     if requested_units is None:
         pending_units = _sections_pending_generation(all_units, statuses)
@@ -1002,23 +1019,30 @@ async def _run_drafting_v2_job(job: GenerationJob, db) -> None:
     pending_ids = {str(unit.get("uid") or unit.get("section_uid")) for unit in pending_units}
 
     requested_assemblies = _target_assembly_uids(job)
-    impacted_groups = [
-        group
-        for group in groups
-        if any(str(unit.get("uid") or unit.get("section_uid")) in pending_ids for unit in group["units"])
-        or (
-            requested_assemblies is not None
-            and group["assembly_uid"] in requested_assemblies
-        )
-    ]
     if requested_assemblies is None:
         assembly_ids = {
             group["assembly_uid"]
-            for group in impacted_groups
+            for group in groups
             if group["requires_assembly"]
+            and (
+                any(
+                    str(unit.get("uid") or unit.get("section_uid")) in pending_ids
+                    for unit in group["units"]
+                )
+                or "ok" not in assembly_statuses.get(group["assembly_uid"], set())
+            )
         }
     else:
         assembly_ids = requested_assemblies
+    impacted_groups = [
+        group
+        for group in groups
+        if any(
+            str(unit.get("uid") or unit.get("section_uid")) in pending_ids
+            for unit in group["units"]
+        )
+        or group["assembly_uid"] in assembly_ids
+    ]
 
     previous_result = job.result_json if isinstance(job.result_json, dict) else {}
     job.result_json = {
@@ -1034,30 +1058,38 @@ async def _run_drafting_v2_job(job: GenerationJob, db) -> None:
     job.updated_at = datetime.now(timezone.utc)
     await db.commit()
 
-    try:
-        schedule_result = await run_schedule(project_id=project.id, db=db, trace_id=job.trace_id)
-        schedule_summary = (
-            schedule_result.get("tp_section_text")
-            if "error" not in schedule_result.get("status", "")
-            else None
-        )
-    except Exception as exc:
-        await db.rollback()
-        job = await db.get(GenerationJob, job.id)
-        if not job:
-            raise
-        schedule_summary = None
-        job.error = f"Schedule summary failed; continuing with raw schedule grounding. {exc}"
-        await db.commit()
+    schedule_summary = None
+    if pending_units:
+        try:
+            schedule_result = await run_schedule(
+                project_id=project_id, db=db, trace_id=trace_id
+            )
+            schedule_summary = (
+                schedule_result.get("tp_section_text")
+                if "error" not in schedule_result.get("status", "")
+                else None
+            )
+        except Exception as exc:
+            await db.rollback()
+            job = await db.get(GenerationJob, job_id)
+            if not job:
+                raise
+            job.error = f"Schedule summary failed; continuing with raw schedule grounding. {exc}"
+            await db.commit()
 
     selected_result = await db.execute(
         select(Generation).where(
-            Generation.project_id == project.id,
+            Generation.project_id == project_id,
             Generation.selected.is_(True),
         )
     )
     selected_by_uid = {
-        str(generation.section_uid): generation
+        str(generation.section_uid): SimpleGeneration(
+            id=str(generation.id),
+            section_uid=str(generation.section_uid),
+            text=str(generation.text or ""),
+            generation_kind=str(generation.generation_kind or "section"),
+        )
         for generation in selected_result.scalars().all()
         if generation.generation_kind in {"subpoint", "section"}
     }
@@ -1089,30 +1121,30 @@ async def _run_drafting_v2_job(job: GenerationJob, db) -> None:
             await db.commit()
             try:
                 examples_result = await run_examples(
-                    project_id=project.id,
+                    project_id=project_id,
                     query=title,
                     db=db,
                     max_snippets=5,
-                    trace_id=job.trace_id,
+                    trace_id=trace_id,
                     section_requirements=requirements,
                     section_requirement_items=requirement_items,
                     section_drafting_guidance=guidance,
                 )
                 try:
                     lex_result = await run_legislation(
-                        project_id=project.id,
+                        project_id=project_id,
                         query=title,
                         db=db,
-                        trace_id=job.trace_id,
+                        trace_id=trace_id,
                     )
                 except Exception:
                     await db.rollback()
-                    job = await db.get(GenerationJob, job.id)
+                    job = await db.get(GenerationJob, job_id)
                     if not job:
                         raise
                     lex_result = {"citations": []}
                 grounding = await build_project_grounding_context_v2(
-                    project_id=project.id,
+                    project_id=project_id,
                     section_title=title,
                     section_requirements=requirements,
                     db=db,
@@ -1120,7 +1152,7 @@ async def _run_drafting_v2_job(job: GenerationJob, db) -> None:
                     linked_fact_keys=list(unit.get("linked_fact_keys") or []),
                 )
                 drafting_result = await run_drafting(
-                    project_id=project.id,
+                    project_id=project_id,
                     section_uid=uid,
                     section_title=title,
                     section_requirements=requirements,
@@ -1128,7 +1160,7 @@ async def _run_drafting_v2_job(job: GenerationJob, db) -> None:
                     schedule_summary=schedule_summary,
                     lex_citations=lex_result.get("citations", []),
                     db=db,
-                    trace_id=job.trace_id,
+                    trace_id=trace_id,
                     project_grounding_context=grounding,
                     section_requirement_items=requirement_items,
                     section_drafting_guidance=guidance,
@@ -1155,7 +1187,7 @@ async def _run_drafting_v2_job(job: GenerationJob, db) -> None:
                 })
             except Exception as exc:
                 await db.rollback()
-                job = await db.get(GenerationJob, job.id)
+                job = await db.get(GenerationJob, job_id)
                 if not job:
                     raise
                 failed_sections.append({
@@ -1163,7 +1195,7 @@ async def _run_drafting_v2_job(job: GenerationJob, db) -> None:
                     "unit_kind": "subpoint",
                 })
                 job.skipped_sections += 1
-            _set_job_result(job, outline, results, failed_sections)
+            _set_job_result(job, outline_snapshot, results, failed_sections)
             job.updated_at = datetime.now(timezone.utc)
             await db.commit()
 
@@ -1190,12 +1222,12 @@ async def _run_drafting_v2_job(job: GenerationJob, db) -> None:
                     "text": generation.text,
                 })
             assembly_result = await run_section_assembly(
-                project_id=project.id,
+                project_id=project_id,
                 section_uid=assembly_uid,
                 section_title=root_title,
                 subpoints=subpoints,
                 db=db,
-                trace_id=job.trace_id,
+                trace_id=trace_id,
             )
             job.completed_sections += 1
             results.append({
@@ -1208,7 +1240,7 @@ async def _run_drafting_v2_job(job: GenerationJob, db) -> None:
             })
         except Exception as exc:
             await db.rollback()
-            job = await db.get(GenerationJob, job.id)
+            job = await db.get(GenerationJob, job_id)
             if not job:
                 raise
             failed_sections.append({
@@ -1216,16 +1248,24 @@ async def _run_drafting_v2_job(job: GenerationJob, db) -> None:
                 "unit_kind": "section_assembly",
             })
             job.skipped_sections += 1
-        _set_job_result(job, outline, results, failed_sections)
+        _set_job_result(job, outline_snapshot, results, failed_sections)
         job.updated_at = datetime.now(timezone.utc)
         await db.commit()
 
     job.status = "error" if failed_sections else "done"
-    job.error = (
-        f"{len(failed_sections)} generation unit(s) failed. Run generation again to retry."
-        if failed_sections
-        else None
-    )
+    if failed_sections:
+        first_error = str(failed_sections[0].get("error") or "Unknown error")
+        failure_label = (
+            "1 генерационна стъпка е неуспешна"
+            if len(failed_sections) == 1
+            else f"{len(failed_sections)} генерационни стъпки са неуспешни"
+        )
+        job.error = (
+            f"{failure_label}. "
+            f"Натиснете „Продължи“, за да опитате отново. Причина: {first_error}"
+        )
+    else:
+        job.error = None
     job.current_section_uid = None
     job.current_section_title = None
     job.completed_at = datetime.now(timezone.utc)

@@ -106,7 +106,7 @@ async def test_v2_job_generates_subpoints_then_assembles_their_section(mock_db):
     selected_result.scalars.return_value.all.return_value = []
     mock_db.get = AsyncMock(return_value=project)
     mock_db.execute = AsyncMock(
-        side_effect=[_outline_result(outline), [], selected_result]
+        side_effect=[_outline_result(outline), [], [], selected_result]
     )
     first_generation_id = str(uuid.uuid4())
     second_generation_id = str(uuid.uuid4())
@@ -169,6 +169,185 @@ async def test_v2_job_generates_subpoints_then_assembles_their_section(mock_db):
         "subpoint",
         "section_assembly",
     ]
+
+
+@pytest.mark.asyncio
+async def test_v2_retry_runs_missing_assembly_without_regenerating_subpoints(mock_db):
+    project = _make_project()
+    first_uid = str(uuid.uuid4())
+    second_uid = str(uuid.uuid4())
+    root_uid = str(uuid.uuid4())
+    outline = TpOutline(
+        id=str(uuid.uuid4()),
+        project_id=project.id,
+        outline_json={
+            "sections": [{
+                "content_plan_uid": root_uid,
+                "title": "Раздел за възстановяване",
+                "subsections": [
+                    {"uid": first_uid, "title": "Подточка 1", "subsections": []},
+                    {"uid": second_uid, "title": "Подточка 2", "subsections": []},
+                ],
+            }]
+        },
+        status_locked=True,
+        version=1,
+    )
+    job = SimpleNamespace(
+        id=str(uuid.uuid4()),
+        project_id=project.id,
+        trace_id=str(uuid.uuid4()),
+        job_type="drafting_all",
+        status="queued",
+        total_sections=0,
+        completed_sections=0,
+        skipped_sections=0,
+        current_section_uid=None,
+        current_section_title=None,
+        result_json=None,
+        error=None,
+        completed_at=None,
+        updated_at=None,
+    )
+    subpoint_rows = [
+        SimpleNamespace(section_uid=first_uid, evidence_status="ok"),
+        SimpleNamespace(section_uid=second_uid, evidence_status="ok"),
+    ]
+    selected_result = MagicMock()
+    selected_result.scalars.return_value.all.return_value = [
+        SimpleNamespace(
+            id="generation-1",
+            section_uid=first_uid,
+            text="Готов текст 1",
+            generation_kind="subpoint",
+        ),
+        SimpleNamespace(
+            id="generation-2",
+            section_uid=second_uid,
+            text="Готов текст 2",
+            generation_kind="subpoint",
+        ),
+    ]
+    mock_db.get = AsyncMock(return_value=project)
+    mock_db.execute = AsyncMock(
+        side_effect=[_outline_result(outline), subpoint_rows, [], selected_result]
+    )
+
+    with (
+        patch("app.agents.schedule.run_schedule", new=AsyncMock()) as run_schedule,
+        patch("app.agents.drafting.run_drafting", new=AsyncMock()) as run_drafting,
+        patch(
+            "app.agents.drafting_v2.run_section_assembly",
+            new=AsyncMock(return_value={"generation_id": "assembly-generation"}),
+        ) as run_assembly,
+    ):
+        await _run_drafting_v2_job(job, mock_db)
+
+    assert job.status == "done"
+    assert job.total_sections == 1
+    assert job.completed_sections == 1
+    run_schedule.assert_not_awaited()
+    run_drafting.assert_not_awaited()
+    run_assembly.assert_awaited_once()
+    assert job.result_json["sections"][0]["unit_kind"] == "section_assembly"
+
+
+@pytest.mark.asyncio
+async def test_v2_assembly_failure_preserves_original_error_after_rollback(mock_db):
+    project = _make_project()
+    subpoint_uid = str(uuid.uuid4())
+    outline = TpOutline(
+        id=str(uuid.uuid4()),
+        project_id=project.id,
+        outline_json={
+            "sections": [{
+                "content_plan_uid": str(uuid.uuid4()),
+                "title": "Раздел",
+                "subsections": [{
+                    "uid": subpoint_uid,
+                    "title": "Подточка",
+                    "requirements": [],
+                    "subsections": [],
+                }],
+            }]
+        },
+        status_locked=True,
+        version=1,
+    )
+
+    class RollbackSensitiveJob(SimpleNamespace):
+        expired = False
+
+        @property
+        def id(self):
+            if self.expired:
+                raise AssertionError("job.id was accessed after rollback")
+            return self._id
+
+    job = RollbackSensitiveJob(
+        _id=str(uuid.uuid4()),
+        project_id=project.id,
+        trace_id=str(uuid.uuid4()),
+        job_type="drafting_all",
+        status="queued",
+        total_sections=0,
+        completed_sections=0,
+        skipped_sections=0,
+        current_section_uid=None,
+        current_section_title=None,
+        result_json=None,
+        error=None,
+        completed_at=None,
+        updated_at=None,
+    )
+    selected_result = MagicMock()
+    selected_result.scalars.return_value.all.return_value = []
+    mock_db.get = AsyncMock(side_effect=[project, job])
+    mock_db.execute = AsyncMock(
+        side_effect=[_outline_result(outline), [], [], selected_result]
+    )
+
+    async def expire_job():
+        job.expired = True
+
+    mock_db.rollback = AsyncMock(side_effect=expire_job)
+
+    with (
+        patch(
+            "app.agents.schedule.run_schedule",
+            new=AsyncMock(return_value={"status": "ok", "tp_section_text": "График"}),
+        ),
+        patch(
+            "app.agents.examples.run_examples",
+            new=AsyncMock(return_value={"selected_snippets": []}),
+        ),
+        patch(
+            "app.agents.legislation.run_legislation",
+            new=AsyncMock(return_value={"citations": []}),
+        ),
+        patch(
+            "app.agents.context.build_project_grounding_context_v2",
+            new=AsyncMock(return_value={"tender_chunks": []}),
+        ),
+        patch(
+            "app.agents.drafting.run_drafting",
+            new=AsyncMock(return_value={
+                "generation_ids": {"variant_1": "subpoint-generation"},
+                "variant_1": {"text": "Готов текст"},
+            }),
+        ),
+        patch(
+            "app.agents.drafting_v2.run_section_assembly",
+            new=AsyncMock(side_effect=RuntimeError("assembly provider timeout")),
+        ),
+    ):
+        await _run_drafting_v2_job(job, mock_db)
+
+    assert job.status == "error"
+    assert job.completed_sections == 1
+    assert job.skipped_sections == 1
+    assert job.result_json["failed_sections"][0]["error"] == "assembly provider timeout"
+    assert "assembly provider timeout" in job.error
 
 
 def test_set_job_result_snapshots_progress_lists():
