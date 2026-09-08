@@ -373,7 +373,11 @@ export interface Generation {
 export interface SectionGenerations {
   section_uid: string;
   section_title?: string | null;
+  section_number?: string | null;
+  node_kind?: "section" | "group" | "subpoint" | string;
+  generation_target_uid?: string | null;
   variants: Generation[];
+  children?: SectionGenerations[];
 }
 
 export interface RegenerateResponse {

@@ -325,6 +325,10 @@ export default function GenerationsPanel({
     );
   }
 
+  const generationNodes = flattenGenerationSections(sections);
+  const generatedNodeCount = generationNodes.filter(
+    (section) => section.variants.length > 0,
+  ).length;
   const planNeedsApproval = contentPlan && !contentPlan.status_locked;
   if (planNeedsApproval) {
     return (
@@ -333,8 +337,8 @@ export default function GenerationsPanel({
           Текущият подробен план v{contentPlan.version} е чернова. Одобрението на плана е достатъчно, за да започне генерирането; WBS и данните за проекта са помощни и не го блокират.
         </p>
         <p className="text-xs leading-relaxed text-gray-400">
-          {sections.length > 0
-            ? `${sections.length} ${sections.length === 1 ? "раздел" : "раздела"} от предишната структура ${sections.length === 1 ? "е запазен" : "са запазени"} като история, но не се прехвърлят автоматично към новия план.`
+          {generatedNodeCount > 0
+            ? `${generatedNodeCount} ${generatedNodeCount === 1 ? "генерирана точка" : "генерирани точки"} от предишната структура ${generatedNodeCount === 1 ? "е запазена" : "са запазени"} като история, но не се прехвърлят автоматично към новия план.`
             : "Генерациите от предишни версии се пазят отделно и не се прехвърлят автоматично към новата структура."}
         </p>
         <button type="button" disabled={approvingAndStarting} onClick={() => void handleApproveAndStart()} data-testid="generation-approve-and-start-button" className="w-full rounded bg-blue-600 px-3 py-2 text-xs font-medium text-white disabled:opacity-50">
@@ -404,7 +408,7 @@ export default function GenerationsPanel({
       {generationJob && (
         <GenerationJobProgress
           job={generationJob}
-          availableSectionCount={sections.length}
+          availableSectionCount={generatedNodeCount}
           onRetry={handleRetryGenerationJob}
           retrying={retryingJob}
           onPause={handlePauseGenerationJob}
@@ -419,7 +423,7 @@ export default function GenerationsPanel({
         regeneratingAll={regeneratingAllJob}
         onComplete={handleRetryGenerationJob}
         onRegenerateAll={handleRegenerateAllSections}
-        hasExistingSections={sections.length > 0}
+        hasExistingSections={generatedNodeCount > 0}
         blocked={false}
       />
       <StaleRegenerationAction
@@ -461,8 +465,8 @@ export default function GenerationsPanel({
       <div className="mb-1 flex items-center justify-between">
         <span className="text-xs text-gray-400">
           {shouldFilterAttention
-            ? `${visibleSections.length} / ${sections.length} секции`
-            : `${sections.length} раздела`}
+            ? `${visibleSections.length} / ${sections.length} основни раздела`
+            : `${sections.length} основни раздела`}
         </span>
         <button
           onClick={load}
@@ -474,99 +478,220 @@ export default function GenerationsPanel({
         </button>
       </div>
 
-      {visibleSections.map((section) => {
-        const isOpen = expanded.has(section.section_uid);
-        const selectedVariants = section.variants.filter(
-          (variant) => variant.selected,
-        );
-        const displayVariant =
-          selectedVariants[0] ?? section.variants[0];
-        const requirementCoverage = getRequirementCoverage(displayVariant);
-        const attention = getSectionAttention(section, qualityAttentionSectionSet);
-        const qualityDetail = qualityAttentionSectionMap.get(section.section_uid);
+      {visibleSections.map((section) => (
+        <GenerationTreeNode
+          key={section.section_uid}
+          section={section}
+          depth={0}
+          expanded={expanded}
+          regenerating={regenerating}
+          selectingGeneration={selectingGeneration}
+          qualityAttentionSectionSet={qualityAttentionSectionSet}
+          qualityAttentionSectionMap={qualityAttentionSectionMap}
+          onToggle={toggleSection}
+          onRegenerate={handleRegenerate}
+          onSelectGeneration={handleSelectGeneration}
+        />
+      ))}
+    </div>
+  );
+}
 
-        return (
-          <div
-            key={section.section_uid}
-            className="overflow-hidden rounded-lg border"
+function GenerationTreeNode({
+  section,
+  depth,
+  expanded,
+  regenerating,
+  selectingGeneration,
+  qualityAttentionSectionSet,
+  qualityAttentionSectionMap,
+  onToggle,
+  onRegenerate,
+  onSelectGeneration,
+}: {
+  section: SectionGenerations;
+  depth: number;
+  expanded: Set<string>;
+  regenerating: string | null;
+  selectingGeneration: string | null;
+  qualityAttentionSectionSet: Set<string>;
+  qualityAttentionSectionMap: Map<string, ExportQualitySection>;
+  onToggle: (uid: string) => void;
+  onRegenerate: (uid: string) => Promise<void>;
+  onSelectGeneration: (generationId: string) => Promise<void>;
+}) {
+  const children = section.children ?? [];
+  const isOpen = expanded.has(section.section_uid);
+  const selectedVariants = section.variants.filter((variant) => variant.selected);
+  const displayVariant = selectedVariants[0] ?? section.variants[0];
+  const requirementCoverage = getRequirementCoverage(displayVariant);
+  const attention = getSectionAttention(section, qualityAttentionSectionSet);
+  const qualityDetail =
+    qualityAttentionSectionMap.get(displayVariant?.section_uid ?? "") ??
+    qualityAttentionSectionMap.get(
+      section.generation_target_uid ?? section.section_uid,
+    );
+  const descendantTargets = flattenGenerationSections(children).filter(
+    (child) => child.generation_target_uid,
+  );
+  const completedDescendants = descendantTargets.filter(
+    (child) => child.variants.length > 0,
+  ).length;
+  const canExpand = Boolean(displayVariant || children.length > 0);
+  // Older API responses were flat and did not expose generation_target_uid.
+  // Keep them actionable while the hierarchical response is rolling out.
+  const regenerateUid =
+    section.generation_target_uid ??
+    (section.node_kind === undefined ? section.section_uid : null);
+  const heading = [section.section_number, repairLikelyMojibake(section.section_title)]
+    .filter(Boolean)
+    .join(". ");
+
+  return (
+    <div
+      className={
+        depth === 0
+          ? "overflow-hidden rounded-lg border border-gray-300"
+          : "overflow-hidden rounded-md border border-gray-200"
+      }
+      data-testid={`generation-node-${section.section_uid}`}
+    >
+      <div
+        className={`flex items-start justify-between px-3 py-2 transition hover:bg-gray-100 ${
+          depth === 0 ? "bg-gray-50" : "bg-white"
+        }`}
+      >
+        <button
+          onClick={() => canExpand && onToggle(section.section_uid)}
+          data-testid={`generation-section-${section.section_uid}`}
+          className="min-w-0 flex-1 text-left"
+          aria-expanded={canExpand ? isOpen : undefined}
+        >
+          <p
+            className={`${depth === 0 ? "font-semibold" : "font-medium"} pr-2 text-xs text-gray-700`}
           >
-            <div className="flex items-start justify-between bg-gray-50 px-3 py-2 transition hover:bg-gray-100">
-              <button
-                onClick={() => toggleSection(section.section_uid)}
-                data-testid={`generation-section-${section.section_uid}`}
-                className="min-w-0 flex-1 text-left"
-              >
-                <p className="truncate pr-2 text-xs font-medium text-gray-700">
-                  {repairLikelyMojibake(section.section_title) ||
-                    `${section.section_uid.slice(0, 8)}...`}
-                </p>
-              </button>
-              <div className="flex shrink-0 items-center gap-1">
-                {attention.hasDuplicateSelected && (
-                  <span
-                    data-testid={`generation-duplicate-selected-badge-${section.section_uid}`}
-                    className="rounded bg-red-100 px-1.5 py-0.5 text-[11px] font-medium text-red-700"
-                    title="Няколко избрани варианта"
-                  >
-                    {selectedVariants.length} избрани
-                  </span>
-                )}
-                {attention.hasStaleSelected && (
-                  <span
-                    data-testid={`generation-stale-selected-badge-${section.section_uid}`}
-                    className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium text-amber-700"
-                    title="Избраната генерация използва остарели доказателства"
-                  >
-                    остаряла
-                  </span>
-                )}
-                {attention.hasQualityReviewIssue && (
-                  <span
-                    data-testid={`generation-quality-attention-badge-${section.section_uid}`}
-                    className="rounded bg-blue-100 px-1.5 py-0.5 text-[11px] font-medium text-blue-700"
-                    title="Избраната генерация е твърде кратка за export readiness"
-                  >
-                    кратка
-                  </span>
-                )}
-                <RequirementCoverageBadge coverage={requirementCoverage} />
-                <button
-                  onClick={() => handleRegenerate(section.section_uid)}
-                  disabled={regenerating === section.section_uid}
-                  data-testid={`generation-regenerate-${section.section_uid}`}
-                  className="rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-700 transition hover:bg-amber-200 disabled:opacity-50"
-                  title="Регенерирай раздела"
-                >
-                  {regenerating === section.section_uid ? "..." : "↻"}
-                </button>
-                <span className="text-xs text-gray-400">
-                  {isOpen ? "▾" : "▸"}
-                </span>
-              </div>
-            </div>
-
-            {isOpen && displayVariant && (
-              <div className="bg-white px-3 py-3">
-                <GenerationVariantSelector
-                  sectionUid={section.section_uid}
-                  variants={section.variants}
-                  selectedCount={selectedVariants.length}
-                  displayVariantId={displayVariant.id}
-                  selectingGeneration={selectingGeneration}
-                  onSelect={(generationId) => {
-                    void handleSelectGeneration(generationId);
-                  }}
-                />
-                <SectionText
-                  variant={displayVariant}
-                  requirementCoverage={requirementCoverage}
-                  qualityDetail={qualityDetail}
-                />
-              </div>
+            {heading || `${section.section_uid.slice(0, 8)}...`}
+          </p>
+        </button>
+        <div className="flex shrink-0 items-center gap-1">
+          {section.node_kind === "section" && descendantTargets.length > 0 && (
+            <span
+              className={`rounded px-1.5 py-0.5 text-[11px] font-medium ${
+                completedDescendants === descendantTargets.length
+                  ? "bg-green-100 text-green-700"
+                  : "bg-gray-100 text-gray-600"
+              }`}
+              title="Генерирани подточки от одобрения план"
+            >
+              {completedDescendants}/{descendantTargets.length}
+            </span>
+          )}
+          {section.node_kind === "section" &&
+            displayVariant?.generation_kind === "section_assembly" && (
+            <span className="rounded bg-purple-100 px-1.5 py-0.5 text-[11px] font-medium text-purple-700">
+              сглобен
+            </span>
+          )}
+          {section.node_kind === "section" &&
+            children.length > 0 &&
+            displayVariant?.generation_kind !== "section_assembly" && (
+              <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium text-amber-700">
+                не е сглобен
+              </span>
             )}
-          </div>
-        );
-      })}
+          {section.node_kind === "subpoint" && !displayVariant && (
+            <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[11px] text-gray-500">
+              не е генерирана
+            </span>
+          )}
+          {attention.hasDuplicateSelected && (
+            <span
+              data-testid={`generation-duplicate-selected-badge-${section.section_uid}`}
+              className="rounded bg-red-100 px-1.5 py-0.5 text-[11px] font-medium text-red-700"
+              title="Няколко избрани варианта"
+            >
+              {selectedVariants.length} избрани
+            </span>
+          )}
+          {attention.hasStaleSelected && (
+            <span
+              data-testid={`generation-stale-selected-badge-${section.section_uid}`}
+              className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium text-amber-700"
+            >
+              остаряла
+            </span>
+          )}
+          {attention.hasQualityReviewIssue && (
+            <span
+              data-testid={`generation-quality-attention-badge-${section.section_uid}`}
+              className="rounded bg-blue-100 px-1.5 py-0.5 text-[11px] font-medium text-blue-700"
+            >
+              кратка
+            </span>
+          )}
+          <RequirementCoverageBadge coverage={requirementCoverage} />
+          {regenerateUid && (
+            <button
+              onClick={() => void onRegenerate(regenerateUid)}
+              disabled={regenerating === regenerateUid}
+              data-testid={`generation-regenerate-${section.section_uid}`}
+              className="rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-700 transition hover:bg-amber-200 disabled:opacity-50"
+              title="Регенерирай подточката"
+            >
+              {regenerating === regenerateUid ? "..." : "↻"}
+            </button>
+          )}
+          {canExpand && (
+            <span className="text-xs text-gray-400">{isOpen ? "▾" : "▸"}</span>
+          )}
+        </div>
+      </div>
+
+      {isOpen && (
+        <div className="space-y-2 bg-white px-2 py-2">
+          {displayVariant && (
+            <div className="px-1 py-1">
+              <GenerationVariantSelector
+                sectionUid={section.section_uid}
+                variants={section.variants}
+                selectedCount={selectedVariants.length}
+                displayVariantId={displayVariant.id}
+                selectingGeneration={selectingGeneration}
+                onSelect={(generationId) => void onSelectGeneration(generationId)}
+              />
+              <SectionText
+                variant={displayVariant}
+                requirementCoverage={requirementCoverage}
+                qualityDetail={qualityDetail}
+              />
+            </div>
+          )}
+          {!displayVariant && children.length === 0 && (
+            <p className="px-2 py-1 text-[11px] text-gray-500">
+              За тази подточка още няма генериран текст.
+            </p>
+          )}
+          {children.length > 0 && (
+            <div className="space-y-1 border-l-2 border-blue-100 pl-2">
+              {children.map((child) => (
+                <GenerationTreeNode
+                  key={child.section_uid}
+                  section={child}
+                  depth={depth + 1}
+                  expanded={expanded}
+                  regenerating={regenerating}
+                  selectingGeneration={selectingGeneration}
+                  qualityAttentionSectionSet={qualityAttentionSectionSet}
+                  qualityAttentionSectionMap={qualityAttentionSectionMap}
+                  onToggle={onToggle}
+                  onRegenerate={onRegenerate}
+                  onSelectGeneration={onSelectGeneration}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -904,10 +1029,19 @@ interface DuplicateSelectionResolutionTarget {
   generationId: string;
 }
 
+function flattenGenerationSections(
+  sections: SectionGenerations[],
+): SectionGenerations[] {
+  return sections.flatMap((section) => [
+    section,
+    ...flattenGenerationSections(section.children ?? []),
+  ]);
+}
+
 function duplicateSelectionResolutionTargets(
   sections: SectionGenerations[],
 ): DuplicateSelectionResolutionTarget[] {
-  return sections
+  return flattenGenerationSections(sections)
     .map((section) => {
       const selectedVariants = section.variants.filter(
         (variant) => variant.selected,
@@ -951,7 +1085,7 @@ function compareGenerationRecency(left: Generation, right: Generation): number {
 }
 
 function countStaleSelectedSections(sections: SectionGenerations[]): number {
-  return sections.filter((section) =>
+  return flattenGenerationSections(sections).filter((section) =>
     getSectionAttention(section).hasStaleSelected,
   ).length;
 }
@@ -959,7 +1093,7 @@ function countStaleSelectedSections(sections: SectionGenerations[]): number {
 function countMissingRequirementSelectedSections(
   sections: SectionGenerations[],
 ): number {
-  return sections.filter((section) => {
+  return flattenGenerationSections(sections).filter((section) => {
     const selectedVariants = section.variants.filter((variant) => variant.selected);
     const displayVariant = selectedVariants[0] ?? section.variants[0];
     const { missing } = coverageCounts(getRequirementCoverage(displayVariant));
@@ -971,7 +1105,7 @@ function summarizeGenerationAttention(
   sections: SectionGenerations[],
   qualityAttentionSectionUids: Set<string>,
 ): GenerationAttentionSummaryData {
-  return sections.reduce<GenerationAttentionSummaryData>(
+  return flattenGenerationSections(sections).reduce<GenerationAttentionSummaryData>(
     (summary, section) => {
       const attention = getSectionAttention(section, qualityAttentionSectionUids);
       if (sectionAttentionCount(attention) > 0) {
@@ -1007,7 +1141,10 @@ function sectionNeedsAttention(
 ): boolean {
   return (
     sectionAttentionCount(getSectionAttention(section, qualityAttentionSectionUids)) >
-    0
+      0 ||
+    (section.children ?? []).some((child) =>
+      sectionNeedsAttention(child, qualityAttentionSectionUids),
+    )
   );
 }
 
@@ -1039,7 +1176,11 @@ function getSectionAttention(
       (variant) => variant.evidence_status === "stale",
     ),
     hasMissingRequirementCoverage: missing > 0,
-    hasQualityReviewIssue: qualityAttentionSectionUids.has(section.section_uid),
+    hasQualityReviewIssue:
+      qualityAttentionSectionUids.has(section.section_uid) ||
+      section.variants.some((variant) =>
+        qualityAttentionSectionUids.has(variant.section_uid),
+      ),
   };
 }
 

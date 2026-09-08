@@ -575,6 +575,91 @@ describe("GenerationsPanel", () => {
     expect(screen.getByText("Section 2")).toBeInTheDocument();
   });
 
+  it("renders the exact approved-plan hierarchy and keeps missing subpoints visible", async () => {
+    listGenerationsMock.mockResolvedValue([
+      {
+        section_uid: "assembly-1",
+        section_number: "1",
+        section_title: "Концепция и подход",
+        node_kind: "section",
+        generation_target_uid: null,
+        variants: [
+          {
+            id: "assembly-generation-1",
+            section_uid: "assembly-1",
+            generation_kind: "section_assembly",
+            variant: 1,
+            text: "Сглобен текст",
+            evidence_status: "ok",
+            selected: true,
+            created_at: "2026-04-20T10:00:00.000Z",
+          },
+        ],
+        children: [
+          {
+            section_uid: "subpoint-1-1",
+            section_number: "1.1",
+            section_title: "Организация на изпълнението",
+            node_kind: "subpoint",
+            generation_target_uid: "subpoint-1-1",
+            variants: [
+              {
+                id: "generation-1-1",
+                section_uid: "subpoint-1-1",
+                generation_kind: "subpoint",
+                variant: 1,
+                text: "Генерирана организация",
+                evidence_status: "ok",
+                selected: true,
+                created_at: "2026-04-20T10:00:00.000Z",
+              },
+            ],
+            children: [],
+          },
+          {
+            section_uid: "subpoint-1-2",
+            section_number: "1.2",
+            section_title: "Комуникация",
+            node_kind: "subpoint",
+            generation_target_uid: "subpoint-1-2",
+            variants: [],
+            children: [],
+          },
+        ],
+      },
+      {
+        section_uid: "section-2",
+        section_number: "2",
+        section_title: "Авторски надзор",
+        node_kind: "section",
+        generation_target_uid: "section-2",
+        variants: [],
+        children: [],
+      },
+    ]);
+
+    render(<GenerationsPanel projectId="project-1" />);
+
+    expect(await screen.findByText("2 основни раздела")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "1. Концепция и подход" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "2. Авторски надзор" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("1.1. Организация на изпълнението"))
+      .not.toBeInTheDocument();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "1. Концепция и подход" }),
+    );
+
+    expect(screen.getByText("1.1. Организация на изпълнението"))
+      .toBeInTheDocument();
+    expect(screen.getByText("1.2. Комуникация")).toBeInTheDocument();
+    expect(screen.getByText("не е генерирана")).toBeInTheDocument();
+  });
+
   it("does not present a legacy incomplete job as complete", async () => {
     listGenerationsMock.mockResolvedValue([
       {
@@ -1009,7 +1094,7 @@ describe("GenerationsPanel", () => {
       .toBeInTheDocument();
     expect(screen.getByTestId("generation-section-sec-quality"))
       .toBeInTheDocument();
-    expect(screen.getByText("4 / 5 секции")).toBeInTheDocument();
+    expect(screen.getByText("4 / 5 основни раздела")).toBeInTheDocument();
     expect(screen.getByTestId("generation-attention-filter-toggle"))
       .toHaveTextContent("Покажи всички");
 

@@ -321,6 +321,107 @@ async def test_get_generations_filters_out_sections_not_in_approved_outline(clie
     assert "status_locked" in outline_query
 
 
+@pytest.mark.asyncio
+async def test_get_generations_follows_approved_outline_hierarchy(client, mock_db):
+    """Връща точната планова йерархия, включително негенерирани подточки."""
+    from datetime import datetime, timezone
+    from app.agents.generation_structure import section_assembly_uid
+    from app.core.models import Generation, TpOutline
+
+    pid = str(uuid.uuid4())
+    now = datetime.now(timezone.utc)
+    root = {
+        "uid": "root-1",
+        "number": "1",
+        "title": "Концепция и подход",
+        "subsections": [
+            {
+                "uid": "subpoint-1-1",
+                "number": "1.1",
+                "title": "Организация на изпълнението",
+            },
+            {
+                "uid": "subpoint-1-2",
+                "number": "1.2",
+                "title": "Комуникация",
+            },
+        ],
+    }
+    assembly_uid = section_assembly_uid(root)
+    outline = TpOutline(
+        id=str(uuid.uuid4()),
+        project_id=pid,
+        outline_json={"sections": [root]},
+        status_locked=True,
+        version=8,
+    )
+    assembly_generation = Generation(
+        id=str(uuid.uuid4()),
+        project_id=pid,
+        section_uid=assembly_uid,
+        generation_kind="section_assembly",
+        variant=1,
+        text="Сглобен текст",
+        evidence_status="ok",
+        selected=True,
+        created_at=now,
+    )
+    subpoint_generation = Generation(
+        id=str(uuid.uuid4()),
+        project_id=pid,
+        section_uid="subpoint-1-1",
+        generation_kind="subpoint",
+        variant=1,
+        text="Генерирана организация",
+        evidence_status="ok",
+        selected=True,
+        created_at=now,
+    )
+    stale_generation = Generation(
+        id=str(uuid.uuid4()),
+        project_id=pid,
+        section_uid="stale-section",
+        variant=1,
+        text="Стар текст",
+        evidence_status="ok",
+        selected=True,
+        created_at=now,
+    )
+
+    outline_result = MagicMock()
+    outline_result.scalar_one_or_none = MagicMock(return_value=outline)
+    gen_result = MagicMock()
+    gen_result.scalars = MagicMock(
+        return_value=MagicMock(
+            all=MagicMock(
+                return_value=[
+                    assembly_generation,
+                    subpoint_generation,
+                    stale_generation,
+                ]
+            )
+        )
+    )
+    mock_db.execute = AsyncMock(side_effect=[outline_result, gen_result])
+
+    resp = await client.get(f"/api/v1/agents/{pid}/generations")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) == 1
+    assert data[0]["section_uid"] == "root-1"
+    assert data[0]["section_number"] == "1"
+    assert data[0]["section_title"] == "Концепция и подход"
+    assert data[0]["node_kind"] == "section"
+    assert len(data[0]["variants"]) == 1
+    assert [child["section_uid"] for child in data[0]["children"]] == [
+        "subpoint-1-1",
+        "subpoint-1-2",
+    ]
+    assert len(data[0]["children"][0]["variants"]) == 1
+    assert data[0]["children"][1]["variants"] == []
+
+
 # ---------------------------------------------------------------------------
 # GET /api/v1/agents/{project_id}/generation-jobs/latest
 # ---------------------------------------------------------------------------

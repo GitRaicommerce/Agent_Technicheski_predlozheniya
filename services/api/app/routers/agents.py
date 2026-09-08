@@ -461,7 +461,11 @@ class GenerationResponse(BaseModel):
 class SectionGenerations(BaseModel):
     section_uid: str
     section_title: str | None = None
+    section_number: str | None = None
+    node_kind: str = "section"
+    generation_target_uid: str | None = None
     variants: list[GenerationResponse]
+    children: list["SectionGenerations"] = Field(default_factory=list)
 
 
 class GenerationJobResponse(BaseModel):
@@ -485,8 +489,8 @@ class GenerationJobResponse(BaseModel):
 @router.get("/{project_id}/generations", response_model=list[SectionGenerations])
 async def list_generations(project_id: str, db: AsyncSession = Depends(get_db)):
     """
-    Връща всички генерации за проекта, групирани по section_uid.
-    Сортирани: selected DESC, variant ASC, created_at DESC.
+    Връща одобрения план като йерархия с генерациите към всяка точка.
+    Липсващите генерации остават видими с празен списък ``variants``.
     """
     from app.core.models import Generation, TpOutline
     from sqlalchemy import select
@@ -504,33 +508,6 @@ async def list_generations(project_id: str, db: AsyncSession = Depends(get_db)):
     )
     outline = outline_result.scalar_one_or_none()
 
-    section_title_map: dict[str, str] = {}
-    section_order: list[str] = []
-    if outline:
-        sections = outline.outline_json.get("sections", outline.outline_json.get("outline", []))
-
-        def _collect(secs: list) -> None:
-            for s in secs:
-                uid = s.get("uid") or s.get("section_uid", "")
-                if uid:
-                    section_title_map[uid] = s.get("title", "")
-                    section_order.append(uid)
-                _collect(s.get("subsections", s.get("children", [])))
-
-        _collect(sections)
-        from app.agents.generation_structure import build_generation_groups
-
-        assembly_order: list[str] = []
-        for group in build_generation_groups(sections):
-            if not group["requires_assembly"]:
-                continue
-            assembly_uid = group["assembly_uid"]
-            section_title_map[assembly_uid] = (
-                f"{group['root'].get('title', '')} — сглобен раздел"
-            )
-            assembly_order.append(assembly_uid)
-        section_order = assembly_order + section_order
-
     gen_result = await db.execute(
         select(Generation)
         .where(Generation.project_id == project_id)
@@ -543,43 +520,108 @@ async def list_generations(project_id: str, db: AsyncSession = Depends(get_db)):
     )
     generations = gen_result.scalars().all()
 
-    if section_title_map:
-        generations = [g for g in generations if g.section_uid in section_title_map]
-
-    # Group by section_uid preserving order
     grouped: dict[str, list[Generation]] = {}
     for g in generations:
-        grouped.setdefault(g.section_uid, []).append(g)
+        grouped.setdefault(str(g.section_uid), []).append(g)
 
-    result = []
-    ordered_section_uids = section_order if section_order else list(grouped.keys())
-    for section_uid in ordered_section_uids:
-        variants = grouped.get(section_uid)
-        if not variants:
-            continue
-        result.append(
+    def _generation_responses(section_uid: str | None) -> list[GenerationResponse]:
+        if not section_uid:
+            return []
+        return [
+            GenerationResponse(
+                id=v.id,
+                section_uid=v.section_uid,
+                generation_kind=v.generation_kind or "section",
+                parent_section_uid=v.parent_section_uid,
+                variant=v.variant,
+                revision_number=v.revision_number or 1,
+                change_summary=v.change_summary,
+                text=v.text,
+                evidence_map_json=v.evidence_map_json,
+                used_sources_json=v.used_sources_json,
+                flags_json=v.flags_json,
+                evidence_status=v.evidence_status,
+                selected=v.selected,
+                created_at=v.created_at.isoformat(),
+                trace_id=v.trace_id,
+            )
+            for v in grouped.get(section_uid, [])
+        ]
+
+    if not outline:
+        return [
             SectionGenerations(
                 section_uid=section_uid,
-                section_title=section_title_map.get(section_uid),
-                variants=[
-                    GenerationResponse(
-                        id=v.id,
-                        section_uid=v.section_uid,
-                        generation_kind=v.generation_kind or "section",
-                        parent_section_uid=v.parent_section_uid,
-                        variant=v.variant,
-                        revision_number=v.revision_number or 1,
-                        change_summary=v.change_summary,
-                        text=v.text,
-                        evidence_map_json=v.evidence_map_json,
-                        used_sources_json=v.used_sources_json,
-                        flags_json=v.flags_json,
-                        evidence_status=v.evidence_status,
-                        selected=v.selected,
-                        created_at=v.created_at.isoformat(),
-                        trace_id=v.trace_id,
-                    )
-                    for v in variants
+                section_title=None,
+                generation_target_uid=section_uid,
+                variants=_generation_responses(section_uid),
+            )
+            for section_uid in grouped
+        ]
+
+    from app.agents.generation_structure import build_generation_groups
+
+    sections = outline.outline_json.get(
+        "sections", outline.outline_json.get("outline", [])
+    )
+
+    def _plan_node(section: dict, *, node_kind: str = "subpoint") -> SectionGenerations:
+        children = section.get("subsections") or section.get("children") or []
+        generation_uid = section.get("uid") or section.get("section_uid")
+        display_uid = (
+            generation_uid
+            or section.get("content_plan_uid")
+            or section.get("content_plan_item_id")
+            or str(uuid.uuid5(
+                uuid.NAMESPACE_URL,
+                f"tp-ai:plan-node:{section.get('number') or section.get('display_numbering', '')}:{section.get('title', '')}",
+            ))
+        )
+        return SectionGenerations(
+            section_uid=str(display_uid),
+            section_title=str(section.get("title") or ""),
+            section_number=str(
+                section.get("number") or section.get("display_numbering") or ""
+            ) or None,
+            node_kind=node_kind if generation_uid else "group",
+            generation_target_uid=str(generation_uid) if generation_uid else None,
+            variants=_generation_responses(str(generation_uid) if generation_uid else None),
+            children=[
+                _plan_node(child)
+                for child in children
+                if isinstance(child, dict)
+            ],
+        )
+
+    result: list[SectionGenerations] = []
+    for group in build_generation_groups(sections):
+        root = group["root"]
+        root_children = root.get("subsections") or root.get("children") or []
+        root_generation_uid = root.get("uid") or root.get("section_uid")
+        root_uid = str(root_generation_uid or group["assembly_uid"])
+        assembly_variants = (
+            _generation_responses(group["assembly_uid"])
+            if group["requires_assembly"]
+            else []
+        )
+        result.append(
+            SectionGenerations(
+                # The node identity follows the approved plan. An assembly UUID is
+                # an implementation detail and must not replace the plan section UID.
+                section_uid=root_uid,
+                section_title=str(root.get("title") or ""),
+                section_number=str(
+                    root.get("number") or root.get("display_numbering") or ""
+                ) or None,
+                node_kind="section",
+                generation_target_uid=(str(root_generation_uid) if root_generation_uid else None),
+                # Prefer the final assembled text. During an incomplete run, fall
+                # back to the root draft so it remains visible and actionable.
+                variants=assembly_variants or _generation_responses(root_uid),
+                children=[
+                    _plan_node(child)
+                    for child in root_children
+                    if isinstance(child, dict)
                 ],
             )
         )
