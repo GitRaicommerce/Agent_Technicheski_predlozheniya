@@ -6,7 +6,10 @@ from app.agents.drafting_blueprint import (
     build_drafting_blueprint,
     format_drafting_blueprint_for_prompt,
 )
-from app.agents.drafting import _format_section_drafting_guidance
+from app.agents.drafting import (
+    _append_missing_requirement_assurances,
+    _format_section_drafting_guidance,
+)
 from app.agents.generation_jobs import (
     _merge_section_drafting_guidance,
     _missing_requirement_target_guidance,
@@ -889,6 +892,60 @@ def test_common_requirement_coverage_requires_developed_operational_detail():
 
     assert superficial["missing_ids"] == ["req-environment-controls"]
     assert developed["covered_ids"] == ["req-environment-controls"]
+
+
+def test_common_deterministic_assurance_covers_remaining_operational_requirement():
+    requirement_items = [
+        {
+            "id": "req-risk-control",
+            "text": (
+                "Управлението на риска обхваща риска от закъснение на "
+                "започването на проектирането."
+            ),
+            "importance": "mandatory",
+            "category": "risk",
+            "category_label": "Управление на риска",
+        }
+    ]
+    shallow_text = "Рискът от закъснение е разгледан в работната програма."
+    initial_coverage = assess_requirement_coverage(shallow_text, requirement_items)
+
+    assured_text, assured_ids = _append_missing_requirement_assurances(
+        shallow_text,
+        initial_coverage,
+    )
+    assured_coverage = assess_requirement_coverage(assured_text, requirement_items)
+
+    assert assured_ids == ["req-risk-control"]
+    assert assured_coverage["missing_ids"] == []
+    assert "Изрично покритие на задължителните изисквания" in assured_text
+    assert "отговорният ръководител организира" in assured_text
+    assert "документира резултатите" in assured_text
+
+
+def test_common_deterministic_assurance_is_noop_when_all_requirements_are_covered():
+    requirement_items = [
+        {
+            "id": "req-records",
+            "text": "The contractor defines inspection records and corrective actions.",
+            "importance": "mandatory",
+            "category": "quality",
+        }
+    ]
+    developed_text = (
+        "The contractor defines inspection records and corrective actions, assigns "
+        "a responsible role, performs control, and documents acceptance evidence."
+    )
+    coverage = assess_requirement_coverage(developed_text, requirement_items)
+
+    assured_text, assured_ids = _append_missing_requirement_assurances(
+        developed_text,
+        coverage,
+    )
+
+    assert coverage["missing_ids"] == []
+    assert assured_text == developed_text
+    assert assured_ids == []
 
 
 def test_common_missing_requirement_remediation_flows_into_targeted_drafting_guidance():

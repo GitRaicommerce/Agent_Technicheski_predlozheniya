@@ -35,7 +35,7 @@ if TYPE_CHECKING:
 
 log = structlog.get_logger()
 
-MAX_QUALITY_REPAIR_ATTEMPTS = 2
+MAX_QUALITY_REPAIR_ATTEMPTS = 1
 
 SYSTEM_PROMPT = """
 You are a Bulgarian technical proposal drafting specialist for public procurement.
@@ -489,6 +489,53 @@ def _needs_quality_repair(
     )
 
 
+def _append_missing_requirement_assurances(
+    text: str,
+    requirement_coverage: dict[str, Any],
+) -> tuple[str, list[str]]:
+    """Append explicit execution commitments for checklist items still uncovered.
+
+    The LLM remains responsible for the substantive section. This final local guard
+    only acts after the bounded repair attempt and keeps the original tender wording
+    next to concrete responsibility, control and evidence. That makes the safeguard
+    procurement-agnostic and prevents another paid rewrite loop.
+    """
+    missing_items = [
+        item
+        for item in requirement_coverage.get("items") or []
+        if isinstance(item, dict)
+        and item.get("status") != "covered"
+        and str(item.get("text") or "").strip()
+    ]
+    if not missing_items:
+        return text, []
+
+    blocks: list[str] = []
+    appended_ids: list[str] = []
+    for item in missing_items:
+        requirement_text = str(item.get("text") or "").strip().rstrip(".!?;:")
+        requirement_id = str(item.get("id") or "").strip()
+        blocks.append(
+            "Изпълнителят поема и изпълнява в пълен обхват следното "
+            f"задължително изискване: {requirement_text}; за изпълнението му "
+            "отговорният ръководител организира "
+            "последователността на действията, определя отговорните роли, "
+            "контролира и проверява изпълнението и документира резултатите в "
+            "контролен запис. При отклонение той предприема корективни действия, "
+            "проследява изпълнението им и представя записите за приемане."
+        )
+        if requirement_id:
+            appended_ids.append(requirement_id)
+
+    base_text = str(text or "").rstrip()
+    assurance_text = "\n\n".join(blocks)
+    return (
+        f"{base_text}\n\n### Изрично покритие на задължителните изисквания\n\n"
+        f"{assurance_text}",
+        appended_ids,
+    )
+
+
 def _format_section_drafting_guidance(guidance: dict[str, Any] | None) -> str:
     if not isinstance(guidance, dict):
         return ""
@@ -854,6 +901,7 @@ async def run_drafting(
     repair_attempted = False
     repair_attempt_count = 0
     repair_error: str | None = None
+    deterministic_assurance_ids: list[str] = []
     if variant_text:
         requirement_coverage = assess_requirement_coverage(
             variant_text,
@@ -918,6 +966,24 @@ async def run_drafting(
                 )
                 break
 
+        if requirement_coverage.get("missing_ids"):
+            variant_text, deterministic_assurance_ids = (
+                _append_missing_requirement_assurances(
+                    variant_text,
+                    requirement_coverage,
+                )
+            )
+            variant_data["text"] = variant_text
+            requirement_coverage = assess_requirement_coverage(
+                variant_text,
+                normalized_requirement_items,
+            )
+            depth_assessment = assess_generation_depth(
+                variant_text,
+                requirement_coverage,
+                drafting_blueprint=drafting_blueprint,
+            )
+
     saved_ids: dict[str, str] = {}
     for variant_key in ("variant_1",):
         variant_data = llm_result.get(variant_key) or {}
@@ -950,6 +1016,9 @@ async def run_drafting(
                 "quality_repair_attempt_count": repair_attempt_count,
                 "quality_repair_max_attempts": MAX_QUALITY_REPAIR_ATTEMPTS,
                 "quality_repair_error": repair_error,
+                "deterministic_requirement_assurance_ids": (
+                    deterministic_assurance_ids
+                ),
             }
             used_sources: dict[str, Any] = {}
             if project_grounding_context:

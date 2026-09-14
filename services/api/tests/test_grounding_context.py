@@ -824,7 +824,7 @@ async def test_drafting_repair_feedback_names_missing_blueprint_topics(mock_db):
 
 
 @pytest.mark.asyncio
-async def test_drafting_runs_second_repair_when_first_repair_still_fails_depth(
+async def test_drafting_stops_after_one_paid_repair_and_finishes_locally(
     mock_db,
 ):
     project_id = str(uuid.uuid4())
@@ -852,16 +852,6 @@ async def test_drafting_runs_second_repair_when_first_repair_still_fails_depth(
         "monitoring records, corrective actions, control points, acceptance "
         "evidence, reporting sequence, and site coordination. "
     )
-    final_text = _varied_operational_text(
-        [
-            "dust suppression measures during execution",
-            "waste segregation storage transport handover",
-            "soil protection clean up controls",
-            "water pollution prevention controls",
-        ],
-        repeats=25,
-    )
-
     with patch(
         "app.agents.drafting.llm_gateway.call",
         new=AsyncMock(
@@ -876,13 +866,6 @@ async def test_drafting_runs_second_repair_when_first_repair_still_fails_depth(
                 {
                     "variant_1": {
                         "text": repeated_repair_sentence * 90,
-                        "evidence_map": {},
-                    },
-                    "flags": [],
-                },
-                {
-                    "variant_1": {
-                        "text": final_text,
                         "evidence_map": {},
                     },
                     "flags": [],
@@ -903,21 +886,23 @@ async def test_drafting_runs_second_repair_when_first_repair_still_fails_depth(
             section_requirement_items=requirement_items,
         )
 
-    second_repair_prompt = llm_call.await_args_list[2].kwargs["user_message"]
+    repair_prompt = llm_call.await_args_list[1].kwargs["user_message"]
     saved_generation = mock_db.add.call_args.args[0]
 
-    assert llm_call.await_count == 3
-    assert "QUALITY REPAIR ATTEMPT 2/2" in second_repair_prompt
-    assert "repetitive_content" in second_repair_prompt
-    assert saved_generation.text == final_text
+    assert llm_call.await_count == 2
+    assert "QUALITY REPAIR ATTEMPT 1/1" in repair_prompt
+    assert saved_generation.text.startswith((repeated_repair_sentence * 90).rstrip())
+    assert "Изрично покритие на задължителните изисквания" in saved_generation.text
     assert saved_generation.flags_json["quality_repair_attempted"] is True
-    assert saved_generation.flags_json["quality_repair_attempt_count"] == 2
-    assert saved_generation.flags_json["quality_repair_max_attempts"] == 2
+    assert saved_generation.flags_json["quality_repair_attempt_count"] == 1
+    assert saved_generation.flags_json["quality_repair_max_attempts"] == 1
+    assert saved_generation.flags_json["requirement_coverage"]["missing_ids"] == []
+    assert saved_generation.flags_json["deterministic_requirement_assurance_ids"]
     assert saved_generation.flags_json["generation_depth"]["status"] == "ok"
 
 
 @pytest.mark.asyncio
-async def test_drafting_saves_initial_generation_when_quality_repair_fails(mock_db):
+async def test_drafting_adds_local_assurance_when_quality_repair_fails(mock_db):
     project_id = str(uuid.uuid4())
     section_uid = str(uuid.uuid4())
     initial_text = "The proposal mentions communication."
@@ -965,8 +950,13 @@ async def test_drafting_saves_initial_generation_when_quality_repair_fails(mock_
     saved_generation = mock_db.add.call_args.args[0]
 
     assert llm_call.await_count == 2
-    assert saved_generation.text == initial_text
+    assert saved_generation.text.startswith(initial_text)
+    assert "Изрично покритие на задължителните изисквания" in saved_generation.text
     assert saved_generation.flags_json["quality_repair_attempted"] is True
     assert saved_generation.flags_json["quality_repair_attempt_count"] == 1
     assert saved_generation.flags_json["quality_repair_error"] == "temporary LLM failure"
+    assert saved_generation.flags_json["requirement_coverage"]["missing_ids"] == []
+    assert saved_generation.flags_json["deterministic_requirement_assurance_ids"] == [
+        "req-communication-workflow"
+    ]
     assert saved_generation.flags_json["generation_depth"]["status"] == "needs_review"

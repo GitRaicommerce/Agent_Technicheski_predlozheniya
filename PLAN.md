@@ -270,6 +270,9 @@
 - Bound drafting, generation history, verification, and export readiness to the latest approved outline, so a newer unapproved outline draft cannot hide existing text or receive a "new generation" command; legacy jobs that claim completion without persisted text are now shown as incomplete using the actual available section count.
 - Made the empty-generation state plan-aware: an unapproved Phase 2 plan now blocks job creation before any provider call, names the exact plan version and outstanding Understanding reviews, and explains that generations from earlier structures remain separate history rather than being silently reused.
 - Removed the winning/reference-proposal back-check from Understanding: uploaded example proposals are now optional forlage for reusing and adapting applicable texts, technical descriptions and methodologies, but cannot create requirements, plan structure, project facts, activities, or alleged gaps for the new procurement.
+- Completed the targeted missing-requirement remediation on the Pernik calibration project: the provider generated 10 of 12 planned subpoint/assembly steps before API credit exhaustion, and the completed drafts were preserved instead of restarting the job.
+- Bounded drafting quality repair to one paid rewrite and added a universal deterministic final assurance for any checklist item still uncovered, keeping the exact tender requirement beside responsible roles, execution steps, controls, records, corrective action, and acceptance evidence without another provider call.
+- Applied the deterministic assurance to the six remaining selected subpoints and rebuilt the three affected parent sections without LLM rewriting; strict DOCX readiness now reports zero missing requirements, shallow sections, missing sections, stale evidence, or duplicate selections.
 
 ## Active Goals
 
@@ -280,11 +283,10 @@
 
 ## Next Recommended Steps
 
-1. When the user authorizes the next API-credit spend, run targeted missing-requirement regeneration for the eight currently blocked subpoints; do not regenerate the complete approved outline.
-2. Re-run strict DOCX readiness and the Pernik calibration bundle after those eight targeted revisions, focusing on whether the seven operational-evidence gaps, two execution-action gaps, one coherent-passage gap, and the missing monitoring signal are cleared.
-3. Inspect the new subpoint and assembly traces to calibrate semantic tender retrieval and automatic forlage precision/recall across different content kinds.
-4. Begin Phase 5: criterion-level verification and project-wide consistency checks against the schedule and fact sheet.
-5. Continue broadening common tender regression coverage with more real-world noisy PDF extraction, DOCX readiness combinations, and operational-action coverage cases.
+1. Re-run the Pernik calibration bundle against the now-ready selected proposal and compare it with the pre-remediation hierarchical manifest, without executing further paid regeneration actions.
+2. Inspect the new subpoint and assembly traces to calibrate semantic tender retrieval and automatic forlage precision/recall across different content kinds.
+3. Begin Phase 5: criterion-level verification and project-wide consistency checks against the schedule and fact sheet.
+4. Continue broadening common tender regression coverage with more real-world noisy PDF extraction, DOCX readiness combinations, and operational-action coverage cases.
 
 ## Notes
 
