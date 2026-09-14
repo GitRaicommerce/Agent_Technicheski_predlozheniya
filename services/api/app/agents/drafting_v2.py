@@ -9,8 +9,14 @@ from typing import Any
 
 from sqlalchemy import select, update
 
-from app.core.llm_gateway import llm_gateway
+from app.core.llm_gateway import LLMOutputTruncatedError, llm_gateway
 from app.core.models import Generation
+
+
+# JSON escaping and Bulgarian text make the provider output materially larger
+# than the source. Above this size, asking the model to echo the full section is
+# both wasteful and likely to hit the output-token ceiling.
+MAX_LLM_ASSEMBLY_SOURCE_CHARS = 32_000
 
 
 ASSEMBLY_SYSTEM_PROMPT = """Ти си редактор на българско техническо предложение.
@@ -73,6 +79,16 @@ def _assembly_input(section_title: str, subpoints: list[dict[str, Any]]) -> str:
     return f"РАЗДЕЛ: {section_title}\n\n" + "\n\n".join(blocks)
 
 
+def _deterministic_assembly(subpoints: list[dict[str, Any]]) -> str:
+    """Join complete subpoint drafts without rewriting or shortening them."""
+    blocks: list[str] = []
+    for item in subpoints:
+        title = str(item.get("title") or "").strip()
+        text = str(item.get("text") or "").strip()
+        blocks.append(f"{title}\n\n{text}" if title else text)
+    return "\n\n".join(blocks).strip()
+
+
 async def run_section_assembly(
     *,
     project_id: str,
@@ -105,29 +121,48 @@ async def run_section_assembly(
         previous = None
     revision_number = (previous.revision_number or 1) + 1 if previous else 1
 
-    user_message = _assembly_input(section_title, usable)
-    result = await llm_gateway.call(
-        system_prompt=ASSEMBLY_SYSTEM_PROMPT,
-        user_message=user_message,
-        agent="drafting_v2_assembly",
-        trace_id=trace_id,
-    )
+    source_chars = sum(len(str(item.get("text") or "")) for item in usable)
+    assembly_mode = "llm_edit"
+    if source_chars > MAX_LLM_ASSEMBLY_SOURCE_CHARS:
+        result = {
+            "text": _deterministic_assembly(usable),
+            "change_summary": (
+                "Подточките са обединени без пренаписване, за да се запази "
+                "пълният текст на големия раздел."
+            ),
+        }
+        assembly_mode = "deterministic_large_section"
+    else:
+        user_message = _assembly_input(section_title, usable)
+        try:
+            result = await llm_gateway.call(
+                system_prompt=ASSEMBLY_SYSTEM_PROMPT,
+                user_message=user_message,
+                agent="drafting_v2_assembly",
+                trace_id=trace_id,
+            )
+        except LLMOutputTruncatedError:
+            result = {
+                "text": _deterministic_assembly(usable),
+                "change_summary": (
+                    "Подточките са обединени без пренаписване след достигане "
+                    "на изходния лимит на модела."
+                ),
+            }
+            assembly_mode = "deterministic_after_truncation"
+
     text = str(result.get("text") or "").strip()
     quality = assembly_quality(text, usable)
     if text and not quality["passed"]:
-        result = await llm_gateway.call(
-            system_prompt=ASSEMBLY_SYSTEM_PROMPT,
-            user_message=(
-                f"{user_message}\n\n"
-                "КОРЕКЦИЯ: Предишният сглобен вариант е съкратил съдържание "
-                f"или заглавия. Липсващи заглавия: {quality['missing_titles']}. "
-                f"Запазен обем: {quality['preservation_ratio']:.0%}. "
-                "Върни пълна редакция без съкращаване."
+        result = {
+            "text": _deterministic_assembly(usable),
+            "change_summary": (
+                "Подточките са обединени без пренаписване, защото редактираният "
+                "вариант не запази пълното съдържание."
             ),
-            agent="drafting_v2_assembly",
-            trace_id=trace_id,
-        )
-        text = str(result.get("text") or "").strip()
+        }
+        assembly_mode = "deterministic_quality_fallback"
+        text = str(result["text"]).strip()
         quality = assembly_quality(text, usable)
     if not text or not quality["passed"]:
         raise ValueError(
@@ -167,7 +202,11 @@ async def run_section_assembly(
                 for item in usable
             ]
         },
-        flags_json={"assembly_quality": quality},
+        flags_json={
+            "assembly_quality": quality,
+            "assembly_mode": assembly_mode,
+            "assembly_source_chars": source_chars,
+        },
         evidence_status="ok",
         selected=True,
         trace_id=trace_id,
@@ -179,4 +218,5 @@ async def run_section_assembly(
         "text": text,
         "revision_number": revision_number,
         "assembly_quality": quality,
+        "assembly_mode": assembly_mode,
     }

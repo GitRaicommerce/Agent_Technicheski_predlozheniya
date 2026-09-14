@@ -4,7 +4,12 @@ import uuid
 
 import pytest
 
-from app.agents.drafting_v2 import assembly_quality, run_section_assembly
+from app.agents.drafting_v2 import (
+    MAX_LLM_ASSEMBLY_SOURCE_CHARS,
+    assembly_quality,
+    run_section_assembly,
+)
+from app.core.llm_gateway import LLMOutputTruncatedError
 from app.agents.generation_structure import build_generation_groups, section_assembly_uid
 
 
@@ -95,3 +100,91 @@ async def test_section_assembly_persists_a_selected_hierarchical_generation(mock
         subpoints[1]["section_uid"],
     }
     assert result["generation_id"] == saved.id
+
+
+@pytest.mark.asyncio
+async def test_large_section_assembly_preserves_text_without_an_llm_echo(mock_db):
+    section_uid = str(uuid.uuid4())
+    first_text = "Пълно описание на организацията. " * 600
+    second_text = "Пълно описание на контрола. " * 600
+    assert len(first_text) + len(second_text) > MAX_LLM_ASSEMBLY_SOURCE_CHARS
+    subpoints = [
+        {
+            "section_uid": str(uuid.uuid4()),
+            "generation_id": str(uuid.uuid4()),
+            "title": "Организация",
+            "text": first_text,
+        },
+        {
+            "section_uid": str(uuid.uuid4()),
+            "generation_id": str(uuid.uuid4()),
+            "title": "Контрол",
+            "text": second_text,
+        },
+    ]
+    previous_result = MagicMock()
+    previous_result.scalar_one_or_none.return_value = None
+    mock_db.execute = AsyncMock(side_effect=[previous_result, MagicMock()])
+
+    with patch(
+        "app.agents.drafting_v2.llm_gateway.call",
+        new=AsyncMock(),
+    ) as llm_call:
+        result = await run_section_assembly(
+            project_id=str(uuid.uuid4()),
+            section_uid=section_uid,
+            section_title="Голям раздел",
+            subpoints=subpoints,
+            db=mock_db,
+        )
+
+    llm_call.assert_not_awaited()
+    saved = mock_db.add.call_args.args[0]
+    assert first_text.strip() in saved.text
+    assert second_text.strip() in saved.text
+    assert saved.flags_json["assembly_mode"] == "deterministic_large_section"
+    assert result["assembly_mode"] == "deterministic_large_section"
+
+
+@pytest.mark.asyncio
+async def test_truncated_section_assembly_falls_back_without_a_second_llm_call(mock_db):
+    section_uid = str(uuid.uuid4())
+    subpoints = [
+        {
+            "section_uid": str(uuid.uuid4()),
+            "generation_id": str(uuid.uuid4()),
+            "title": "Организация",
+            "text": "Организация на дейностите и отговорностите.",
+        },
+        {
+            "section_uid": str(uuid.uuid4()),
+            "generation_id": str(uuid.uuid4()),
+            "title": "Контрол",
+            "text": "Контрол чрез проверки и записи.",
+        },
+    ]
+    previous_result = MagicMock()
+    previous_result.scalar_one_or_none.return_value = None
+    mock_db.execute = AsyncMock(side_effect=[previous_result, MagicMock()])
+    truncated = LLMOutputTruncatedError(
+        "LLM response was truncated by the output token limit."
+    )
+
+    with patch(
+        "app.agents.drafting_v2.llm_gateway.call",
+        new=AsyncMock(side_effect=truncated),
+    ) as llm_call:
+        result = await run_section_assembly(
+            project_id=str(uuid.uuid4()),
+            section_uid=section_uid,
+            section_title="Раздел",
+            subpoints=subpoints,
+            db=mock_db,
+        )
+
+    llm_call.assert_awaited_once()
+    saved = mock_db.add.call_args.args[0]
+    assert "Организация" in saved.text
+    assert "Контрол" in saved.text
+    assert saved.flags_json["assembly_mode"] == "deterministic_after_truncation"
+    assert result["assembly_quality"]["passed"] is True
