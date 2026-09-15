@@ -525,9 +525,126 @@ export interface ExportReadiness {
   missing_requirement_count?: number;
   quality_sections?: ExportQualitySection[];
   quality_section_count?: number;
+  auto_assurance_sections?: Array<{
+    section_uid: string;
+    section_title?: string;
+    generation_id?: string;
+    assurance_requirement_ids?: string[];
+    assurance_count?: number;
+  }>;
+  auto_assurance_section_count?: number;
+  criteria_issue_sections?: CriteriaIssueSection[];
+  criteria_issue_section_count?: number;
+  criteria_unmet_count?: number;
+  consistency?: {
+    job_id?: string;
+    stale?: boolean;
+    critical_count?: number;
+    warning_count?: number;
+    conflicts?: ConsistencyConflict[];
+    checked_section_count?: number | null;
+    completed_at?: string | null;
+  } | null;
+  consistency_critical_count?: number;
   hard_blocker_count?: number;
   can_export_current_draft?: boolean;
   export_current_draft_message?: string | null;
+}
+
+export interface CriteriaIssueSection {
+  section_uid: string;
+  section_title?: string;
+  generation_id?: string;
+  checked_count: number;
+  covered_count: number;
+  partial_count: number;
+  missing_count: number;
+  violated_count: number;
+  unchecked_count: number;
+  issues: Array<{
+    criterion_id: string;
+    criterion_text: string;
+    criterion_kind: string;
+    requirement_id?: string | null;
+    verdict: string;
+    evidence?: string | null;
+    note?: string | null;
+  }>;
+}
+
+export interface CriterionCheck {
+  id: string;
+  generation_id: string;
+  section_uid: string;
+  criterion_id: string;
+  criterion_text: string;
+  criterion_kind: string;
+  requirement_id?: string | null;
+  source_quote?: string | null;
+  verdict: "covered" | "partial" | "missing" | "violated" | "unchecked" | string;
+  evidence?: string | null;
+  note?: string | null;
+  created_at: string;
+}
+
+export interface CriteriaJob {
+  id: string;
+  project_id: string;
+  status: "queued" | "processing" | "done" | "error" | "cancelled" | string;
+  total_sections: number;
+  completed_sections: number;
+  current_step?: string | null;
+  error?: string | null;
+  result_json?: Record<string, unknown> | null;
+  created_at: string;
+  updated_at: string;
+  completed_at?: string | null;
+}
+
+export interface CriteriaWorkspace {
+  enabled: boolean;
+  checks: CriterionCheck[];
+  totals: Record<string, number>;
+  latest_job?: CriteriaJob | null;
+}
+
+export interface ConsistencyStatement {
+  section_uid: string;
+  section_title?: string;
+  quote: string;
+  anchored?: boolean;
+}
+
+export interface ConsistencyConflict {
+  kind: "cross_section" | "schedule" | "fact_sheet" | string;
+  topic: string;
+  severity: "critical" | "warning" | string;
+  explanation: string;
+  statements: ConsistencyStatement[];
+}
+
+export interface ConsistencyReport {
+  checked_section_count?: number;
+  claim_count?: number;
+  critical_count?: number;
+  warning_count?: number;
+  conflicts?: ConsistencyConflict[];
+  checked_generation_ids?: string[];
+  completed_at?: string;
+}
+
+export interface ConsistencyJob {
+  id: string;
+  project_id: string;
+  status: "queued" | "processing" | "done" | "error" | "cancelled" | string;
+  total_sections: number;
+  completed_sections: number;
+  current_step?: string | null;
+  error?: string | null;
+  result_json?: ConsistencyReport | null;
+  created_at: string;
+  updated_at: string;
+  completed_at?: string | null;
 }
 
 export interface ExportQualitySection {
@@ -833,6 +950,36 @@ export const api = {
         `/api/v1/understanding/${projectId}/fact-sheet/confirm`,
         { method: "POST" },
       ),
+  },
+  criteria: {
+    get: (projectId: string) =>
+      apiFetch<CriteriaWorkspace>(`/api/v1/criteria/${projectId}`),
+    start: (projectId: string) =>
+      apiFetch<CriteriaJob>(`/api/v1/criteria/${projectId}/jobs`, {
+        method: "POST",
+      }),
+    getJob: (projectId: string, jobId: string) =>
+      apiFetch<CriteriaJob>(`/api/v1/criteria/${projectId}/jobs/${jobId}`),
+  },
+  consistency: {
+    getLatest: (projectId: string) =>
+      apiFetch<ConsistencyJob | null>(`/api/v1/consistency/${projectId}`),
+    start: (projectId: string) =>
+      apiFetch<ConsistencyJob>(`/api/v1/consistency/${projectId}/jobs`, {
+        method: "POST",
+      }),
+    getJob: (projectId: string, jobId: string) =>
+      apiFetch<ConsistencyJob>(
+        `/api/v1/consistency/${projectId}/jobs/${jobId}`,
+      ),
+    report: async (projectId: string) => {
+      const response = await fetch(
+        buildUrl(`/api/v1/consistency/${projectId}/report`),
+        { cache: "no-store" },
+      );
+      await ensureOk(response);
+      return response.text();
+    },
   },
   export: {
     readiness: (projectId: string) =>

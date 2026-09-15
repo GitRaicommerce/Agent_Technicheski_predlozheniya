@@ -51,6 +51,17 @@ export default function ExportButton({
   const [qualitySectionCount, setQualitySectionCount] = useState<number | null>(null);
   const [qualityWarningSummary, setQualityWarningSummary] =
     useState<QualityWarningSummary | null>(null);
+  const [autoAssuranceWarning, setAutoAssuranceWarning] = useState(false);
+  const [autoAssuranceSectionCount, setAutoAssuranceSectionCount] =
+    useState<number | null>(null);
+  const [criteriaWarning, setCriteriaWarning] = useState(false);
+  const [criteriaUnmetCount, setCriteriaUnmetCount] = useState<number | null>(
+    null,
+  );
+  const [consistencyWarning, setConsistencyWarning] = useState(false);
+  const [consistencyCriticalCount, setConsistencyCriticalCount] = useState<
+    number | null
+  >(null);
   const [canExportCurrentDraft, setCanExportCurrentDraft] = useState(false);
   const { toast } = useToast();
   const qualityWarningDetail = formatQualityWarningSummary(qualityWarningSummary);
@@ -59,7 +70,10 @@ export default function ExportButton({
     staleWarning ||
     missingGenerationWarning ||
     missingRequirementWarning ||
-    qualityWarning;
+    qualityWarning ||
+    autoAssuranceWarning ||
+    criteriaWarning ||
+    consistencyWarning;
 
   const applyReadinessWarnings = (source: unknown, message = "") => {
     let handled = false;
@@ -97,6 +111,21 @@ export default function ExportButton({
       );
       handled = true;
     }
+    if (isAutoAssuranceExportError(source)) {
+      setAutoAssuranceWarning(true);
+      setAutoAssuranceSectionCount(getAutoAssuranceSectionCount(source));
+      handled = true;
+    }
+    if (isCriteriaExportError(source)) {
+      setCriteriaWarning(true);
+      setCriteriaUnmetCount(getCriteriaUnmetCount(source));
+      handled = true;
+    }
+    if (isConsistencyExportError(source)) {
+      setConsistencyWarning(true);
+      setConsistencyCriticalCount(getConsistencyCriticalCount(source));
+      handled = true;
+    }
 
     return handled;
   };
@@ -132,6 +161,12 @@ export default function ExportButton({
     setQualityWarning(false);
     setQualitySectionCount(null);
     setQualityWarningSummary(null);
+    setAutoAssuranceWarning(false);
+    setAutoAssuranceSectionCount(null);
+    setCriteriaWarning(false);
+    setCriteriaUnmetCount(null);
+    setConsistencyWarning(false);
+    setConsistencyCriticalCount(null);
     setCanExportCurrentDraft(false);
     onQualitySectionsBlocked?.([], []);
 
@@ -351,6 +386,75 @@ export default function ExportButton({
               Отвори Генерации
             </button>
           )}
+        </div>
+      )}
+
+      {autoAssuranceWarning && (
+        <div
+          data-testid="export-auto-assurance-warning"
+          className="mt-1 max-w-xs rounded-lg border border-orange-300 bg-orange-50 px-3 py-2 text-xs text-orange-900"
+        >
+          <p>
+            {`В ${
+              autoAssuranceSectionCount
+                ? formatAutoAssuranceSectionCount(autoAssuranceSectionCount)
+                : "някои секции"
+            } има автоматично добавени шаблонни уверения („Изрично покритие на задължителните изисквания“). `}
+            Прегледайте ги и ги заменете с конкретен текст или регенерирайте
+            секцията — комисиите разпознават шаблонния текст.
+          </p>
+          {onOpenGenerations && (
+            <button
+              type="button"
+              onClick={onOpenGenerations}
+              className="mt-2 rounded border border-orange-300 bg-white px-2 py-1 font-medium text-orange-900 transition hover:bg-orange-100"
+            >
+              Отвори Генерации
+            </button>
+          )}
+        </div>
+      )}
+
+      {criteriaWarning && (
+        <div
+          data-testid="export-criteria-warning"
+          className="mt-1 max-w-xs rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-900"
+        >
+          <p>
+            {`Проверката по критерии откри неизпълнени или нарушени критерии за приемане${
+              criteriaUnmetCount
+                ? ` (${formatCriteriaCount(criteriaUnmetCount)})`
+                : ""
+            }. `}
+            Прегледайте бележките в readiness отчета и регенерирайте засегнатите
+            секции преди финалния export.
+          </p>
+          {onOpenGenerations && (
+            <button
+              type="button"
+              onClick={onOpenGenerations}
+              className="mt-2 rounded border border-red-300 bg-white px-2 py-1 font-medium text-red-900 transition hover:bg-red-100"
+            >
+              Отвори Генерации
+            </button>
+          )}
+        </div>
+      )}
+
+      {consistencyWarning && (
+        <div
+          data-testid="export-consistency-warning"
+          className="mt-1 max-w-xs rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-900"
+        >
+          <p>
+            {`Проверката за съгласуваност откри критични противоречия${
+              consistencyCriticalCount
+                ? ` (${formatConsistencyCount(consistencyCriticalCount)})`
+                : ""
+            } — между раздели, спрямо графика или фактите. `}
+            Отстранете ги преди финалния export; противоречията са най-честата
+            причина за отстраняване от търг.
+          </p>
         </div>
       )}
 
@@ -753,6 +857,97 @@ function getApiErrorPayload(error: ApiError): unknown {
   return detail && typeof detail === "object" && "detail" in detail
     ? (detail as { detail?: unknown }).detail
     : detail;
+}
+
+function isAutoAssuranceExportError(err: unknown): boolean {
+  const payload = getReadinessPayload(err);
+  return (
+    !!payload &&
+    typeof payload === "object" &&
+    (positiveNumber(
+      (payload as { auto_assurance_section_count?: unknown })
+        .auto_assurance_section_count,
+    ) ||
+      nonEmptyArray(
+        (payload as { auto_assurance_sections?: unknown })
+          .auto_assurance_sections,
+      ))
+  );
+}
+
+function getAutoAssuranceSectionCount(err: unknown): number | null {
+  const payload = getReadinessPayload(err);
+  if (!payload || typeof payload !== "object") return null;
+
+  const explicitCount = (payload as { auto_assurance_section_count?: unknown })
+    .auto_assurance_section_count;
+  if (typeof explicitCount === "number") return explicitCount;
+
+  const sections = (payload as { auto_assurance_sections?: unknown })
+    .auto_assurance_sections;
+  return Array.isArray(sections) ? sections.length : null;
+}
+
+function formatAutoAssuranceSectionCount(count: number): string {
+  return `${count} ${count === 1 ? "секция" : "секции"}`;
+}
+
+function isCriteriaExportError(err: unknown): boolean {
+  const payload = getReadinessPayload(err);
+  return (
+    !!payload &&
+    typeof payload === "object" &&
+    (positiveNumber(
+      (payload as { criteria_unmet_count?: unknown }).criteria_unmet_count,
+    ) ||
+      nonEmptyArray(
+        (payload as { criteria_issue_sections?: unknown })
+          .criteria_issue_sections,
+      ))
+  );
+}
+
+function getCriteriaUnmetCount(err: unknown): number | null {
+  const payload = getReadinessPayload(err);
+  if (!payload || typeof payload !== "object") return null;
+
+  const explicitCount = (payload as { criteria_unmet_count?: unknown })
+    .criteria_unmet_count;
+  if (typeof explicitCount === "number") return explicitCount;
+
+  const sections = (payload as { criteria_issue_sections?: unknown })
+    .criteria_issue_sections;
+  return Array.isArray(sections) ? sections.length : null;
+}
+
+function formatCriteriaCount(count: number): string {
+  return `${count} ${count === 1 ? "критерий" : "критерия"}`;
+}
+
+function isConsistencyExportError(err: unknown): boolean {
+  const payload = getReadinessPayload(err);
+  return (
+    !!payload &&
+    typeof payload === "object" &&
+    positiveNumber(
+      (payload as { consistency_critical_count?: unknown })
+        .consistency_critical_count,
+    )
+  );
+}
+
+function getConsistencyCriticalCount(err: unknown): number | null {
+  const payload = getReadinessPayload(err);
+  if (!payload || typeof payload !== "object") return null;
+
+  const explicitCount = (
+    payload as { consistency_critical_count?: unknown }
+  ).consistency_critical_count;
+  return typeof explicitCount === "number" ? explicitCount : null;
+}
+
+function formatConsistencyCount(count: number): string {
+  return `${count} ${count === 1 ? "противоречие" : "противоречия"}`;
 }
 
 function formatStaleSectionCount(count: number): string {

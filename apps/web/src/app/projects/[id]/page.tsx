@@ -12,6 +12,8 @@ import OutlinePanel from "@/components/OutlinePanel";
 import SchedulePanel from "@/components/SchedulePanel";
 import GenerationsPanel from "@/components/GenerationsPanel";
 import UnderstandingPanel from "@/components/UnderstandingPanel";
+import CriteriaPanel from "@/components/CriteriaPanel";
+import ConsistencyPanel from "@/components/ConsistencyPanel";
 
 type Module = "examples" | "tender_docs" | "schedule" | "legislation";
 
@@ -46,6 +48,10 @@ export default function ProjectPage() {
   const [showOutline, setShowOutline] = useState(false);
   const [showSchedule, setShowSchedule] = useState(false);
   const [showGenerations, setShowGenerations] = useState(false);
+  const [showCriteria, setShowCriteria] = useState(false);
+  const [criteriaRefreshKey, setCriteriaRefreshKey] = useState(0);
+  const [showConsistency, setShowConsistency] = useState(false);
+  const [consistencyRefreshKey, setConsistencyRefreshKey] = useState(0);
   const [outlineRefreshKey, setOutlineRefreshKey] = useState(0);
   const [scheduleRefreshKey, setScheduleRefreshKey] = useState(0);
   const [generationsRefreshKey, setGenerationsRefreshKey] = useState(0);
@@ -512,6 +518,56 @@ export default function ProjectPage() {
                   focusAttentionKey={generationAttentionFocusKey}
                   qualityAttentionSectionUids={qualityAttentionSectionUids}
                   qualityAttentionSections={qualityAttentionSections}
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Проверка по критерии */}
+          <div className="border-b">
+            <button
+              onClick={() => {
+                setShowCriteria((v) => !v);
+                setCriteriaRefreshKey((value) => value + 1);
+              }}
+              data-testid="criteria-panel-toggle"
+              className="w-full px-3 py-2.5 text-left text-sm font-semibold text-gray-700 flex justify-between items-center hover:bg-gray-50 transition"
+            >
+              <span>✅ Проверка по критерии</span>
+              <span className="text-gray-400 text-xs">
+                {showCriteria ? "▾" : "▸"}
+              </span>
+            </button>
+            {showCriteria && (
+              <div className="px-3 pb-3">
+                <CriteriaPanel
+                  projectId={project.id}
+                  refreshKey={criteriaRefreshKey}
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Проверка за съгласуваност */}
+          <div className="border-b">
+            <button
+              onClick={() => {
+                setShowConsistency((v) => !v);
+                setConsistencyRefreshKey((value) => value + 1);
+              }}
+              data-testid="consistency-panel-toggle"
+              className="w-full px-3 py-2.5 text-left text-sm font-semibold text-gray-700 flex justify-between items-center hover:bg-gray-50 transition"
+            >
+              <span>🔗 Съгласуваност</span>
+              <span className="text-gray-400 text-xs">
+                {showConsistency ? "▾" : "▸"}
+              </span>
+            </button>
+            {showConsistency && (
+              <div className="px-3 pb-3">
+                <ConsistencyPanel
+                  projectId={project.id}
+                  refreshKey={consistencyRefreshKey}
                 />
               </div>
             )}
