@@ -98,6 +98,8 @@ TP AI is a monorepo for an AI-assisted workflow that prepares technical proposal
 - `apps/web/src/components/`
   - `apps/web/src/components/ChatPanel.test.tsx`
   - `apps/web/src/components/ChatPanel.tsx`
+  - `apps/web/src/components/ConsistencyPanel.tsx`
+  - `apps/web/src/components/CriteriaPanel.tsx`
   - `apps/web/src/components/ExportButton.test.tsx`
   - `apps/web/src/components/ExportButton.tsx`
   - `apps/web/src/components/FileUploadPanel.test.tsx`
@@ -122,8 +124,10 @@ TP AI is a monorepo for an AI-assisted workflow that prepares technical proposal
   - `apps/web/src/test/setup.ts`
 - `services/api/app/agents/`
   - `services/api/app/agents/__init__.py`
+  - `services/api/app/agents/consistency.py`
   - `services/api/app/agents/content_plan.py`
   - `services/api/app/agents/context.py`
+  - `services/api/app/agents/criteria_verifier.py`
   - `services/api/app/agents/drafting.py`
   - `services/api/app/agents/drafting_blueprint.py`
   - `services/api/app/agents/drafting_v2.py`
@@ -163,7 +167,9 @@ TP AI is a monorepo for an AI-assisted workflow that prepares technical proposal
 - `services/api/app/routers/`
   - `services/api/app/routers/__init__.py`
   - `services/api/app/routers/agents.py`
+  - `services/api/app/routers/consistency.py`
   - `services/api/app/routers/content_plan.py`
+  - `services/api/app/routers/criteria.py`
   - `services/api/app/routers/export.py`
   - `services/api/app/routers/files.py`
   - `services/api/app/routers/projects.py`
@@ -174,7 +180,9 @@ TP AI is a monorepo for an AI-assisted workflow that prepares technical proposal
 ## Backend API Surface
 
 - `services/api/app/routers/agents.py`
+- `services/api/app/routers/consistency.py`
 - `services/api/app/routers/content_plan.py`
+- `services/api/app/routers/criteria.py`
 - `services/api/app/routers/export.py`
 - `services/api/app/routers/files.py`
 - `services/api/app/routers/projects.py`
@@ -182,15 +190,17 @@ TP AI is a monorepo for an AI-assisted workflow that prepares technical proposal
 
 ## Test Inventory
 
-- Total backend tests discovered: `276`
+- Total backend tests discovered: `293`
 - `test_agents.py`: `45`
 - `test_common_proposal_scenarios.py`: `21`
 - `test_config.py`: `2`
+- `test_consistency.py`: `5`
 - `test_content_plan.py`: `13`
+- `test_criteria_verifier.py`: `6`
 - `test_drafting_blueprint.py`: `5`
 - `test_drafting_v2.py`: `5`
 - `test_examples.py`: `2`
-- `test_export.py`: `15`
+- `test_export.py`: `21`
 - `test_export_readiness_report.py`: `2`
 - `test_files.py`: `10`
 - `test_forlage.py`: `3`

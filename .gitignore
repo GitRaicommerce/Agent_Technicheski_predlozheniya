@@ -37,3 +37,6 @@ postgres_data/
 
 old/
 local_analysis/
+
+# Claude Code agent worktrees (must never be committed)
+.claude/
