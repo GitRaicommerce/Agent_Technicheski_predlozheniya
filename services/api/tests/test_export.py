@@ -12,6 +12,14 @@ import pytest
 from tests.conftest import _make_project
 
 
+def _empty_scalars_result() -> MagicMock:
+    """Резултат за заявките от Фаза 5 (criterion checks + consistency job)."""
+    result = MagicMock()
+    result.scalars.return_value.all.return_value = []
+    result.scalar_one_or_none.return_value = None
+    return result
+
+
 # ---------------------------------------------------------------------------
 # GET /api/v1/export/{project_id}/docx
 # ---------------------------------------------------------------------------
@@ -77,6 +85,296 @@ async def test_export_docx_duplicate_selected_returns_409(client, mock_db):
         "gen-1",
         "gen-2",
     ]
+
+
+@pytest.mark.asyncio
+async def test_export_readiness_flags_auto_assurance_text(client, mock_db):
+    """Автоматично добавените уверения се показват като readiness предупреждение."""
+    project = _make_project()
+    mock_db.get = AsyncMock(return_value=project)
+
+    generation = MagicMock()
+    generation.id = "gen-assured"
+    generation.section_uid = "sec-assured"
+    generation.evidence_status = "ok"
+    generation.text = "Текст с автоматично добавени уверения."
+    generation.flags_json = {
+        "deterministic_requirement_assurance_ids": ["req-7", "req-9"],
+    }
+
+    selected_result = MagicMock()
+    selected_result.scalars.return_value.all.return_value = [generation]
+    mock_db.execute = AsyncMock(return_value=selected_result)
+
+    resp = await client.get(f"/api/v1/export/{project.id}/readiness")
+
+    assert resp.status_code == 200
+    readiness = resp.json()
+    assert readiness["ready"] is False
+    assert readiness["auto_assurance_section_count"] == 1
+    section = readiness["auto_assurance_sections"][0]
+    assert section["section_uid"] == "sec-assured"
+    assert section["assurance_requirement_ids"] == ["req-7", "req-9"]
+    assert section["assurance_count"] == 2
+    blocker_codes = {item["code"] for item in readiness["blockers"]}
+    assert "auto_assurance_text" in blocker_codes
+    # Работната чернова остава експортируема — предупреждение, не твърд блокер.
+    assert readiness["can_export_current_draft"] is True
+
+
+@pytest.mark.asyncio
+async def test_export_readiness_report_lists_auto_assurance_sections(client, mock_db):
+    """Markdown отчетът включва секциите с автоматично добавени уверения."""
+    project = _make_project()
+    mock_db.get = AsyncMock(return_value=project)
+
+    generation = MagicMock()
+    generation.id = "gen-assured"
+    generation.section_uid = "sec-assured"
+    generation.evidence_status = "ok"
+    generation.text = "Текст с автоматично добавени уверения."
+    generation.flags_json = {
+        "deterministic_requirement_assurance_ids": ["req-7"],
+    }
+
+    selected_result = MagicMock()
+    selected_result.scalars.return_value.all.return_value = [generation]
+    mock_db.execute = AsyncMock(return_value=selected_result)
+
+    resp = await client.get(f"/api/v1/export/{project.id}/readiness/report")
+
+    assert resp.status_code == 200
+    report = resp.text
+    assert "Auto-Appended Requirement Assurances" in report
+    assert "sec-assured" in report
+    assert "req-7" in report
+
+
+@pytest.mark.asyncio
+async def test_export_readiness_flags_unmet_criteria(client, mock_db):
+    """Verdict missing/violated от проверката по критерии блокира readiness."""
+    project = _make_project()
+    mock_db.get = AsyncMock(return_value=project)
+
+    generation = MagicMock()
+    generation.id = "gen-1"
+    generation.section_uid = "sec-1"
+    generation.evidence_status = "ok"
+    generation.text = "Генериран текст."
+    generation.flags_json = {}
+
+    selected_result = MagicMock()
+    selected_result.scalars.return_value.all.return_value = [generation]
+
+    outline_result = MagicMock()
+    outline_result.scalar_one_or_none.return_value = None
+
+    check = MagicMock()
+    check.generation_id = "gen-1"
+    check.section_uid = "sec-1"
+    check.criterion_id = "crit-1"
+    check.criterion_text = "Разпределение на дейностите по експерти."
+    check.criterion_kind = "content"
+    check.requirement_id = "req-1"
+    check.verdict = "missing"
+    check.evidence = None
+    check.note = "Липсва конкретно разпределение."
+
+    checks_result = MagicMock()
+    checks_result.scalars.return_value.all.return_value = [check]
+
+    consistency_result = MagicMock()
+    consistency_result.scalar_one_or_none.return_value = None
+
+    mock_db.execute = AsyncMock(
+        side_effect=[
+            selected_result,
+            outline_result,
+            checks_result,
+            consistency_result,
+        ]
+    )
+
+    resp = await client.get(f"/api/v1/export/{project.id}/readiness")
+
+    assert resp.status_code == 200
+    readiness = resp.json()
+    assert readiness["ready"] is False
+    assert readiness["criteria_unmet_count"] == 1
+    section = readiness["criteria_issue_sections"][0]
+    assert section["section_uid"] == "sec-1"
+    assert section["missing_count"] == 1
+    assert section["issues"][0]["criterion_id"] == "crit-1"
+    blocker_codes = {item["code"] for item in readiness["blockers"]}
+    assert "criteria_unmet" in blocker_codes
+    assert readiness["can_export_current_draft"] is True
+
+
+@pytest.mark.asyncio
+async def test_export_readiness_ignores_checks_of_unselected_generations(
+    client, mock_db
+):
+    """Оценки от стари (неизбрани) генерации не блокират readiness."""
+    project = _make_project()
+    mock_db.get = AsyncMock(return_value=project)
+
+    generation = MagicMock()
+    generation.id = "gen-new"
+    generation.section_uid = "sec-1"
+    generation.evidence_status = "ok"
+    generation.text = "Регенериран текст."
+    generation.flags_json = {}
+
+    selected_result = MagicMock()
+    selected_result.scalars.return_value.all.return_value = [generation]
+
+    outline_result = MagicMock()
+    outline_result.scalar_one_or_none.return_value = None
+
+    stale_check = MagicMock()
+    stale_check.generation_id = "gen-old"
+    stale_check.section_uid = "sec-1"
+    stale_check.verdict = "violated"
+
+    checks_result = MagicMock()
+    checks_result.scalars.return_value.all.return_value = [stale_check]
+
+    consistency_result = MagicMock()
+    consistency_result.scalar_one_or_none.return_value = None
+
+    mock_db.execute = AsyncMock(
+        side_effect=[
+            selected_result,
+            outline_result,
+            checks_result,
+            consistency_result,
+        ]
+    )
+
+    resp = await client.get(f"/api/v1/export/{project.id}/readiness")
+
+    assert resp.status_code == 200
+    readiness = resp.json()
+    assert readiness["criteria_issue_sections"] == []
+    blocker_codes = {item["code"] for item in readiness["blockers"]}
+    assert "criteria_unmet" not in blocker_codes
+
+
+@pytest.mark.asyncio
+async def test_export_readiness_flags_critical_consistency_conflicts(
+    client, mock_db
+):
+    """Критични противоречия от свеж consistency доклад блокират readiness."""
+    project = _make_project()
+    mock_db.get = AsyncMock(return_value=project)
+
+    generation = MagicMock()
+    generation.id = "gen-1"
+    generation.section_uid = "sec-1"
+    generation.evidence_status = "ok"
+    generation.text = "Текст."
+    generation.flags_json = {}
+
+    selected_result = MagicMock()
+    selected_result.scalars.return_value.all.return_value = [generation]
+
+    outline_result = MagicMock()
+    outline_result.scalar_one_or_none.return_value = None
+
+    checks_result = MagicMock()
+    checks_result.scalars.return_value.all.return_value = []
+
+    consistency_job = MagicMock()
+    consistency_job.id = "job-1"
+    consistency_job.result_json = {
+        "checked_generation_ids": ["gen-1"],
+        "critical_count": 2,
+        "warning_count": 1,
+        "conflicts": [
+            {"severity": "critical", "kind": "schedule", "topic": "Срок"},
+            {"severity": "critical", "kind": "cross_section", "topic": "Екип"},
+            {"severity": "warning", "kind": "fact_sheet", "topic": "Обект"},
+        ],
+        "checked_section_count": 1,
+        "completed_at": "2026-09-14T00:00:00+00:00",
+    }
+    consistency_result = MagicMock()
+    consistency_result.scalar_one_or_none.return_value = consistency_job
+
+    mock_db.execute = AsyncMock(
+        side_effect=[
+            selected_result,
+            outline_result,
+            checks_result,
+            consistency_result,
+        ]
+    )
+
+    resp = await client.get(f"/api/v1/export/{project.id}/readiness")
+
+    assert resp.status_code == 200
+    readiness = resp.json()
+    assert readiness["ready"] is False
+    assert readiness["consistency_critical_count"] == 2
+    assert readiness["consistency"]["stale"] is False
+    blocker_codes = {item["code"] for item in readiness["blockers"]}
+    assert "consistency_conflicts" in blocker_codes
+
+
+@pytest.mark.asyncio
+async def test_export_readiness_treats_regenerated_consistency_as_stale(
+    client, mock_db
+):
+    """Регенерирана секция прави consistency доклада остарял — не блокира."""
+    project = _make_project()
+    mock_db.get = AsyncMock(return_value=project)
+
+    generation = MagicMock()
+    generation.id = "gen-new"
+    generation.section_uid = "sec-1"
+    generation.evidence_status = "ok"
+    generation.text = "Регенериран текст."
+    generation.flags_json = {}
+
+    selected_result = MagicMock()
+    selected_result.scalars.return_value.all.return_value = [generation]
+
+    outline_result = MagicMock()
+    outline_result.scalar_one_or_none.return_value = None
+
+    checks_result = MagicMock()
+    checks_result.scalars.return_value.all.return_value = []
+
+    consistency_job = MagicMock()
+    consistency_job.id = "job-1"
+    consistency_job.result_json = {
+        "checked_generation_ids": ["gen-old"],
+        "critical_count": 3,
+        "warning_count": 0,
+        "conflicts": [],
+        "checked_section_count": 1,
+        "completed_at": "2026-09-14T00:00:00+00:00",
+    }
+    consistency_result = MagicMock()
+    consistency_result.scalar_one_or_none.return_value = consistency_job
+
+    mock_db.execute = AsyncMock(
+        side_effect=[
+            selected_result,
+            outline_result,
+            checks_result,
+            consistency_result,
+        ]
+    )
+
+    resp = await client.get(f"/api/v1/export/{project.id}/readiness")
+
+    assert resp.status_code == 200
+    readiness = resp.json()
+    assert readiness["consistency"]["stale"] is True
+    assert readiness["consistency_critical_count"] == 0
+    blocker_codes = {item["code"] for item in readiness["blockers"]}
+    assert "consistency_conflicts" not in blocker_codes
 
 
 @pytest.mark.asyncio
@@ -173,7 +471,14 @@ async def test_export_readiness_aggregates_multiple_blockers(client, mock_db):
     ]
     outline_result = MagicMock()
     outline_result.scalar_one_or_none.return_value = None
-    mock_db.execute = AsyncMock(side_effect=[selected_result, outline_result])
+    mock_db.execute = AsyncMock(
+        side_effect=[
+            selected_result,
+            outline_result,
+            _empty_scalars_result(),
+            _empty_scalars_result(),
+        ]
+    )
 
     resp = await client.get(f"/api/v1/export/{project.id}/readiness")
 
@@ -287,7 +592,14 @@ async def test_export_readiness_report_returns_markdown_summary(client, mock_db)
     }
     outline_result = MagicMock()
     outline_result.scalar_one_or_none.return_value = outline
-    mock_db.execute = AsyncMock(side_effect=[selected_result, outline_result])
+    mock_db.execute = AsyncMock(
+        side_effect=[
+            selected_result,
+            outline_result,
+            _empty_scalars_result(),
+            _empty_scalars_result(),
+        ]
+    )
 
     resp = await client.get(f"/api/v1/export/{project.id}/readiness/report")
 
@@ -328,7 +640,14 @@ async def test_export_readiness_reports_outline_sections_without_generated_text(
     }
     outline_result = MagicMock()
     outline_result.scalar_one_or_none.return_value = outline
-    mock_db.execute = AsyncMock(side_effect=[selected_result, outline_result])
+    mock_db.execute = AsyncMock(
+        side_effect=[
+            selected_result,
+            outline_result,
+            _empty_scalars_result(),
+            _empty_scalars_result(),
+        ]
+    )
 
     resp = await client.get(f"/api/v1/export/{project.id}/readiness")
 
@@ -417,7 +736,14 @@ async def test_export_docx_allows_current_draft_with_warning_blockers(
     selected_result.scalars.return_value.all.return_value = [generation]
     outline_result = MagicMock()
     outline_result.scalar_one_or_none.return_value = None
-    mock_db.execute = AsyncMock(side_effect=[selected_result, outline_result])
+    mock_db.execute = AsyncMock(
+        side_effect=[
+            selected_result,
+            outline_result,
+            _empty_scalars_result(),
+            _empty_scalars_result(),
+        ]
+    )
     fake_docx = b"PK\x03\x04current-draft"
 
     with patch(
@@ -494,7 +820,14 @@ async def test_export_docx_shallow_requirement_text_returns_409(client, mock_db)
     selected_result.scalars.return_value.all.return_value = [generation]
     outline_result = MagicMock()
     outline_result.scalar_one_or_none.return_value = None
-    mock_db.execute = AsyncMock(side_effect=[selected_result, outline_result])
+    mock_db.execute = AsyncMock(
+        side_effect=[
+            selected_result,
+            outline_result,
+            _empty_scalars_result(),
+            _empty_scalars_result(),
+        ]
+    )
 
     resp = await client.get(f"/api/v1/export/{project.id}/docx")
 
@@ -571,7 +904,14 @@ async def test_export_docx_uses_drafting_blueprint_for_quality_gate(client, mock
     selected_result.scalars.return_value.all.return_value = [generation]
     outline_result = MagicMock()
     outline_result.scalar_one_or_none.return_value = None
-    mock_db.execute = AsyncMock(side_effect=[selected_result, outline_result])
+    mock_db.execute = AsyncMock(
+        side_effect=[
+            selected_result,
+            outline_result,
+            _empty_scalars_result(),
+            _empty_scalars_result(),
+        ]
+    )
 
     resp = await client.get(f"/api/v1/export/{project.id}/docx")
 
@@ -656,7 +996,14 @@ async def test_export_readiness_counts_compact_additional_blueprint_groups(
     selected_result.scalars.return_value.all.return_value = [generation]
     outline_result = MagicMock()
     outline_result.scalar_one_or_none.return_value = None
-    mock_db.execute = AsyncMock(side_effect=[selected_result, outline_result])
+    mock_db.execute = AsyncMock(
+        side_effect=[
+            selected_result,
+            outline_result,
+            _empty_scalars_result(),
+            _empty_scalars_result(),
+        ]
+    )
 
     resp = await client.get(f"/api/v1/export/{project.id}/readiness")
 
@@ -719,7 +1066,14 @@ async def test_export_docx_reports_uneven_blueprint_distribution(client, mock_db
     selected_result.scalars.return_value.all.return_value = [generation]
     outline_result = MagicMock()
     outline_result.scalar_one_or_none.return_value = None
-    mock_db.execute = AsyncMock(side_effect=[selected_result, outline_result])
+    mock_db.execute = AsyncMock(
+        side_effect=[
+            selected_result,
+            outline_result,
+            _empty_scalars_result(),
+            _empty_scalars_result(),
+        ]
+    )
 
     resp = await client.get(f"/api/v1/export/{project.id}/readiness")
 
@@ -768,7 +1122,14 @@ async def test_export_docx_uses_outline_requirements_for_legacy_quality_gate(cli
     }
     outline_result = MagicMock()
     outline_result.scalar_one_or_none.return_value = outline
-    mock_db.execute = AsyncMock(side_effect=[selected_result, outline_result])
+    mock_db.execute = AsyncMock(
+        side_effect=[
+            selected_result,
+            outline_result,
+            _empty_scalars_result(),
+            _empty_scalars_result(),
+        ]
+    )
 
     resp = await client.get(f"/api/v1/export/{project.id}/docx")
 

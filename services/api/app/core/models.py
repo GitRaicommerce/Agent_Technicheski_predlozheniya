@@ -69,6 +69,9 @@ class Project(Base):
     content_plan_items: Mapped[list[ContentPlanItem]] = relationship(
         back_populates="project", cascade="all, delete-orphan"
     )
+    criterion_checks: Mapped[list[CriterionCheck]] = relationship(
+        back_populates="project", cascade="all, delete-orphan"
+    )
 
 
 class ProjectFile(Base):
@@ -487,6 +490,39 @@ class WbsItem(Base):
     status: Mapped[str] = mapped_column(String(16), default="extracted")
 
     project: Mapped[Project] = relationship(back_populates="wbs_items")
+
+
+class CriterionCheck(Base):
+    """Phase 5.1: LLM verdict for one acceptance criterion of one generation."""
+
+    __tablename__ = "criterion_checks"
+
+    id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), primary_key=True, default=_uuid
+    )
+    project_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("projects.id", ondelete="CASCADE")
+    )
+    generation_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("generations.id", ondelete="CASCADE")
+    )
+    section_uid: Mapped[str] = mapped_column(UUID(as_uuid=False))
+    criterion_id: Mapped[str] = mapped_column(String(64))
+    criterion_text: Mapped[str] = mapped_column(Text)
+    criterion_kind: Mapped[str] = mapped_column(String(32), default="content")
+    requirement_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    source_quote: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    verdict: Mapped[str] = mapped_column(
+        String(16)
+    )  # covered|partial|missing|violated|unchecked
+    evidence: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    trace_id: Mapped[Optional[str]] = mapped_column(UUID(as_uuid=False))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    project: Mapped[Project] = relationship(back_populates="criterion_checks")
 
 
 class ProjectFactSheet(Base):

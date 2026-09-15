@@ -109,7 +109,37 @@ def _blocker_actions(readiness: dict[str, Any]) -> list[str]:
         actions.append(
             "Регенерирайте плитките секции с по-развита структура, роли, контроли, документи и последователност."
         )
+    if "auto_assurance_text" in blocker_codes:
+        actions.append(
+            "Прегледайте секциите с автоматично добавени уверения („Изрично "
+            "покритие на задължителните изисквания“): заменете шаблонните "
+            "изречения с конкретен текст или регенерирайте секцията, преди "
+            "финалния export."
+        )
+    if "criteria_unmet" in blocker_codes:
+        actions.append(
+            "Регенерирайте или редактирайте секциите с неизпълнени критерии за "
+            "приемане (verdict missing/violated от проверката по критерии), "
+            "като адресирате конкретните бележки от проверяващия."
+        )
+    if "consistency_conflicts" in blocker_codes:
+        actions.append(
+            "Отстранете критичните противоречия от доклада за съгласуваност "
+            "(между раздели, спрямо линейния график или фактите по проекта), "
+            "след което пуснете проверката отново."
+        )
     return actions
+
+
+def _verdict_label(verdict: str) -> str:
+    labels = {
+        "covered": "изпълнен",
+        "partial": "частично изпълнен",
+        "missing": "неизпълнен",
+        "violated": "нарушена забрана/ограничение",
+        "unchecked": "непроверен",
+    }
+    return labels.get(verdict, verdict)
 
 
 def render_export_readiness_report(readiness: dict[str, Any]) -> str:
@@ -364,6 +394,92 @@ def render_export_readiness_report(readiness: dict[str, Any]) -> str:
                         "  - missing groups/topics: "
                         + _list(missing_labels[:8])
                     )
+
+    criteria_issue_sections = [
+        item
+        for item in readiness.get("criteria_issue_sections") or []
+        if isinstance(item, dict)
+    ]
+    if criteria_issue_sections:
+        lines.extend(["", "## Unmet Acceptance Criteria", ""])
+        for section in criteria_issue_sections:
+            lines.append(
+                "- "
+                f"{_section_label(section)}: "
+                f"{_as_int(section.get('missing_count'))} неизпълнени, "
+                f"{_as_int(section.get('violated_count'))} нарушени, "
+                f"{_as_int(section.get('partial_count'))} частични, "
+                f"{_as_int(section.get('unchecked_count'))} непроверени "
+                f"(от {_as_int(section.get('checked_count'))} критерия)"
+            )
+            for issue in section.get("issues") or []:
+                if not isinstance(issue, dict):
+                    continue
+                verdict = str(issue.get("verdict") or "")
+                lines.append(
+                    f"  - `{issue.get('criterion_id', 'n/a')}` "
+                    f"[{_verdict_label(verdict)} (`{verdict}`)]: "
+                    f"{_truncate(issue.get('criterion_text'))}"
+                )
+                note = _truncate(issue.get("note") or "")
+                if note:
+                    lines.append(f"    - бележка: {note}")
+
+    consistency = readiness.get("consistency")
+    if isinstance(consistency, dict):
+        lines.extend(["", "## Consistency Check", ""])
+        if consistency.get("stale"):
+            lines.append(
+                "- Докладът за съгласуваност е остарял: има регенерирани "
+                "секции след последната проверка. Пуснете проверката отново."
+            )
+        lines.append(
+            "- Критични противоречия: "
+            f"{_as_int(consistency.get('critical_count'))}; предупреждения: "
+            f"{_as_int(consistency.get('warning_count'))}"
+        )
+        for conflict in (consistency.get("conflicts") or [])[:20]:
+            if not isinstance(conflict, dict):
+                continue
+            lines.append(
+                f"- [{conflict.get('severity', '')}/{conflict.get('kind', '')}] "
+                f"{_truncate(conflict.get('topic'))}: "
+                f"{_truncate(conflict.get('explanation'))}"
+            )
+            for statement in (conflict.get("statements") or [])[:4]:
+                if not isinstance(statement, dict):
+                    continue
+                title = _truncate(statement.get("section_title") or "", limit=70)
+                label = title or f"`{statement.get('section_uid', 'n/a')}`"
+                lines.append(
+                    f"  - {label}: „{_truncate(statement.get('quote'))}“"
+                )
+
+    auto_assurance_sections = [
+        item
+        for item in readiness.get("auto_assurance_sections") or []
+        if isinstance(item, dict)
+    ]
+    if auto_assurance_sections:
+        lines.extend(["", "## Auto-Appended Requirement Assurances", ""])
+        lines.append(
+            "Тези секции съдържат автоматично добавени шаблонни уверения за "
+            "непокрити изисквания. Прегледайте ги и ги заменете с конкретен "
+            "текст преди финалния export."
+        )
+        lines.append("")
+        for section in auto_assurance_sections:
+            assurance_ids = [
+                str(item)
+                for item in section.get("assurance_requirement_ids") or []
+                if item is not None
+            ]
+            lines.append(
+                "- "
+                f"{_section_label(section)}: "
+                f"{_as_int(section.get('assurance_count'))} auto-appended "
+                f"({_list(assurance_ids)})"
+            )
 
     actions = _blocker_actions(readiness)
     lines.extend(["", "## Recommended Next Actions", ""])

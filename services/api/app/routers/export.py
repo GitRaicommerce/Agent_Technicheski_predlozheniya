@@ -4,9 +4,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.core.database import get_db
-from app.core.models import Project, Generation, TpOutline
+from app.core.models import (
+    CriterionCheck,
+    GenerationJob,
+    Project,
+    Generation,
+    TpOutline,
+)
 from app.agents.proposal_quality import assess_generation_depth
 from app.export.readiness_report import render_export_readiness_report
+
+CRITERION_VERDICTS = {"covered", "partial", "missing", "violated", "unchecked"}
+CRITERION_BLOCKING_VERDICTS = {"missing", "violated"}
 
 router = APIRouter()
 
@@ -235,6 +244,153 @@ def _missing_requirement_coverage(generation: Generation) -> dict | None:
         "missing_requirement_ids": [str(item) for item in missing_ids],
         "missing_count": len(missing_ids),
         "missing_items": missing_items,
+    }
+
+
+async def _criteria_issue_sections(
+    project_id: str,
+    selected_generations: list[Generation],
+    db: AsyncSession,
+) -> list[dict]:
+    """Sections whose LLM criterion checks report unmet acceptance criteria.
+
+    Only checks bound to a currently selected generation count: a regenerated
+    section invalidates its old verdicts. Verdicts are validated against the
+    known set so malformed rows never produce phantom blockers.
+    """
+    if not selected_generations:
+        return []
+    selected_ids = {
+        str(generation.id) for generation in selected_generations
+    }
+    checks_result = await db.execute(
+        select(CriterionCheck).where(CriterionCheck.project_id == project_id)
+    )
+    sections: dict[str, dict] = {}
+    for check in checks_result.scalars().all():
+        verdict = getattr(check, "verdict", None)
+        if not isinstance(verdict, str) or verdict not in CRITERION_VERDICTS:
+            continue
+        if str(getattr(check, "generation_id", "")) not in selected_ids:
+            continue
+        section_uid = str(getattr(check, "section_uid", "") or "")
+        if not section_uid:
+            continue
+        section = sections.setdefault(
+            section_uid,
+            {
+                "section_uid": section_uid,
+                "generation_id": str(check.generation_id),
+                "checked_count": 0,
+                "covered_count": 0,
+                "partial_count": 0,
+                "missing_count": 0,
+                "violated_count": 0,
+                "unchecked_count": 0,
+                "issues": [],
+            },
+        )
+        section["checked_count"] += 1
+        section[f"{verdict}_count"] += 1
+        if verdict != "covered":
+            section["issues"].append(
+                {
+                    "criterion_id": str(check.criterion_id),
+                    "criterion_text": check.criterion_text,
+                    "criterion_kind": check.criterion_kind,
+                    "requirement_id": check.requirement_id,
+                    "verdict": verdict,
+                    "evidence": check.evidence,
+                    "note": check.note,
+                }
+            )
+    return [
+        section
+        for section in sections.values()
+        if any(
+            section[f"{verdict}_count"] > 0
+            for verdict in CRITERION_BLOCKING_VERDICTS
+        )
+    ]
+
+
+async def _consistency_state(
+    project_id: str,
+    selected_generations: list[Generation],
+    db: AsyncSession,
+) -> dict | None:
+    """Latest completed consistency report, marked stale after regeneration.
+
+    A report is trustworthy only while every generation it inspected is still
+    the selected one; any regeneration since then invalidates its verdicts.
+    """
+    result = await db.execute(
+        select(GenerationJob)
+        .where(
+            GenerationJob.project_id == project_id,
+            GenerationJob.job_type == "consistency_check",
+            GenerationJob.status == "done",
+        )
+        .order_by(GenerationJob.created_at.desc())
+        .limit(1)
+    )
+    job = result.scalar_one_or_none()
+    report = (
+        job.result_json
+        if job is not None and isinstance(getattr(job, "result_json", None), dict)
+        else None
+    )
+    if not report:
+        return None
+    checked_ids = {
+        str(item) for item in report.get("checked_generation_ids") or [] if item
+    }
+    selected_ids = {str(generation.id) for generation in selected_generations}
+    stale = not checked_ids or not checked_ids.issubset(selected_ids)
+    conflicts = [
+        conflict
+        for conflict in report.get("conflicts") or []
+        if isinstance(conflict, dict)
+    ]
+    critical_count = report.get("critical_count")
+    if not isinstance(critical_count, int):
+        critical_count = sum(
+            1 for conflict in conflicts if conflict.get("severity") == "critical"
+        )
+    warning_count = report.get("warning_count")
+    if not isinstance(warning_count, int):
+        warning_count = sum(
+            1 for conflict in conflicts if conflict.get("severity") == "warning"
+        )
+    return {
+        "job_id": str(getattr(job, "id", "")),
+        "stale": stale,
+        "critical_count": critical_count,
+        "warning_count": warning_count,
+        "conflicts": conflicts,
+        "checked_section_count": report.get("checked_section_count"),
+        "completed_at": report.get("completed_at"),
+    }
+
+
+def _auto_assurance_section(generation: Generation) -> dict | None:
+    """Surface silently appended requirement-assurance text for human review.
+
+    Drafting may append deterministic "Изрично покритие" commitments when the
+    model repeatedly fails to cover a checklist item. That safety net must stay
+    visible: the bidder has to review those template sentences before export,
+    otherwise generic filler reaches the final proposal unnoticed.
+    """
+    raw_flags = getattr(generation, "flags_json", None)
+    flags = raw_flags if isinstance(raw_flags, dict) else {}
+    assurance_ids = flags.get("deterministic_requirement_assurance_ids")
+    if not isinstance(assurance_ids, list) or not assurance_ids:
+        return None
+    return {
+        "section_uid": generation.section_uid,
+        "generation_id": generation.id,
+        "assurance_requirement_ids": [str(item) for item in assurance_ids],
+        "assurance_count": len(assurance_ids),
     }
 
 
@@ -470,6 +626,21 @@ def _readiness_message(readiness: dict) -> str:
             "Pre-export check failed: some selected sections are too short for "
             "their mapped tender requirements."
         )
+    if code == "auto_assurance_text":
+        return (
+            "Pre-export check failed: some sections contain automatically "
+            "appended requirement-assurance text that needs review."
+        )
+    if code == "criteria_unmet":
+        return (
+            "Pre-export check failed: some sections do not pass "
+            "acceptance-criteria verification."
+        )
+    if code == "consistency_conflicts":
+        return (
+            "Pre-export check failed: the consistency check found critical "
+            "contradictions."
+        )
     return "Pre-export check failed: proposal is not ready for DOCX export."
 
 
@@ -510,6 +681,21 @@ async def _build_export_readiness(
         for generation in selected_generations
         if (issue := _quality_review_issue(generation, outline_requirement_counts))
     ]
+    auto_assurance_sections = [
+        issue
+        for generation in selected_generations
+        if (issue := _auto_assurance_section(generation))
+    ]
+    criteria_issue_sections = await _criteria_issue_sections(
+        project_id,
+        selected_generations,
+        db,
+    )
+    consistency_state = await _consistency_state(
+        project_id,
+        selected_generations,
+        db,
+    )
     duplicate_sections = _attach_section_titles(
         duplicate_sections,
         outline_section_metadata,
@@ -520,6 +706,14 @@ async def _build_export_readiness(
     )
     quality_sections = _attach_section_titles(
         quality_sections,
+        outline_section_metadata,
+    )
+    auto_assurance_sections = _attach_section_titles(
+        auto_assurance_sections,
+        outline_section_metadata,
+    )
+    criteria_issue_sections = _attach_section_titles(
+        criteria_issue_sections,
         outline_section_metadata,
     )
     stale_section_details = _stale_section_details(
@@ -571,6 +765,48 @@ async def _build_export_readiness(
                 "message": "Some selected sections are too short for their mapped tender requirements.",
             }
         )
+    if auto_assurance_sections:
+        blockers.append(
+            {
+                "code": "auto_assurance_text",
+                "count": len(auto_assurance_sections),
+                "message": (
+                    "Some selected sections contain automatically appended "
+                    "requirement-assurance text that must be reviewed."
+                ),
+            }
+        )
+    criteria_unmet_count = sum(
+        section["missing_count"] + section["violated_count"]
+        for section in criteria_issue_sections
+    )
+    if criteria_issue_sections:
+        blockers.append(
+            {
+                "code": "criteria_unmet",
+                "count": criteria_unmet_count,
+                "message": (
+                    "Some selected sections fail LLM acceptance-criteria "
+                    "verification (missing or violated criteria)."
+                ),
+            }
+        )
+    consistency_critical_count = (
+        consistency_state["critical_count"]
+        if consistency_state and not consistency_state["stale"]
+        else 0
+    )
+    if consistency_critical_count:
+        blockers.append(
+            {
+                "code": "consistency_conflicts",
+                "count": consistency_critical_count,
+                "message": (
+                    "The consistency check found critical contradictions "
+                    "between sections, the schedule or the project facts."
+                ),
+            }
+        )
 
     readiness = {
         "project_id": project_id,
@@ -592,6 +828,13 @@ async def _build_export_readiness(
         "missing_requirement_count": missing_requirement_count,
         "quality_sections": quality_sections,
         "quality_section_count": len(quality_sections),
+        "auto_assurance_sections": auto_assurance_sections,
+        "auto_assurance_section_count": len(auto_assurance_sections),
+        "criteria_issue_sections": criteria_issue_sections,
+        "criteria_issue_section_count": len(criteria_issue_sections),
+        "criteria_unmet_count": criteria_unmet_count,
+        "consistency": consistency_state,
+        "consistency_critical_count": consistency_critical_count,
     }
     hard_blockers = _hard_export_blockers(readiness)
     readiness["hard_blocker_count"] = len(hard_blockers)
