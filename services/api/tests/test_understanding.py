@@ -433,6 +433,111 @@ async def test_truncated_understanding_batch_splits_and_checkpoints_leaf_results
     resumed_call.assert_not_awaited()
 
 
+@pytest.mark.asyncio
+async def test_understanding_batches_run_concurrently_with_deterministic_order():
+    import asyncio
+
+    from app.agents.understanding import _run_batches_concurrently
+
+    batches = [
+        [
+            {
+                "chunk_id": f"{batch_index}-0",
+                "file_id": "file",
+                "filename": "tender.pdf",
+                "text": f"Текст {batch_index}",
+            }
+        ]
+        for batch_index in range(6)
+    ]
+    lookup = {batch[0]["chunk_id"]: batch[0] for batch in batches}
+    active = 0
+    max_active = 0
+    started_order: list[str] = []
+
+    async def llm_call(**kwargs):
+        nonlocal active, max_active
+        active += 1
+        max_active = max(max_active, active)
+        started_order.append(kwargs["user_message"])
+        await asyncio.sleep(0.01)
+        active -= 1
+        return {
+            "requirements": [],
+            "wbs_items": [],
+            "facts": {"subject": kwargs["user_message"]},
+        }
+
+    with patch("app.agents.understanding.llm_gateway.call", new=llm_call):
+        results = await _run_batches_concurrently(
+            batches=batches,
+            key_prefix="map",
+            prompt_builder_for_index=lambda index: (
+                lambda current, i=index: f"batch-{i}"
+            ),
+            system_prompt="system",
+            agent="understanding_map",
+            trace_id="trace",
+            chunk_lookup=lookup,
+            origin="map",
+            cache={},
+            on_start=AsyncMock(),
+            on_split=AsyncMock(),
+            on_complete=AsyncMock(),
+            max_concurrency=3,
+        )
+
+    # Реален паралелизъм, ограничен от лимита.
+    assert max_active == 3
+    # Резултатите остават в реда на партидите независимо от паралелизма.
+    assert [item["facts"]["subject"] for item in results] == [
+        f"batch-{index}" for index in range(1, 7)
+    ]
+
+
+@pytest.mark.asyncio
+async def test_understanding_concurrent_runner_propagates_batch_errors():
+    from app.agents.understanding import _run_batches_concurrently
+
+    batches = [
+        [
+            {
+                "chunk_id": f"{batch_index}-0",
+                "file_id": "file",
+                "filename": "tender.pdf",
+                "text": f"Текст {batch_index}",
+            }
+        ]
+        for batch_index in range(3)
+    ]
+    lookup = {batch[0]["chunk_id"]: batch[0] for batch in batches}
+
+    async def llm_call(**kwargs):
+        if kwargs["user_message"] == "batch-2":
+            raise ValueError("provider failure")
+        return {"requirements": [], "wbs_items": [], "facts": {}}
+
+    with patch("app.agents.understanding.llm_gateway.call", new=llm_call):
+        with pytest.raises(ValueError, match="provider failure"):
+            await _run_batches_concurrently(
+                batches=batches,
+                key_prefix="map",
+                prompt_builder_for_index=lambda index: (
+                    lambda current, i=index: f"batch-{i}"
+                ),
+                system_prompt="system",
+                agent="understanding_map",
+                trace_id="trace",
+                chunk_lookup=lookup,
+                origin="map",
+                cache={},
+                on_start=AsyncMock(),
+                on_split=AsyncMock(),
+                on_complete=AsyncMock(),
+                max_concurrency=2,
+            )
+
+
 def test_understanding_job_response_does_not_send_checkpoint_payload_to_ui():
     now = datetime.now(timezone.utc)
     job = SimpleNamespace(

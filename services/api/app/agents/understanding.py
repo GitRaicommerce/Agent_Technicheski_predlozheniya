@@ -676,6 +676,71 @@ async def _run_batch_with_adaptive_split(
     return [sanitized]
 
 
+async def _run_batches_concurrently(
+    *,
+    batches: list[list[dict[str, Any]]],
+    key_prefix: str,
+    prompt_builder_for_index: Callable[
+        [int], Callable[[list[dict[str, Any]]], str]
+    ],
+    system_prompt: str,
+    agent: str,
+    trace_id: str,
+    chunk_lookup: dict[str, dict[str, Any]],
+    origin: str,
+    cache: dict[str, dict[str, Any]],
+    on_start: Callable[[str], Awaitable[None]],
+    on_split: Callable[[], Awaitable[None]],
+    on_complete: Callable[[str], Awaitable[None]],
+    max_concurrency: int,
+) -> list[dict[str, Any]]:
+    """Run independent understanding batches concurrently.
+
+    Batches are independent LLM extractions, so up to ``max_concurrency`` run
+    at the same time. Results are returned in the original batch order, so the
+    downstream reduce/dedupe behavior is identical to the sequential run, and
+    the shared checkpoint cache keeps working because each batch writes only
+    its own keys.
+    """
+    semaphore = asyncio.Semaphore(max(1, int(max_concurrency or 1)))
+    results_by_index: dict[int, list[dict[str, Any]]] = {}
+
+    async def run_one(index: int, batch: list[dict[str, Any]]) -> None:
+        async with semaphore:
+            results_by_index[index] = await _run_batch_with_adaptive_split(
+                batch=batch,
+                batch_key=f"{key_prefix}:{index}",
+                prompt_builder=prompt_builder_for_index(index),
+                system_prompt=system_prompt,
+                agent=agent,
+                trace_id=trace_id,
+                chunk_lookup=chunk_lookup,
+                origin=origin,
+                cache=cache,
+                on_start=on_start,
+                on_split=on_split,
+                on_complete=on_complete,
+            )
+
+    tasks = [
+        asyncio.create_task(run_one(index, batch))
+        for index, batch in enumerate(batches, start=1)
+    ]
+    try:
+        outcomes = await asyncio.gather(*tasks, return_exceptions=True)
+    finally:
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+    for outcome in outcomes:
+        if isinstance(outcome, BaseException):
+            raise outcome
+    ordered: list[dict[str, Any]] = []
+    for index in range(1, len(batches) + 1):
+        ordered.extend(results_by_index.get(index) or [])
+    return ordered
+
+
 def _merge_values(current: Any, incoming: Any) -> Any:
     if current in (None, "", [], {}):
         return incoming
@@ -889,67 +954,73 @@ async def run_understanding(
     }
     map_cache = checkpoint["map_results"]
     proposal_cache = checkpoint["proposal_results"]
-    map_results: list[dict[str, Any]] = []
     completed_steps = 0
     total_steps = len(batches) * 2 + 1
+    # The DB session behind progress/checkpoint callbacks is not safe for
+    # concurrent use, so every callback runs under one shared lock while the
+    # LLM calls themselves stay parallel.
+    callback_lock = asyncio.Lock()
 
     async def on_start(batch_key: str) -> None:
-        if progress:
-            await progress(completed_steps, total_steps, f"Обработка {batch_key}")
+        async with callback_lock:
+            if progress:
+                await progress(
+                    completed_steps, total_steps, f"Обработка {batch_key}"
+                )
 
     async def on_split() -> None:
         nonlocal total_steps
-        total_steps += 1
+        async with callback_lock:
+            total_steps += 1
 
     async def on_complete(title: str) -> None:
         nonlocal completed_steps
-        completed_steps += 1
-        if save_checkpoint:
-            await save_checkpoint(checkpoint)
-        if progress:
-            await progress(completed_steps, total_steps, title)
+        async with callback_lock:
+            completed_steps += 1
+            if save_checkpoint:
+                await save_checkpoint(checkpoint)
+            if progress:
+                await progress(completed_steps, total_steps, title)
 
-    for index, batch in enumerate(batches, start=1):
-        map_results.extend(
-            await _run_batch_with_adaptive_split(
-                batch=batch,
-                batch_key=f"map:{index}",
-                prompt_builder=lambda current, i=index: _map_user_message(
-                    current, i, len(batches)
-                ),
-                system_prompt=MAP_SYSTEM_PROMPT,
-                agent="understanding_map",
-                trace_id=trace_id,
-                chunk_lookup=chunk_lookup,
-                origin="map",
-                cache=map_cache,
-                on_start=on_start,
-                on_split=on_split,
-                on_complete=on_complete,
-            )
-        )
+    max_concurrency = settings.understanding_max_concurrency
+    map_results = await _run_batches_concurrently(
+        batches=batches,
+        key_prefix="map",
+        prompt_builder_for_index=lambda index: (
+            lambda current, i=index: _map_user_message(current, i, len(batches))
+        ),
+        system_prompt=MAP_SYSTEM_PROMPT,
+        agent="understanding_map",
+        trace_id=trace_id,
+        chunk_lookup=chunk_lookup,
+        origin="map",
+        cache=map_cache,
+        on_start=on_start,
+        on_split=on_split,
+        on_complete=on_complete,
+        max_concurrency=max_concurrency,
+    )
 
     initial = await reduce_understanding_maps(map_results, [])
-    proposal_results: list[dict[str, Any]] = []
-    for index, batch in enumerate(batches, start=1):
-        proposal_results.extend(
-            await _run_batch_with_adaptive_split(
-                batch=batch,
-                batch_key=f"proposal:{index}",
-                prompt_builder=lambda current, i=index: _audit_user_message(
-                    current, initial["requirements"], i, len(batches)
-                ),
-                system_prompt=PROPOSAL_AUDIT_SYSTEM_PROMPT,
-                agent="understanding_proposal_audit",
-                trace_id=trace_id,
-                chunk_lookup=chunk_lookup,
-                origin="proposal_audit",
-                cache=proposal_cache,
-                on_start=on_start,
-                on_split=on_split,
-                on_complete=on_complete,
+    proposal_results = await _run_batches_concurrently(
+        batches=batches,
+        key_prefix="proposal",
+        prompt_builder_for_index=lambda index: (
+            lambda current, i=index: _audit_user_message(
+                current, initial["requirements"], i, len(batches)
             )
-        )
+        ),
+        system_prompt=PROPOSAL_AUDIT_SYSTEM_PROMPT,
+        agent="understanding_proposal_audit",
+        trace_id=trace_id,
+        chunk_lookup=chunk_lookup,
+        origin="proposal_audit",
+        cache=proposal_cache,
+        on_start=on_start,
+        on_split=on_split,
+        on_complete=on_complete,
+        max_concurrency=max_concurrency,
+    )
 
     schedule_result = await db.execute(
         select(ScheduleNormalized)

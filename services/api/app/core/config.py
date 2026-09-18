@@ -33,6 +33,11 @@ class Settings(BaseSettings):
     # Generation architecture. v2 remains opt-in until the rework is complete.
     generation_pipeline: str = "v1"
 
+    # Understanding pass: how many document batches are analyzed concurrently.
+    # Higher values speed up the analysis linearly until the provider's rate
+    # limits are reached; 1 restores the fully sequential legacy behavior.
+    understanding_max_concurrency: int = 4
+
     # Embeddings
     embedding_model: str = "text-embedding-3-small"
     embedding_dims: int = 1536

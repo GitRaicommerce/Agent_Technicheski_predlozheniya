@@ -277,6 +277,8 @@
 - Implemented Phase 5.1 (criterion-level LLM verification): new `criterion_checks` table and Alembic migration, `app/agents/criteria_verifier.py` verifying every acceptance criterion of every selected generation against its source quote (covered/partial/missing/violated, with prohibition awareness and template-assurance downgrading), background job on the ingest queue, `/api/v1/criteria` API, a sidebar panel, export readiness `criteria_unmet` blocker keyed to currently selected generations only, and unit tests for verdict sanitization.
 - Implemented Phase 5.2 (cross-section consistency): `app/agents/consistency.py` extracts verbatim-anchored claims (deadlines, durations, team, stages, project parts, sequence) per selected section and has an LLM analysis compare them across sections, against the confirmed fact sheet and against the uploaded schedule; conflicts persist in a `consistency_check` job report with severities, `/api/v1/consistency` API plus Markdown report download, sidebar panel, export readiness `consistency_conflicts` blocker that automatically goes stale when any checked generation is regenerated, and unit tests for claim/conflict sanitization and report rendering.
 
+- Parallelized the Understanding pass: independent map and proposal-audit batches now run concurrently (configurable via `UNDERSTANDING_MAX_CONCURRENCY`, default 4) with deterministic result order, lock-protected progress/checkpoint persistence, and regression tests for concurrency limits and error propagation — roughly a 4x wall-clock speedup on real projects.
+
 ## Active Goals
 
 1. Turn the application into a reference-quality technical proposal generator that produces detailed, tender-specific Bulgarian proposals rather than short generic sections.
