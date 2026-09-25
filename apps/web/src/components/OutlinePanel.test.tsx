@@ -11,6 +11,7 @@ vi.mock("@/lib/api", async () => {
     ...actual,
     api: {
       ...actual.api,
+      capabilities: { get: vi.fn() },
       agents: { ...actual.api.agents, getOutline: vi.fn() },
       contentPlan: {
         get: vi.fn(),
@@ -70,6 +71,32 @@ describe("OutlinePanel Phase 2", () => {
     vi.clearAllMocks();
     vi.mocked(api.agents.getOutline).mockResolvedValue(null);
     vi.mocked(api.contentPlan.get).mockResolvedValue(null);
+    vi.mocked(api.capabilities.get).mockResolvedValue({
+      generation_pipeline: "v2",
+      features: {
+        understanding: true,
+        content_plan: true,
+        criteria_verification: true,
+        consistency_check: true,
+      },
+    });
+  });
+
+  it("explains the disabled v2 plan instead of calling it under v1", async () => {
+    vi.mocked(api.capabilities.get).mockResolvedValue({
+      generation_pipeline: "v1",
+      features: {
+        understanding: false,
+        content_plan: false,
+        criteria_verification: false,
+        consistency_check: false,
+      },
+    });
+    render(<OutlinePanel projectId="project-1" />);
+
+    expect(await screen.findByTestId("content-plan-v2-disabled")).toBeInTheDocument();
+    expect(api.contentPlan.get).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("content-plan-build-button")).not.toBeInTheDocument();
   });
 
   it("offers a deterministic build when no content plan exists", async () => {

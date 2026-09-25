@@ -12,6 +12,7 @@ vi.mock("@/lib/api", async () => {
     ...actual,
     api: {
       ...actual.api,
+      capabilities: { get: vi.fn() },
       agents: {
         ...actual.api.agents,
         listGenerations: vi.fn(),
@@ -66,6 +67,86 @@ describe("GenerationsPanel", () => {
     vi.clearAllMocks();
     latestGenerationJobMock.mockResolvedValue(null);
     getContentPlanMock.mockResolvedValue(null);
+    vi.mocked(api.capabilities.get).mockResolvedValue({
+      generation_pipeline: "v2",
+      features: {
+        understanding: true,
+        content_plan: true,
+        criteria_verification: true,
+        consistency_check: true,
+      },
+    });
+  });
+
+  it("keeps existing generations visible when the v2 plan is disabled", async () => {
+    vi.mocked(api.capabilities.get).mockResolvedValue({
+      generation_pipeline: "v1",
+      features: {
+        understanding: false,
+        content_plan: false,
+        criteria_verification: false,
+        consistency_check: false,
+      },
+    });
+    listGenerationsMock.mockResolvedValue([
+      {
+        section_uid: "legacy-section",
+        section_title: "Стар раздел",
+        variants: [
+          {
+            id: "gen-legacy",
+            section_uid: "legacy-section",
+            generation_kind: "section",
+            variant: 1,
+            revision_number: 1,
+            change_summary: "Първоначална редакция на раздела.",
+            text: "Съществуващ текст от v1.",
+            evidence_status: "ok",
+            selected: true,
+            created_at: "2026-09-01T10:00:00.000Z",
+          },
+        ],
+      },
+    ]);
+
+    render(<GenerationsPanel projectId="project-1" />);
+
+    const sectionButton = await screen.findByRole("button", { name: /Стар раздел/i });
+    await userEvent.click(sectionButton);
+    expect(await screen.findByText("Съществуващ текст от v1.")).toBeInTheDocument();
+    expect(getContentPlanMock).not.toHaveBeenCalled();
+    expect(screen.queryByText(/API error 404/)).not.toBeInTheDocument();
+  });
+
+  it("keeps generations visible and reports a real content-plan error", async () => {
+    getContentPlanMock.mockRejectedValue(new Error("сървърна грешка"));
+    listGenerationsMock.mockResolvedValue([
+      {
+        section_uid: "section-1",
+        section_title: "Раздел с текст",
+        variants: [
+          {
+            id: "gen-1",
+            section_uid: "section-1",
+            generation_kind: "section",
+            variant: 1,
+            revision_number: 1,
+            change_summary: "Първоначална редакция на раздела.",
+            text: "Текст.",
+            evidence_status: "ok",
+            selected: true,
+            created_at: "2026-09-01T10:00:00.000Z",
+          },
+        ],
+      },
+    ]);
+
+    render(<GenerationsPanel projectId="project-1" />);
+
+    expect(await screen.findByText("Раздел с текст")).toBeInTheDocument();
+    expect(
+      await screen.findByText(/Подробният план не можа да бъде зареден: сървърна грешка/),
+    ).toBeInTheDocument();
   });
 
   it("renders empty state when there are no generations", async () => {

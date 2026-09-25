@@ -11,6 +11,17 @@ vi.mock("@/lib/api", async () => {
     ...actual,
     api: {
       ...actual.api,
+      capabilities: {
+        get: vi.fn().mockResolvedValue({
+          generation_pipeline: "v2",
+          features: {
+            understanding: true,
+            content_plan: true,
+            criteria_verification: true,
+            consistency_check: true,
+          },
+        }),
+      },
       contentPlan: {
         ...actual.api.contentPlan,
         get: vi.fn(),
@@ -163,6 +174,23 @@ describe("UnderstandingPanel", () => {
     createWbsItemMock.mockResolvedValue(workspace.wbs_items[0]);
     confirmWbsMock.mockResolvedValue({ status: "confirmed", updated: 1 });
     saveFactSheetMock.mockResolvedValue(workspace.fact_sheet!);
+  });
+
+  it("explains that understanding is disabled under v1 without calling it", async () => {
+    vi.mocked(api.capabilities.get).mockResolvedValueOnce({
+      generation_pipeline: "v1",
+      features: {
+        understanding: false,
+        content_plan: false,
+        criteria_verification: false,
+        consistency_check: false,
+      },
+    });
+    render(<UnderstandingPanel projectId="project-1" />);
+
+    expect(await screen.findByTestId("understanding-v2-disabled")).toBeInTheDocument();
+    expect(getMock).not.toHaveBeenCalled();
+    expect(getContentPlanMock).not.toHaveBeenCalled();
   });
 
   it("shows the three Bulgarian review panels and their source links", async () => {

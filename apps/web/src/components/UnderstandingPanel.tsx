@@ -58,9 +58,22 @@ export default function UnderstandingPanel({ projectId }: { projectId: string })
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [factsText, setFactsText] = useState("{}");
+  const [v2Enabled, setV2Enabled] = useState(true);
 
   const load = useCallback(async () => {
     try {
+      const available = await api.capabilities
+        .get()
+        .then((capabilities) => capabilities.features.understanding)
+        // Older backend without the endpoint: try the feature itself.
+        .catch(() => true);
+      setV2Enabled(available);
+      if (!available) {
+        setWorkspace(null);
+        setContentPlan(null);
+        setError(null);
+        return;
+      }
       const [result, plan] = await Promise.all([
         api.understanding.get(projectId),
         api.contentPlan.get(projectId),
@@ -109,6 +122,19 @@ export default function UnderstandingPanel({ projectId }: { projectId: string })
   }
 
   if (loading) return <p className="text-xs text-gray-500">Зарежда анализ...</p>;
+
+  if (!v2Enabled) {
+    return (
+      <p
+        data-testid="understanding-v2-disabled"
+        className="rounded bg-slate-50 p-2 text-xs leading-relaxed text-slate-700"
+      >
+        „Разбиране на изискванията“ е функция на v2 и е изключена на този
+        сървър (GENERATION_PIPELINE=v1). Наличните генерирани текстове остават
+        достъпни в панела „Генерации“.
+      </p>
+    );
+  }
 
   const job = workspace?.latest_job;
   const jobActive = job && ["queued", "processing"].includes(job.status);

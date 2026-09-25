@@ -63,8 +63,26 @@ jobs:
           EMBEDDING_DIMS: "1536"
         run: python -m pytest tests/ -v --tb=short
 
+  script-tests:
+    name: Calibration script tests (Python 3.11)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install pytest
+        run: pip install pytest
+
+      - name: Run script tests
+        run: python -m pytest scripts/tests -v --tb=short
+
   lint-frontend:
-    name: TypeScript + ESLint (Next.js)
+    name: TypeScript + ESLint + unit tests (Next.js)
     runs-on: ubuntu-latest
 
     defaults:
@@ -89,3 +107,6 @@ jobs:
 
       - name: ESLint
         run: npm run lint
+
+      - name: Unit tests (Vitest)
+        run: npm run test:run

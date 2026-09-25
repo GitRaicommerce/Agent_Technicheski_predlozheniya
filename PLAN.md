@@ -291,15 +291,15 @@
 - The plan auditor forms an independent source inventory before comparing the plan. Current, complete audit acceptance is required for the exact inputs used in new drafting; author and auditor are distinct roles/contexts.
 - Preserve immutable job inputs, stable requirement provenance, human edits, required headings, existing outputs and permitted draft export. Keep the calendar-date restriction.
 - Source documents: `docs/REPOSITORY_ANALYSIS_2026-09-25_BG.md` holds audit evidence and cards; `docs/IMPLEMENTATION_PLAN_GPT6_SOL.md` holds execution contracts, dependencies and estimates. This file is the only current execution-status ledger.
-- Current authorization covers the documentation PR. Implementation, merging, production migration/deployment and paid model execution remain separate actions requiring the applicable assignment/budget. This program uses focused PRs rather than direct main changes.
+- Implementation was started on 2026-09-25 by the user. Authorization as given: the user chose direct commits to `main` (instead of focused PRs) and uninterrupted execution through milestone M1 (WP-00..WP-05). The lead is Claude working on the user's local repository; the lead cannot push (no access to the user's Git credentials), so the user or Codex pushes. Paid model runs, production migration and deployment remain NOT APPROVED.
 
 ## Implementation Execution Status
 
-All work packages are unstarted. The lead must fill owner, branch/head, evidence, gaps and exact next action when implementation is explicitly started; model-role design is not itself execution authority.
+Lead: Claude (Cowork), branch `main`, local commits pushed by the user. Test environment: isolated Linux sandbox without Docker; backend tests run against mocked DB/Redis/LLM (as in CI), frontend lint/tsc/Vitest and script tests run natively. No real full-stack acceptance is claimed.
 
 | Package | State | Assigned owner / branch / head | Acceptance evidence / next action |
 |---|---|---|---|
-| WP-00 | PLANNED | Unassigned | Refresh baseline and establish supported test environment |
+| WP-00 | DONE (T-01 technical) | Claude / main / base `2ae7fd6` | Baseline confirmed = audit head `7652435` + planning docs. K-01: content-plan tests opt into v2 via fixture, separate v1-disabled test; new `GET /api/v1/capabilities`; Generations/Outline/Understanding panels load v2 features only when available and a content-plan failure no longer hides texts. CI now runs Vitest and `scripts/tests`. Added synthetic `tests/fixtures/scope_fixture.json` (parent/child, prohibition, evaluation, short line, last-page, qualification exclusion, late violation, unsupported commitment). Evidence: backend 321 passed (default v1 env), frontend lint+tsc+Vitest 78/78, scripts 95/95. Gap: Docker stack unavailable in sandbox; no live-stack check. |
 | WP-01 | PLANNED | Unassigned | Model-role and API compatibility policy after WP-00 |
 | WP-02 | PLANNED | Unassigned | Source/schedule/queue integrity after WP-00 |
 | WP-03 | PLANNED | Unassigned | Requirement conservation and Astra plan author |

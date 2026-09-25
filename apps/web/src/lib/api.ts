@@ -101,6 +101,16 @@ async function apiNoContent(path: string, options?: RequestInit): Promise<void> 
   await ensureOk(response);
 }
 
+export interface Capabilities {
+  generation_pipeline: "v1" | "v2" | string;
+  features: {
+    understanding: boolean;
+    content_plan: boolean;
+    criteria_verification: boolean;
+    consistency_check: boolean;
+  };
+}
+
 export interface Project {
   id: string;
   name: string;
@@ -690,6 +700,9 @@ export interface ExportQualitySection {
 }
 
 export const api = {
+  capabilities: {
+    get: () => apiFetch<Capabilities>("/api/v1/capabilities"),
+  },
   projects: {
     list: (limit = 20, offset = 0) =>
       apiFetch<Project[]>(`/api/v1/projects?limit=${limit}&offset=${offset}`),

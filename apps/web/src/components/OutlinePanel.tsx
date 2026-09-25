@@ -20,13 +20,20 @@ export default function OutlinePanel({ projectId, refreshKey = 0 }: Props) {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [v2Enabled, setV2Enabled] = useState(true);
 
   const load = async () => {
     setLoading(true);
     setError(null);
     try {
+      const available = await api.capabilities
+        .get()
+        .then((capabilities) => capabilities.features.content_plan)
+        // Older backend without the endpoint: try the feature itself.
+        .catch(() => true);
+      setV2Enabled(available);
       const [contentPlan, outline] = await Promise.all([
-        api.contentPlan.get(projectId),
+        available ? api.contentPlan.get(projectId) : Promise.resolve(null),
         api.agents.getOutline(projectId),
       ]);
       setPlan(contentPlan);
@@ -53,6 +60,21 @@ export default function OutlinePanel({ projectId, refreshKey = 0 }: Props) {
   };
 
   if (loading) return <p className="py-2 text-xs text-gray-400 animate-pulse">Зарежда се планът на ТП...</p>;
+
+  if (!v2Enabled) {
+    const sectionCount = legacyOutline?.outline_json.sections?.length ?? 0;
+    return (
+      <div className="space-y-2" data-testid="content-plan-v2-disabled">
+        <p className="rounded bg-slate-50 p-2 text-xs leading-relaxed text-slate-700">
+          Подробният план (v2) е изключен на този сървър (GENERATION_PIPELINE=v1).
+          {legacyOutline
+            ? ` Използва се наличната структура v${legacyOutline.version} с ${sectionCount} раздела; генерираните текстове остават достъпни.`
+            : " Структурата се създава през чата."}
+        </p>
+        {error && <p className="text-xs text-red-600">{error}</p>}
+      </div>
+    );
+  }
 
   if (!plan) {
     const legacy = legacyOutline && legacyOutline.outline_json.source !== "understanding_content_plan";

@@ -49,6 +49,8 @@ export default function GenerationsPanel({
     useState(false);
   const [generationJob, setGenerationJob] = useState<GenerationJob | null>(null);
   const [contentPlan, setContentPlan] = useState<ContentPlan | null>(null);
+  // A failed plan request is shown next to the texts; it never hides them.
+  const [planError, setPlanError] = useState<string | null>(null);
   const [approvingAndStarting, setApprovingAndStarting] = useState(false);
   const hasLoadedRef = useRef(false);
 
@@ -57,12 +59,28 @@ export default function GenerationsPanel({
       setLoading(true);
     }
     setError(null);
+    // The content plan is a v2-only feature. Load it only when the backend
+    // reports it as available, and never let its failure hide existing texts:
+    // generations and the job are loaded independently of the plan.
+    const contentPlanRequest = api.capabilities
+      .get()
+      .then((capabilities) => capabilities.features.content_plan)
+      // An older backend without the capabilities endpoint: try the feature
+      // and let a real error surface on its own.
+      .catch(() => true)
+      .then((available) =>
+        available ? api.contentPlan.get(projectId) : null,
+      );
     return Promise.all([
       api.agents.listGenerations(projectId),
       api.agents.latestGenerationJob(projectId),
-      api.contentPlan.get(projectId),
+      contentPlanRequest.then(
+        (plan) => ({ plan, error: null as unknown }),
+        (planError: unknown) => ({ plan: null, error: planError }),
+      ),
     ])
-      .then(([nextSections, nextJob, nextContentPlan]) => {
+      .then(([nextSections, nextJob, planResult]) => {
+        const nextContentPlan = planResult.plan;
         const jobOutlineId = nextJob?.result_json?.outline_id;
         const relevantJob =
           nextContentPlan?.status_locked &&
@@ -72,6 +90,13 @@ export default function GenerationsPanel({
         setSections(nextSections);
         setGenerationJob(relevantJob);
         setContentPlan(nextContentPlan);
+        setPlanError(
+          planResult.error
+            ? planResult.error instanceof Error
+              ? `Подробният план не можа да бъде зареден: ${planResult.error.message}`
+              : "Подробният план не можа да бъде зареден."
+            : null,
+        );
       })
       .catch((e: unknown) =>
         setError(
@@ -405,6 +430,14 @@ export default function GenerationsPanel({
 
   return (
     <div className="space-y-1">
+      {planError && (
+        <p
+          data-testid="generation-plan-load-error"
+          className="rounded border border-red-300 bg-red-50 px-2 py-1 text-xs text-red-700"
+        >
+          {planError}
+        </p>
+      )}
       {generationJob && (
         <GenerationJobProgress
           job={generationJob}

@@ -66,6 +66,28 @@ app.include_router(
     prefix="/api/v1/consistency",
     tags=["consistency"],
 )
+
+
+@app.get("/api/v1/capabilities", tags=["capabilities"])
+async def capabilities():
+    """Expose the active pipeline so the UI loads only available features.
+
+    v2-only endpoints answer 404 when the v1 pipeline is active. Without this
+    explicit signal the UI cannot tell "feature disabled" from a real error,
+    and a disabled-feature 404 could hide existing generated text.
+    """
+    v2_enabled = settings.generation_pipeline == "v2"
+    return {
+        "generation_pipeline": settings.generation_pipeline,
+        "features": {
+            "understanding": v2_enabled,
+            "content_plan": v2_enabled,
+            "criteria_verification": v2_enabled,
+            "consistency_check": v2_enabled,
+        },
+    }
+
+
 @app.get("/health")
 async def health():
     checks: dict = {"status": "ok", "db": "ok", "redis": "ok"}

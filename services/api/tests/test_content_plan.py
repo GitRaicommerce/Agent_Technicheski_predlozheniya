@@ -17,6 +17,12 @@ from app.agents.content_plan import (
 )
 
 
+@pytest.fixture
+def v2_pipeline(monkeypatch):
+    """Content-plan endpoints exist only in v2; tests of their behavior opt in."""
+    monkeypatch.setattr("app.core.config.settings.generation_pipeline", "v2")
+
+
 def requirement(path, *, scope="proposal_content", **values):
     return SimpleNamespace(
         proposal_path_json=path,
@@ -178,7 +184,35 @@ def test_parent_section_disambiguates_repeated_subpoint_titles():
 
 
 @pytest.mark.asyncio
-async def test_content_plan_get_returns_null_without_phase_2_outline(client, mock_db):
+async def test_content_plan_api_reports_v2_disabled_under_v1(client, mock_db, monkeypatch):
+    monkeypatch.setattr("app.core.config.settings.generation_pipeline", "v1")
+    project_id = "11111111-1111-1111-1111-111111111111"
+
+    response = await client.get(f"/api/v1/content-plan/{project_id}")
+
+    assert response.status_code == 404
+    assert "GENERATION_PIPELINE=v2" in response.json()["detail"]
+    mock_db.execute.assert_not_called()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("pipeline,enabled", [("v1", False), ("v2", True)])
+async def test_capabilities_expose_active_pipeline(client, monkeypatch, pipeline, enabled):
+    monkeypatch.setattr("app.core.config.settings.generation_pipeline", pipeline)
+
+    response = await client.get("/api/v1/capabilities")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["generation_pipeline"] == pipeline
+    assert payload["features"]["content_plan"] is enabled
+    assert payload["features"]["understanding"] is enabled
+
+
+@pytest.mark.asyncio
+async def test_content_plan_get_returns_null_without_phase_2_outline(
+    client, mock_db, v2_pipeline
+):
     project_id = "11111111-1111-1111-1111-111111111111"
     mock_db.get.return_value = SimpleNamespace(id=project_id)
     result = SimpleNamespace()
@@ -193,7 +227,9 @@ async def test_content_plan_get_returns_null_without_phase_2_outline(client, moc
 
 
 @pytest.mark.asyncio
-async def test_content_plan_approval_does_not_require_wbs_or_fact_sheet(client, mock_db):
+async def test_content_plan_approval_does_not_require_wbs_or_fact_sheet(
+    client, mock_db, v2_pipeline
+):
     project_id = "11111111-1111-1111-1111-111111111111"
     outline_id = "22222222-2222-2222-2222-222222222222"
     outline = SimpleNamespace(
@@ -238,7 +274,7 @@ async def test_content_plan_approval_does_not_require_wbs_or_fact_sheet(client, 
 
 
 @pytest.mark.asyncio
-async def test_mandatory_heading_title_cannot_be_changed(client, mock_db):
+async def test_mandatory_heading_title_cannot_be_changed(client, mock_db, v2_pipeline):
     project_id = "11111111-1111-1111-1111-111111111111"
     item_id = "22222222-2222-2222-2222-222222222222"
     outline_id = "33333333-3333-3333-3333-333333333333"

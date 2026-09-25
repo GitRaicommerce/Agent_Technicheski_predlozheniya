@@ -1,0 +1,119 @@
+{
+  "description": "Synthetic, non-confidential tender used by scope-preservation acceptance tests (WP-00..WP-05). Every case the audit requires is represented once; expected_requirements lists what a complete understanding/plan must account for.",
+  "files": [
+    {
+      "file_id": "fx-file-tender",
+      "filename": "fixture_tender.pdf",
+      "role": "tender_documentation",
+      "pages": [
+        {
+          "page": 1,
+          "text": "Документация за участие\nПредмет: Проектиране и изпълнение на водопровод в село Примерно.\n\nИзисквания към техническото предложение\n1. Концепция и подход\nУчастникът следва да опише подхода за изпълнение на предмета на поръчката като цяло."
+        },
+        {
+          "page": 2,
+          "text": "2. Организация на изпълнението\nУчастникът следва да посочи организацията на екипа, като за всяка проектна част е наличен съответния специалист.\n2.1. Разпределение на отговорностите\nУчастникът следва да представи разпределение на дейностите между експертите.\nЕкспертите се посочват само като квалификация и брой, без имена."
+        },
+        {
+          "page": 3,
+          "text": "Срок: 30 дни.\n\nОценяване на техническото предложение\nТехническото предложение се оценява по показател „Организация“, като се присъждат точки за конкретност на разпределението."
+        },
+        {
+          "page": 4,
+          "text": "Допълнителни условия\nВ техническото предложение участникът следва да опише мерките за проверка на сертификатите на влаганите материали."
+        }
+      ]
+    },
+    {
+      "file_id": "fx-file-qualification",
+      "filename": "fixture_selection_criteria.pdf",
+      "role": "tender_documentation",
+      "pages": [
+        {
+          "page": 1,
+          "text": "Критерии за подбор\nУчастникът трябва да притежава сертификат ISO 9001, което се декларира в ЕЕДОП."
+        }
+      ]
+    }
+  ],
+  "expected_requirements": [
+    {
+      "key": "R-parent-organization",
+      "quote": "Участникът следва да посочи организацията на екипа, като за всяка проектна част е наличен съответния специалист.",
+      "file_id": "fx-file-tender",
+      "page": 2,
+      "kind": "cross_ref",
+      "scope": "proposal_content",
+      "case": "parent obligation with a child subpoint and a cross reference"
+    },
+    {
+      "key": "R-child-distribution",
+      "quote": "Участникът следва да представи разпределение на дейностите между експертите.",
+      "file_id": "fx-file-tender",
+      "page": 2,
+      "kind": "content",
+      "scope": "proposal_content",
+      "parent_key": "R-parent-organization",
+      "case": "child obligation"
+    },
+    {
+      "key": "R-prohibition-names",
+      "quote": "Експертите се посочват само като квалификация и брой, без имена.",
+      "file_id": "fx-file-tender",
+      "page": 2,
+      "kind": "prohibition",
+      "scope": "proposal_format",
+      "case": "global prohibition that must remain a rule"
+    },
+    {
+      "key": "R-short-deadline",
+      "quote": "Срок: 30 дни.",
+      "file_id": "fx-file-tender",
+      "page": 3,
+      "kind": "obligation",
+      "scope": "execution_constraint",
+      "case": "short line that must not be dropped by the parser"
+    },
+    {
+      "key": "R-evaluation",
+      "quote": "Техническото предложение се оценява по показател „Организация“, като се присъждат точки за конкретност на разпределението.",
+      "file_id": "fx-file-tender",
+      "page": 3,
+      "kind": "evaluation",
+      "scope": "evaluation_rule",
+      "case": "evaluation rule"
+    },
+    {
+      "key": "R-last-page-certificates",
+      "quote": "В техническото предложение участникът следва да опише мерките за проверка на сертификатите на влаганите материали.",
+      "file_id": "fx-file-tender",
+      "page": 4,
+      "kind": "content",
+      "scope": "proposal_content",
+      "case": "last-page proposal requirement mentioning certificates; must stay in proposal scope"
+    }
+  ],
+  "expected_exclusions": [
+    {
+      "key": "X-qualification-iso",
+      "quote": "Участникът трябва да притежава сертификат ISO 9001, което се декларира в ЕЕДОП.",
+      "file_id": "fx-file-qualification",
+      "page": 1,
+      "scope": "qualification_admin",
+      "case": "genuine qualification requirement; excluded from proposal scope"
+    }
+  ],
+  "late_text_violation": {
+    "description": "Generated text whose only prohibition violation (an expert name) appears after 60,000 characters.",
+    "filler_sentence": "Изпълнителят организира дейностите последователно и документира резултатите. ",
+    "filler_min_chars": 60000,
+    "violation_sentence": "Ръководител на екипа ще бъде инж. Иван Иванов.",
+    "violated_requirement_key": "R-prohibition-names"
+  },
+  "unsupported_commitment": {
+    "description": "A plan addition that claims a client mandate absent from every source.",
+    "plan_item_title": "Безплатна гаранционна поддръжка 10 години",
+    "claimed_as": "client_requirement",
+    "supported_by_source": false
+  }
+}
