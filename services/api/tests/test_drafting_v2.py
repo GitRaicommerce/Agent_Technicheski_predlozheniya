@@ -188,3 +188,39 @@ async def test_truncated_section_assembly_falls_back_without_a_second_llm_call(m
     assert "Контрол" in saved.text
     assert saved.flags_json["assembly_mode"] == "deterministic_after_truncation"
     assert result["assembly_quality"]["passed"] is True
+
+
+@pytest.mark.asyncio
+async def test_section_assembly_rejects_calendar_date_introduced_by_editor(mock_db):
+    section_uid = str(uuid.uuid4())
+    subpoints = [
+        {
+            "section_uid": str(uuid.uuid4()),
+            "generation_id": str(uuid.uuid4()),
+            "title": "Проектиране",
+            "text": "Проектирането се изпълнява в срок от 20 дни.",
+        }
+    ]
+    previous_result = MagicMock()
+    previous_result.scalar_one_or_none.return_value = None
+    mock_db.execute = AsyncMock(side_effect=[previous_result, MagicMock()])
+
+    with patch(
+        "app.agents.drafting_v2.llm_gateway.call",
+        new=AsyncMock(return_value={
+            "text": "Проектиране\nПроектирането започва на 06.10.2026 г.",
+            "change_summary": "Редактирано.",
+        }),
+    ):
+        result = await run_section_assembly(
+            project_id=str(uuid.uuid4()),
+            section_uid=section_uid,
+            section_title="Проектиране",
+            subpoints=subpoints,
+            db=mock_db,
+        )
+
+    saved = mock_db.add.call_args.args[0]
+    assert "06.10.2026" not in saved.text
+    assert "20 дни" in saved.text
+    assert result["assembly_mode"] == "deterministic_calendar_guard"

@@ -22,6 +22,7 @@ from app.agents.proposal_quality import (
     build_generation_depth_target,
     format_generation_depth_target_for_prompt,
 )
+from app.agents.proposal_timing import find_concrete_calendar_dates
 from app.agents.requirement_coverage import (
     assess_requirement_coverage,
     format_requirement_items_for_prompt,
@@ -61,6 +62,14 @@ Requirements:
   several checklist items into a vague generic paragraph.
 - Use clear paragraphs and, where useful, subheadings or numbered points.
 - Integrate concrete schedule data when available.
+- Treat every calendar start/end date from a schedule as a non-contractual,
+  conditional planning anchor. Never cite a concrete calendar date anywhere in
+  the technical proposal. Use only relative durations (for example 20 days,
+  4 weeks, 1 month), sequence and dependencies that are supported by sources.
+- Express commencement relative to the applicable future event (contract
+  signing, notice to proceed, site handover, approval) only when that event is
+  supported by the current tender. Never convert a conditional schedule date
+  into a bidder commitment.
 - Never expose source diagnostics in the proposal. Do not state that an uploaded
   schedule, tender file or example is incomplete, contains only one activity,
   lacks dates/resources, or could not be parsed. Missing-source warnings belong
@@ -132,6 +141,52 @@ def _change_summary(variant_data: dict[str, Any], revision_number: int) -> str:
         "Разделът е регенериран спрямо актуалните изисквания, източници "
         "и резултати от проверките за пълнота."
     )
+
+
+CALENDAR_DATE_REPAIR_PROMPT = """Ти си строг редактор на българско техническо
+предложение. Получаваш готов проект на текст, в който има забранени конкретни
+календарни дати.
+
+Пренапиши текста така, че:
+- да няма нито една конкретна календарна дата за начало, край или изпълнение;
+- да се запазят всички дейности, методологии, отговорности и зависимости;
+- да се запазят общите срокове и продължителности като дни, седмици или месеци;
+- календарна дата да се замени с относителна връзка към бъдещо събитие само ако
+  такава връзка вече е подкрепена в текста; иначе датата просто да се премахне;
+- да не се измислят срокове, факти или нови ангажименти.
+
+Върни само валиден JSON: {"text": "<коригиран пълен текст>"}
+"""
+
+
+async def _repair_concrete_calendar_dates(
+    text: str,
+    *,
+    trace_id: str,
+) -> str:
+    dates = find_concrete_calendar_dates(text)
+    if not dates:
+        return text
+    result = await llm_gateway.call(
+        system_prompt=CALENDAR_DATE_REPAIR_PROMPT,
+        user_message=(
+            "Открити забранени календарни дати: "
+            + ", ".join(dates)
+            + "\n\n[ТЕКСТ ЗА КОРЕКЦИЯ START]\n"
+            + text
+            + "\n[ТЕКСТ ЗА КОРЕКЦИЯ END]"
+        ),
+        agent="drafting_calendar_guard",
+        trace_id=trace_id,
+    )
+    repaired = str(result.get("text") or "").strip()
+    remaining = find_concrete_calendar_dates(repaired)
+    if not repaired or remaining:
+        raise ValueError(
+            "Генерираният текст съдържа конкретни календарни дати и не беше "
+            "запазен. Регенерирайте раздела без условните дати от графика."
+        )
+    return repaired
 
 
 def _safe_section_uuid(raw: str) -> str:
@@ -901,6 +956,8 @@ async def run_drafting(
     repair_attempted = False
     repair_attempt_count = 0
     repair_error: str | None = None
+    calendar_date_repair_attempted = False
+    removed_calendar_dates: list[str] = []
     deterministic_assurance_ids: list[str] = []
     if variant_text:
         requirement_coverage = assess_requirement_coverage(
@@ -984,6 +1041,24 @@ async def run_drafting(
                 drafting_blueprint=drafting_blueprint,
             )
 
+        removed_calendar_dates = find_concrete_calendar_dates(variant_text)
+        if removed_calendar_dates:
+            calendar_date_repair_attempted = True
+            variant_text = await _repair_concrete_calendar_dates(
+                variant_text,
+                trace_id=trace_id,
+            )
+            variant_data["text"] = variant_text
+            requirement_coverage = assess_requirement_coverage(
+                variant_text,
+                normalized_requirement_items,
+            )
+            depth_assessment = assess_generation_depth(
+                variant_text,
+                requirement_coverage,
+                drafting_blueprint=drafting_blueprint,
+            )
+
     saved_ids: dict[str, str] = {}
     for variant_key in ("variant_1",):
         variant_data = llm_result.get(variant_key) or {}
@@ -1016,6 +1091,11 @@ async def run_drafting(
                 "quality_repair_attempt_count": repair_attempt_count,
                 "quality_repair_max_attempts": MAX_QUALITY_REPAIR_ATTEMPTS,
                 "quality_repair_error": repair_error,
+                "calendar_date_guard": {
+                    "passed": True,
+                    "repair_attempted": calendar_date_repair_attempted,
+                    "removed_dates": removed_calendar_dates,
+                },
                 "deterministic_requirement_assurance_ids": (
                     deterministic_assurance_ids
                 ),

@@ -12,6 +12,7 @@ from app.core.models import (
     TpOutline,
 )
 from app.agents.proposal_quality import assess_generation_depth
+from app.agents.proposal_timing import find_concrete_calendar_dates
 from app.export.readiness_report import render_export_readiness_report
 
 CRITERION_VERDICTS = {"covered", "partial", "missing", "violated", "unchecked"}
@@ -19,7 +20,7 @@ CRITERION_BLOCKING_VERDICTS = {"missing", "violated"}
 
 router = APIRouter()
 
-HARD_EXPORT_BLOCKER_CODES: set[str] = set()
+HARD_EXPORT_BLOCKER_CODES: set[str] = {"concrete_calendar_dates"}
 
 
 def _missing_requirement_reason(item: dict) -> str:
@@ -394,6 +395,18 @@ def _auto_assurance_section(generation: Generation) -> dict | None:
     }
 
 
+def _calendar_date_section(generation: Generation) -> dict | None:
+    dates = find_concrete_calendar_dates(str(getattr(generation, "text", "") or ""))
+    if not dates:
+        return None
+    return {
+        "section_uid": generation.section_uid,
+        "generation_id": generation.id,
+        "calendar_dates": dates,
+        "calendar_date_count": len(dates),
+    }
+
+
 def _duplicate_selected_sections(generations: list[Generation]) -> list[dict]:
     grouped: dict[str, list[Generation]] = {}
     for generation in generations:
@@ -631,6 +644,11 @@ def _readiness_message(readiness: dict) -> str:
             "Pre-export check failed: some sections contain automatically "
             "appended requirement-assurance text that needs review."
         )
+    if code == "concrete_calendar_dates":
+        return (
+            "Pre-export check failed: some selected sections contain concrete "
+            "calendar dates copied from conditional schedule anchors."
+        )
     if code == "criteria_unmet":
         return (
             "Pre-export check failed: some sections do not pass "
@@ -686,6 +704,11 @@ async def _build_export_readiness(
         for generation in selected_generations
         if (issue := _auto_assurance_section(generation))
     ]
+    calendar_date_sections = [
+        issue
+        for generation in selected_generations
+        if (issue := _calendar_date_section(generation))
+    ]
     criteria_issue_sections = await _criteria_issue_sections(
         project_id,
         selected_generations,
@@ -710,6 +733,10 @@ async def _build_export_readiness(
     )
     auto_assurance_sections = _attach_section_titles(
         auto_assurance_sections,
+        outline_section_metadata,
+    )
+    calendar_date_sections = _attach_section_titles(
+        calendar_date_sections,
         outline_section_metadata,
     )
     criteria_issue_sections = _attach_section_titles(
@@ -776,6 +803,20 @@ async def _build_export_readiness(
                 ),
             }
         )
+    calendar_date_count = sum(
+        section["calendar_date_count"] for section in calendar_date_sections
+    )
+    if calendar_date_sections:
+        blockers.append(
+            {
+                "code": "concrete_calendar_dates",
+                "count": calendar_date_count,
+                "message": (
+                    "Some selected sections contain concrete calendar dates from "
+                    "conditional schedule anchors and must be regenerated."
+                ),
+            }
+        )
     criteria_unmet_count = sum(
         section["missing_count"] + section["violated_count"]
         for section in criteria_issue_sections
@@ -830,6 +871,9 @@ async def _build_export_readiness(
         "quality_section_count": len(quality_sections),
         "auto_assurance_sections": auto_assurance_sections,
         "auto_assurance_section_count": len(auto_assurance_sections),
+        "calendar_date_sections": calendar_date_sections,
+        "calendar_date_section_count": len(calendar_date_sections),
+        "calendar_date_count": calendar_date_count,
         "criteria_issue_sections": criteria_issue_sections,
         "criteria_issue_section_count": len(criteria_issue_sections),
         "criteria_unmet_count": criteria_unmet_count,

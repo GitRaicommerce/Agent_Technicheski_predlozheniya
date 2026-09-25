@@ -59,6 +59,9 @@ Additional verification rules:
   for checklist item ids that are not covered.
 - Mark gaps when required project parts, design disciplines, deliverables,
   schedule activities, review/approval steps, or timing are missing.
+- A concrete calendar start/end date in generated proposal text is a conflict:
+  uploaded schedule dates are conditional planning anchors. Only supported
+  relative durations, sequence and dependencies may appear in the proposal.
 - For investment/design project sections, return needs_review or reject if the
   text mentions only one discipline while the sources list multiple parts such
   as Geodesy, Structural, Water supply, PBZ, PUSO, cost estimate documentation,

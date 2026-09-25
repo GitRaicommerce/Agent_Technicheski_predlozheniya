@@ -171,3 +171,31 @@ def test_render_export_readiness_report_handles_ready_state():
 
     assert "Няма readiness блокери." in report
     assert "Proposal is ready for DOCX export." in report
+
+
+def test_render_export_readiness_report_lists_concrete_calendar_dates():
+    report = render_export_readiness_report(
+        {
+            "project_id": "project-dated",
+            "ready": False,
+            "status": "blocked",
+            "selected_generation_count": 1,
+            "selected_section_count": 1,
+            "blocker_count": 1,
+            "blockers": [{
+                "code": "concrete_calendar_dates",
+                "count": 2,
+                "message": "Concrete dates",
+            }],
+            "calendar_date_sections": [{
+                "section_uid": "sec-1",
+                "section_title": "Изпълнение",
+                "calendar_dates": ["06.10.2026", "25.10.2026"],
+            }],
+            "message": "Blocked",
+        }
+    )
+
+    assert "## Забранени конкретни календарни дати" in report
+    assert "Изпълнение (`sec-1`): 06.10.2026, 25.10.2026" in report
+    assert "Регенерирайте секциите с конкретни календарни дати" in report

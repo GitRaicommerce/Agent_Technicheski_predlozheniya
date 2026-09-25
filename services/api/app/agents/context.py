@@ -6,6 +6,7 @@ from typing import Any, TYPE_CHECKING
 
 from sqlalchemy import select
 
+from app.agents.proposal_timing import schedule_for_proposal
 from app.core.models import (
     ExtractedChunk,
     ProjectFactSheet,
@@ -79,7 +80,7 @@ def _score_text(text: str, keywords: set[str]) -> int:
 
 
 def _compact_task(task: dict[str, Any]) -> dict[str, Any]:
-    return {
+    compact = {
         key: task.get(key)
         for key in (
             "uid",
@@ -87,11 +88,12 @@ def _compact_task(task: dict[str, Any]) -> dict[str, Any]:
             "name",
             "task_name",
             "duration_days",
-            "start",
-            "finish",
+            "predecessors",
+            "resources",
         )
         if task.get(key) is not None
     }
+    return schedule_for_proposal(compact)
 
 
 async def build_project_grounding_context(

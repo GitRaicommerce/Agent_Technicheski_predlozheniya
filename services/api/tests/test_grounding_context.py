@@ -436,6 +436,54 @@ async def test_drafting_prompt_and_saved_generation_include_grounding_context(mo
 
 
 @pytest.mark.asyncio
+async def test_drafting_repairs_concrete_calendar_dates_before_saving(mock_db):
+    project_id = str(uuid.uuid4())
+    section_uid = str(uuid.uuid4())
+    llm = AsyncMock(side_effect=[
+        {
+            "variant_1": {
+                "text": (
+                    "Проектирането започва на 06.10.2026 г. и приключва на "
+                    "25.10.2026 г. в рамките на 20 дни."
+                ),
+                "evidence_map": {},
+            },
+            "flags": [],
+        },
+        {
+            "text": (
+                "Проектирането започва след приложимото възлагателно събитие "
+                "и се изпълнява в рамките на 20 дни."
+            )
+        },
+    ])
+
+    with patch("app.agents.drafting.llm_gateway.call", new=llm):
+        await run_drafting(
+            project_id=project_id,
+            section_uid=section_uid,
+            section_title="Проектиране",
+            section_requirements=[],
+            evidence_snippets=[],
+            schedule_summary=None,
+            lex_citations=[],
+            db=mock_db,
+            trace_id=str(uuid.uuid4()),
+        )
+
+    saved_generation = mock_db.add.call_args.args[0]
+    assert llm.await_count == 2
+    assert "06.10.2026" not in saved_generation.text
+    assert "25.10.2026" not in saved_generation.text
+    assert "20 дни" in saved_generation.text
+    assert saved_generation.flags_json["calendar_date_guard"] == {
+        "passed": True,
+        "repair_attempted": True,
+        "removed_dates": ["06.10.2026", "25.10.2026"],
+    }
+
+
+@pytest.mark.asyncio
 async def test_drafting_unselects_existing_section_generations_before_saving(mock_db):
     project_id = str(uuid.uuid4())
     section_uid = str(uuid.uuid4())

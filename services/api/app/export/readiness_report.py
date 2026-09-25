@@ -116,6 +116,12 @@ def _blocker_actions(readiness: dict[str, Any]) -> list[str]:
             "изречения с конкретен текст или регенерирайте секцията, преди "
             "финалния export."
         )
+    if "concrete_calendar_dates" in blocker_codes:
+        actions.append(
+            "Регенерирайте секциите с конкретни календарни дати. В текста на "
+            "ТП оставете само общи срокове/продължителности, последователност "
+            "и зависимости; началните и крайните дати от графика са условни."
+        )
     if "criteria_unmet" in blocker_codes:
         actions.append(
             "Регенерирайте или редактирайте секциите с неизпълнени критерии за "
@@ -479,6 +485,29 @@ def render_export_readiness_report(readiness: dict[str, Any]) -> str:
                 f"{_section_label(section)}: "
                 f"{_as_int(section.get('assurance_count'))} auto-appended "
                 f"({_list(assurance_ids)})"
+            )
+
+    calendar_date_sections = [
+        item
+        for item in readiness.get("calendar_date_sections") or []
+        if isinstance(item, dict)
+    ]
+    if calendar_date_sections:
+        lines.extend(["", "## Забранени конкретни календарни дати", ""])
+        lines.append(
+            "Началните и крайните дати от приложения график са условни. "
+            "Регенерирайте тези секции, като запазите само общите срокове, "
+            "продължителностите и зависимостите."
+        )
+        lines.append("")
+        for section in calendar_date_sections:
+            dates = [
+                str(item)
+                for item in section.get("calendar_dates") or []
+                if item is not None
+            ]
+            lines.append(
+                f"- {_section_label(section)}: {_list(dates)}"
             )
 
     actions = _blocker_actions(readiness)

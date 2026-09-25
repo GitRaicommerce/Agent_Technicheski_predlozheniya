@@ -123,6 +123,41 @@ async def test_export_readiness_flags_auto_assurance_text(client, mock_db):
 
 
 @pytest.mark.asyncio
+async def test_export_readiness_hard_blocks_selected_text_with_calendar_dates(
+    client, mock_db
+):
+    project = _make_project()
+    mock_db.get = AsyncMock(return_value=project)
+
+    generation = MagicMock()
+    generation.id = "gen-dated"
+    generation.section_uid = "sec-dated"
+    generation.evidence_status = "ok"
+    generation.text = (
+        "Проектирането започва на 06.10.2026 г. и е с продължителност 20 дни."
+    )
+    generation.flags_json = {}
+
+    selected_result = MagicMock()
+    selected_result.scalars.return_value.all.return_value = [generation]
+    mock_db.execute = AsyncMock(return_value=selected_result)
+
+    resp = await client.get(f"/api/v1/export/{project.id}/readiness")
+
+    assert resp.status_code == 200
+    readiness = resp.json()
+    assert readiness["calendar_date_section_count"] == 1
+    assert readiness["calendar_date_count"] == 1
+    assert readiness["calendar_date_sections"][0]["calendar_dates"] == [
+        "06.10.2026"
+    ]
+    assert "concrete_calendar_dates" in {
+        item["code"] for item in readiness["blockers"]
+    }
+    assert readiness["can_export_current_draft"] is False
+
+
+@pytest.mark.asyncio
 async def test_export_readiness_report_lists_auto_assurance_sections(client, mock_db):
     """Markdown отчетът включва секциите с автоматично добавени уверения."""
     project = _make_project()

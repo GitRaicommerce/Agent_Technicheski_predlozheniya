@@ -278,6 +278,7 @@
 - Implemented Phase 5.2 (cross-section consistency): `app/agents/consistency.py` extracts verbatim-anchored claims (deadlines, durations, team, stages, project parts, sequence) per selected section and has an LLM analysis compare them across sections, against the confirmed fact sheet and against the uploaded schedule; conflicts persist in a `consistency_check` job report with severities, `/api/v1/consistency` API plus Markdown report download, sidebar panel, export readiness `consistency_conflicts` blocker that automatically goes stale when any checked generation is regenerated, and unit tests for claim/conflict sanitization and report rendering.
 
 - Parallelized the Understanding pass: independent map and proposal-audit batches now run concurrently (configurable via `UNDERSTANDING_MAX_CONCURRENCY`, default 4) with deterministic result order, lock-protected progress/checkpoint persistence, and regression tests for concurrency limits and error propagation — roughly a 4x wall-clock speedup on real projects.
+- Added a universal calendar-date guard for technical-proposal generation: conditional schedule start/finish dates are removed from drafting and consistency context while durations, dependencies, and resources remain available; drafting repairs a violating model response once and refuses to persist it if concrete dates remain; schedule summaries and section assembly also fail closed, and DOCX readiness hard-blocks older selected text that still contains concrete calendar dates until it is regenerated.
 
 ## Active Goals
 

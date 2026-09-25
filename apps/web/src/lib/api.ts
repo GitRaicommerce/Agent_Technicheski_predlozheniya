@@ -533,6 +533,15 @@ export interface ExportReadiness {
     assurance_count?: number;
   }>;
   auto_assurance_section_count?: number;
+  calendar_date_sections?: Array<{
+    section_uid: string;
+    section_title?: string;
+    generation_id?: string;
+    calendar_dates: string[];
+    calendar_date_count: number;
+  }>;
+  calendar_date_section_count?: number;
+  calendar_date_count?: number;
   criteria_issue_sections?: CriteriaIssueSection[];
   criteria_issue_section_count?: number;
   criteria_unmet_count?: number;
