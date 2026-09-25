@@ -211,6 +211,11 @@ class ContentPlanItem(Base):
     generation_uid: Mapped[Optional[str]] = mapped_column(
         UUID(as_uuid=False), nullable=True
     )
+    # Writer instructions, target depth and origin proposed by the plan author
+    # (K-26). Contractor method proposals are marked here, never as mandates.
+    drafting_guidance_json: Mapped[Optional[dict]] = mapped_column(
+        JSONB, nullable=True
+    )
 
     project: Mapped[Project] = relationship(back_populates="content_plan_items")
     outline: Mapped[TpOutline] = relationship(back_populates="content_plan_items")

@@ -8,6 +8,7 @@ import {
   type ContentPlanItem,
   type TpOutline,
 } from "@/lib/api";
+import PlanAuthorControl from "@/components/PlanAuthorControl";
 import RequirementCoveragePanel from "@/components/RequirementCoveragePanel";
 
 interface Props {
@@ -188,6 +189,13 @@ export default function OutlinePanel({ projectId, refreshKey = 0 }: Props) {
         >
           {busy ? "Обработва се..." : "✓ Одобри подробния план"}
         </button>
+      )}
+      {!plan.status_locked && (
+        <PlanAuthorControl
+          projectId={projectId}
+          disabled={busy}
+          onApplied={() => void load()}
+        />
       )}
       {!plan.status_locked && (
         <button

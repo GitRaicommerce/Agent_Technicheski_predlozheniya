@@ -16,6 +16,7 @@ from app.agents.understanding import ensure_v2_enabled
 from app.core.database import get_db
 from app.core.models import (
     ContentPlanItem,
+    GenerationJob,
     Project,
     ProjectFactSheet,
     RequirementRegister,
@@ -49,6 +50,7 @@ class ContentPlanItemResponse(BaseModel):
     order_index: int
     status: Literal["draft", "approved"]
     generation_uid: str | None
+    drafting_guidance_json: dict[str, Any] | None = None
 
     model_config = {"from_attributes": True}
 
@@ -192,6 +194,59 @@ async def update_content_plan_item(
     await sync_outline_from_content_plan(item.outline_id, db)
     await db.refresh(item)
     return item
+
+
+class PlanAuthorJobResponse(BaseModel):
+    id: str
+    status: str
+    error: str | None = None
+    result_json: dict[str, Any] | None = None
+    created_at: datetime
+    completed_at: datetime | None = None
+
+
+def _author_job_response(job: GenerationJob) -> PlanAuthorJobResponse:
+    return PlanAuthorJobResponse(
+        id=job.id,
+        status=job.status,
+        error=job.error,
+        result_json=job.result_json,
+        created_at=job.created_at,
+        completed_at=job.completed_at,
+    )
+
+
+@router.post(
+    "/{project_id}/author",
+    response_model=PlanAuthorJobResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def start_plan_author(project_id: str, db: AsyncSession = Depends(get_db)):
+    """K-26: the plan author proposes a detailed draft on the protected structure."""
+    _require_v2()
+    project = await db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    from app.agents.plan_author import create_plan_author_job
+
+    try:
+        job = await create_plan_author_job(project, db)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return _author_job_response(job)
+
+
+@router.get("/{project_id}/author/latest", response_model=PlanAuthorJobResponse | None)
+async def latest_plan_author_job(project_id: str, db: AsyncSession = Depends(get_db)):
+    _require_v2()
+    result = await db.execute(
+        select(GenerationJob)
+        .where(GenerationJob.project_id == project_id, GenerationJob.job_type == "plan_author")
+        .order_by(GenerationJob.created_at.desc())
+        .limit(1)
+    )
+    job = result.scalar_one_or_none()
+    return _author_job_response(job) if job else None
 
 
 @router.post(

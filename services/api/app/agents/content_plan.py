@@ -502,6 +502,27 @@ def _wbs_links(title: str, criteria: list[dict[str, Any]], wbs_items: list[WbsIt
     return [item_id for _, item_id in sorted(scored, key=lambda pair: (-pair[0], pair[1]))[:8]]
 
 
+def _guidance_payload(guidance: Any) -> dict[str, Any] | None:
+    if not isinstance(guidance, dict):
+        return None
+    instructions = [
+        _clean(value) for value in guidance.get("instructions") or [] if _clean(value)
+    ]
+    subtopics = [
+        _clean(value) for value in guidance.get("required_subtopics") or [] if _clean(value)
+    ]
+    if guidance.get("target_depth"):
+        instructions.append(f"Целева дълбочина: {guidance['target_depth']}.")
+    if guidance.get("origin") == "contractor_method":
+        instructions.append(
+            "Тази подточка е методическо предложение на изпълнителя, не изискване "
+            "на възложителя. Не я представяй като задължение по документацията."
+        )
+    if not instructions and not subtopics:
+        return None
+    return {"instructions": instructions, "required_subtopics": subtopics}
+
+
 def _item_outline_payload(item: ContentPlanItem, children: list[dict[str, Any]]) -> dict[str, Any]:
     criteria = [entry for entry in (item.acceptance_criteria_json or []) if isinstance(entry, dict)]
     requirement_map: dict[str, str] = {}
@@ -540,6 +561,9 @@ def _item_outline_payload(item: ContentPlanItem, children: list[dict[str, Any]])
         "linked_wbs_ids": item.linked_wbs_ids or [],
         "linked_fact_keys": item.linked_fact_keys or [],
         "subsections": children,
+        # Plan-author instructions reach the writer through the existing
+        # section drafting-guidance channel.
+        "drafting_guidance": _guidance_payload(getattr(item, "drafting_guidance_json", None)),
         "include_in_document": bool(
             item.generation_uid
             or any(child.get("include_in_document") for child in children)

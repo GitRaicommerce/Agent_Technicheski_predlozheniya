@@ -284,6 +284,20 @@ export interface ContentPlan {
   plan_author?: Record<string, unknown> | null;
 }
 
+export interface PlanAuthorJob {
+  id: string;
+  status: "queued" | "processing" | "done" | "error" | string;
+  error?: string | null;
+  result_json?: {
+    validation_errors?: string[];
+    subpoints_added?: number;
+    assignments?: number;
+    author_unresolved?: number;
+  } | null;
+  created_at: string;
+  completed_at?: string | null;
+}
+
 export interface RequirementCoverageSummary {
   total: number;
   target: number;
@@ -913,6 +927,12 @@ export const api = {
       apiFetch<ContentPlan>(`/api/v1/content-plan/${projectId}/unlock`, {
         method: "POST",
       }),
+    startAuthor: (projectId: string) =>
+      apiFetch<PlanAuthorJob>(`/api/v1/content-plan/${projectId}/author`, {
+        method: "POST",
+      }),
+    latestAuthorJob: (projectId: string) =>
+      apiFetch<PlanAuthorJob | null>(`/api/v1/content-plan/${projectId}/author/latest`),
     resolveRequirement: (
       projectId: string,
       requirementId: string,

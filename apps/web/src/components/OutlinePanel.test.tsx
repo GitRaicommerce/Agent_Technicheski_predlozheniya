@@ -20,6 +20,8 @@ vi.mock("@/lib/api", async () => {
         approve: vi.fn(),
         unlock: vi.fn(),
         resolveRequirement: vi.fn(),
+        startAuthor: vi.fn(),
+        latestAuthorJob: vi.fn().mockResolvedValue(null),
       },
     },
   };
