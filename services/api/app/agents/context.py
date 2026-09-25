@@ -88,6 +88,9 @@ def _compact_task(task: dict[str, Any]) -> dict[str, Any]:
             "name",
             "task_name",
             "duration_days",
+            # Non-day durations keep their own unit instead of being dropped.
+            "duration_value",
+            "duration_unit",
             "predecessors",
             "resources",
         )

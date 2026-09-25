@@ -476,9 +476,17 @@ export interface UnderstandingJob {
   completed_at?: string | null;
 }
 
+export interface SourceManifest {
+  file_count: number;
+  manifest_hash: string;
+  complete: boolean;
+  incomplete_files: Array<{ file_id: string; filename: string; issues: string[] }>;
+}
+
 export interface UnderstandingWorkspace {
   enabled: boolean;
   sources: Array<{ id: string; filename: string }>;
+  source_manifest?: SourceManifest | null;
   requirements: UnderstandingRequirement[];
   wbs_items: UnderstandingWbsItem[];
   fact_sheet?: UnderstandingFactSheet | null;

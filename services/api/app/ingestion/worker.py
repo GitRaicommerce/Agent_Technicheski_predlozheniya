@@ -303,7 +303,31 @@ async def _ingest_schedule(file, content: bytes, db):
         "tasks_count": len(result.get("tasks", [])),
         "resources_count": len(result.get("resources", [])),
         "schedule_reliable": quality["reliable"],
+        "field_coverage": quality.get("field_coverage"),
     }
+
+    # K-17: a schedule that failed to parse must never become the active
+    # version. Storing it would make "latest version" an empty schedule that
+    # silently replaces the previous usable one.
+    if result.get("error") or not result.get("tasks"):
+        file.ingest_status = "error"
+        file.ingest_error = (
+            str(result.get("error"))
+            if result.get("error")
+            else "Графикът не съдържа разпознати задачи."
+        ) + " Предишният използваем график остава активен."
+        file.ingest_quality_status = "error"
+        file.ingest_report_json = {
+            **file.ingest_report_json,
+            "quality_status": "error",
+            "active_schedule_unchanged": True,
+        }
+        log.warning(
+            "ingest_schedule_rejected",
+            file_id=file.id,
+            error=file.ingest_error,
+        )
+        return
 
     version_result = await db.execute(
         select(func.max(ScheduleNormalized.version)).where(

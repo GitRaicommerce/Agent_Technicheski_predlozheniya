@@ -159,7 +159,7 @@ def _chunks_from_markdown(md_text: str) -> list[dict[str, Any]]:
     def _flush(section: str | None) -> None:
         nonlocal page_counter
         text = "\n".join(buffer_lines).strip()
-        if len(text) >= 20:
+        if _is_meaningful_text(text):
             chunks.append({
                 "type": "text",
                 "text": text,
@@ -309,7 +309,15 @@ def _extract_pdf_with_audit(
     ):
         warnings.append("markdown_chunks_have_no_page_numbers")
 
-    return chunks, _build_report(
+    chunks, page_coverage = _ensure_page_coverage(
+        chunks, page_texts, reader_available=bool(page_audits)
+    )
+    if page_coverage["status"] == "unknown":
+        warnings.append("page_coverage_unknown")
+    for page_num in page_coverage["missing_pages"]:
+        warnings.append(f"page_text_missing_from_extraction:{page_num}")
+
+    report = _build_report(
         filename=filename,
         file_type="pdf",
         chunks=chunks,
@@ -320,6 +328,76 @@ def _extract_pdf_with_audit(
         reference_chars=reference_chars,
         markdown_chars=markdown_chars,
     )
+    report["page_coverage"] = page_coverage
+    return chunks, report
+
+
+_COVERAGE_TOKEN_RE = re.compile(r"[^\W_]{4,}", re.UNICODE)
+_MIN_PAGE_TOKEN_COVERAGE = 0.5
+
+
+def _coverage_tokens(text: str) -> set[str]:
+    return {token.casefold() for token in _COVERAGE_TOKEN_RE.findall(text)}
+
+
+def _ensure_page_coverage(
+    chunks: list[dict[str, Any]],
+    page_texts: list[tuple[int, str]],
+    *,
+    reader_available: bool,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Detect pages whose reference text is absent from the chosen chunks.
+
+    A document-wide character ratio can look healthy while a whole page is
+    lost. Each page with reference text is checked separately; a lost page is
+    recovered deterministically from its page text and reported. A page with
+    no reference text is "empty", not "lost".
+    """
+    if not reader_available:
+        return chunks, {
+            "status": "unknown",
+            "checked_pages": 0,
+            "empty_pages": [],
+            "missing_pages": [],
+            "recovered_pages": [],
+        }
+    extracted_tokens = _coverage_tokens(
+        "\n".join(str(chunk.get("text") or "") for chunk in chunks)
+    )
+    empty_pages: list[int] = []
+    missing_pages: list[int] = []
+    recovered: list[dict[str, Any]] = []
+    for page_num, text in page_texts:
+        tokens = _coverage_tokens(text)
+        if not tokens:
+            empty_pages.append(page_num)
+            continue
+        covered = len(tokens & extracted_tokens) / len(tokens)
+        if covered >= _MIN_PAGE_TOKEN_COVERAGE:
+            continue
+        missing_pages.append(page_num)
+        for para in _split_paragraphs(text):
+            recovered.append(
+                {
+                    "type": "text",
+                    "text": para,
+                    "page": page_num,
+                    "section_path": None,
+                    "parser_method": "pdf_page_text",
+                    "meta": {
+                        "parser_method": "pdf_page_text",
+                        "recovered_missing_page": True,
+                    },
+                }
+            )
+    status = "incomplete_recovered" if missing_pages else "complete"
+    return chunks + recovered, {
+        "status": status,
+        "checked_pages": len(page_texts),
+        "empty_pages": empty_pages,
+        "missing_pages": missing_pages,
+        "recovered_pages": sorted({chunk["page"] for chunk in recovered}),
+    }
 
 
 def _extract_pdf_via_opendataloader_markdown(
@@ -705,11 +783,34 @@ def _ocr_page_image(page) -> str:
 
 
 def _split_paragraphs(text: str, min_length: int = 20) -> list[str]:
-    """Разделя текст на параграфи по двойни нови редове."""
+    """Разделя текст на параграфи по двойни нови редове.
+
+    Кратки, но смислени редове („Срок: 30 дни.“) се запазват: изискванията
+    често са кратки, а тихото им изтриване губи обхват (K-06).
+    """
     paragraphs = text.split("\n\n")
     result = []
     for p in paragraphs:
         p = p.replace("\n", " ").strip()
-        if len(p) >= min_length:
+        if len(p) >= min_length or _is_meaningful_text(p):
             result.append(p)
     return result
+
+
+_LETTER_WORD_RE = re.compile(r"[^\W\d_]{2,}", re.UNICODE)
+_TOKEN_RE = re.compile(r"\w+", re.UNICODE)
+
+
+def _is_meaningful_text(text: str) -> bool:
+    """True for any paragraph that may carry a requirement.
+
+    Long text always qualifies. Short text qualifies when it has at least one
+    real word and at least two tokens — this keeps "Срок: 30 дни." or
+    "Не се допуска." while dropping bare page numbers and separators.
+    """
+    clean = text.strip()
+    if len(clean) >= 20:
+        return True
+    if not _LETTER_WORD_RE.search(clean):
+        return False
+    return len(_TOKEN_RE.findall(clean)) >= 2

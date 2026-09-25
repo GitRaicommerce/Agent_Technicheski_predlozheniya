@@ -11,7 +11,7 @@ import re
 from typing import Any
 
 
-PARSER_VERSION = "1.1.0"
+PARSER_VERSION = "1.2.0"
 
 
 def parse_schedule(content: bytes, filename: str) -> dict[str, Any]:
@@ -176,28 +176,54 @@ def _parse_excel(content: bytes) -> dict[str, Any]:
                 "finish date", "finish_date",
                 "край", "крайна дата",
             )
-            dur_val = _pick(
-                row_dict,
-                "duration", "duration (days)", "duration_days",
-                "продължителност", "days",
+            duration_header = next(
+                (
+                    key
+                    for key in (
+                        "duration (days)", "duration_days", "days",
+                        "duration", "продължителност",
+                    )
+                    if row_dict.get(key) is not None
+                    and str(row_dict.get(key)).strip() not in ("", "None")
+                ),
+                None,
             )
+            dur_val = row_dict.get(duration_header) if duration_header else None
             wbs_val = _pick(row_dict, "wbs", "task id", "id", "no", "№")
-
-            try:
-                dur_float = float(dur_val) if dur_val is not None else None
-            except (ValueError, TypeError):
-                dur_float = None
-
-            tasks.append(
-                {
-                    "uid": i,
-                    "name": str(name_val) if name_val is not None else f"Задача {i}",
-                    "start": _to_str_date(start_val),
-                    "finish": _to_str_date(finish_val),
-                    "duration_days": dur_float,
-                    "wbs": str(wbs_val) if wbs_val is not None else None,
-                }
+            predecessors_val = _pick(
+                row_dict,
+                "predecessors", "predecessor", "предшественици",
+                "предшественик", "зависимости", "зависимост",
             )
+            resources_val = _pick(
+                row_dict,
+                "resource names", "resources", "resource", "ресурси", "ресурс",
+            )
+
+            duration = parse_duration(
+                dur_val,
+                header_unit_days=duration_header in ("duration (days)", "duration_days", "days"),
+            )
+            task: dict[str, Any] = {
+                "uid": i,
+                "name": str(name_val) if name_val is not None else f"Задача {i}",
+                "start": _to_str_date(start_val),
+                "finish": _to_str_date(finish_val),
+                "duration_days": duration["days"],
+                "wbs": str(wbs_val) if wbs_val is not None else None,
+            }
+            if duration["text"]:
+                task["duration_text"] = duration["text"]
+            if duration["unit"]:
+                task["duration_value"] = duration["value"]
+                task["duration_unit"] = duration["unit"]
+            if duration["warning"]:
+                task["duration_warning"] = duration["warning"]
+            if predecessors_val is not None:
+                task["predecessors"] = _clean_pdf_cell(predecessors_val)
+            if resources_val is not None:
+                task["resources"] = _clean_pdf_cell(resources_val)
+            tasks.append(task)
 
         return {
             "normalized": {"tasks": tasks, "resources": []},
@@ -281,14 +307,83 @@ def _clean_pdf_cell(value: Any) -> str:
     return re.sub(r"\s+", " ", str(value or "")).strip()
 
 
-def _duration_days(value: Any) -> float | None:
-    match = re.search(r"-?\d+(?:[.,]\d+)?", _clean_pdf_cell(value))
+_DAY_UNITS = (
+    "edays", "eday", "days", "day", "d", "работни дни", "раб. дни", "раб.дни",
+    "календарни дни", "кал. дни", "дни", "ден", "дн", "д",
+)
+_WEEK_UNITS = ("weeks", "week", "wks", "wk", "w", "седмици", "седмица", "седм", "с")
+_MONTH_UNITS = ("months", "month", "mons", "mon", "mo", "месеци", "месец", "мес", "м")
+_HOUR_UNITS = ("hours", "hour", "hrs", "hr", "h", "часа", "часове", "час", "ч")
+_DURATION_RE = re.compile(r"^\s*(-?\d+(?:[.,]\d+)?)\s*([^\d\s?][^\d?]*)?\??\s*$")
+
+
+def _unit_of(raw_unit: str) -> str | None:
+    unit = raw_unit.strip().strip(".").casefold()
+    for name, variants in (
+        ("days", _DAY_UNITS),
+        ("weeks", _WEEK_UNITS),
+        ("months", _MONTH_UNITS),
+        ("hours", _HOUR_UNITS),
+    ):
+        if unit in {variant.strip(".") for variant in variants}:
+            return name
+    return None
+
+
+def parse_duration(value: Any, *, header_unit_days: bool = False) -> dict[str, Any]:
+    """Parse a schedule duration without silently converting units (K-17).
+
+    Only day units become ``days``. Weeks, months and hours keep their value
+    and unit and leave ``days`` empty; the working-week/day conversion is a
+    scheduling assumption the parser must not invent. A bare number counts as
+    days only under an explicit days header; otherwise it is kept as days with
+    a visible ``unit_assumed_days`` warning (MS Project exports often omit it).
+    """
+    result: dict[str, Any] = {
+        "days": None,
+        "value": None,
+        "unit": None,
+        "text": None,
+        "warning": None,
+    }
+    if value is None:
+        return result
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        result.update(value=float(value), text=str(value))
+        result["days"] = float(value)
+        if not header_unit_days:
+            result["warning"] = "unit_assumed_days"
+        return result
+    text = _clean_pdf_cell(value)
+    if not text or text.lower() == "none":
+        return result
+    result["text"] = text
+    match = _DURATION_RE.match(text)
     if not match:
-        return None
-    try:
-        return float(match.group(0).replace(",", "."))
-    except ValueError:
-        return None
+        result["warning"] = "unparsed_duration"
+        return result
+    number = float(match.group(1).replace(",", "."))
+    raw_unit = (match.group(2) or "").strip()
+    result["value"] = number
+    if not raw_unit:
+        result["days"] = number
+        if not header_unit_days:
+            result["warning"] = "unit_assumed_days"
+        return result
+    unit = _unit_of(raw_unit)
+    if unit is None:
+        result["warning"] = f"unknown_duration_unit:{raw_unit}"
+        return result
+    result["unit"] = unit
+    if unit == "days":
+        result["days"] = number
+    else:
+        result["warning"] = f"duration_not_in_days:{unit}"
+    return result
+
+
+def _duration_days(value: Any) -> float | None:
+    return parse_duration(value, header_unit_days=True)["days"]
 
 
 def _tasks_from_pdf_tables(tables: list[list[list[Any]]]) -> list[dict[str, Any]]:
@@ -342,21 +437,66 @@ def schedule_quality(schedule_json: dict[str, Any] | None) -> dict[str, Any]:
     detailed = [
         task
         for task in tasks
-        if task.get("start") or task.get("finish") or task.get("duration_days") is not None
+        if task.get("start")
+        or task.get("finish")
+        or task.get("duration_days") is not None
+        or task.get("duration_unit")
     ]
-    reliable = bool(tasks) and not text_fallback and (
-        len(tasks) > 1 or bool(detailed)
-    )
+    # K-17: the number of rows alone is not evidence of a usable schedule;
+    # at least one task must carry timing information.
+    reliable = bool(tasks) and not text_fallback and bool(detailed)
     reasons: list[str] = []
     if not tasks:
         reasons.append("Графикът не съдържа разпознати задачи.")
     if text_fallback:
         reasons.append("PDF таблицата не е разпозната структурирано.")
-    if len(tasks) == 1 and not detailed:
-        reasons.append("Разпознат е само един запис без срок или продължителност.")
+    if tasks and not detailed:
+        if len(tasks) == 1:
+            reasons.append("Разпознат е само един запис без срок или продължителност.")
+        else:
+            reasons.append(
+                "Нито една задача няма разпозната продължителност или срок."
+            )
+    duration_warnings = sorted(
+        {
+            str(task["duration_warning"])
+            for task in tasks
+            if task.get("duration_warning")
+        }
+    )
+    unknown_units = [w for w in duration_warnings if w.startswith("unknown_duration_unit")]
+    if unknown_units:
+        reasons.append(
+            "Непозната единица за продължителност: "
+            + ", ".join(w.split(":", 1)[1] for w in unknown_units)
+            + "."
+        )
+    if any(w.startswith("duration_not_in_days") for w in duration_warnings):
+        reasons.append(
+            "Част от продължителностите са в седмици/месеци/часове и не са "
+            "превърнати в дни."
+        )
+    if "unparsed_duration" in duration_warnings:
+        reasons.append("Част от продължителностите не са разчетени.")
+    if "unit_assumed_days" in duration_warnings:
+        reasons.append(
+            "Продължителности без единица са приети за дни; проверете графика."
+        )
+    field_coverage = {
+        "duration": sum(
+            1
+            for task in tasks
+            if task.get("duration_days") is not None or task.get("duration_unit")
+        ),
+        "predecessors": sum(1 for task in tasks if task.get("predecessors")),
+        "resources": sum(1 for task in tasks if task.get("resources")),
+        "dates": sum(1 for task in tasks if task.get("start") or task.get("finish")),
+    }
     return {
         "reliable": reliable,
         "task_count": len(tasks),
         "detailed_task_count": len(detailed),
         "reasons": reasons,
+        "duration_warnings": duration_warnings,
+        "field_coverage": field_coverage,
     }

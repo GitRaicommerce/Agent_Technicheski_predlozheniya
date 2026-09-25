@@ -16,6 +16,8 @@ from app.agents.understanding import (
     reconcile_understanding_job,
     request_understanding_job_stop,
 )
+from app.agents.source_manifest import _file_entry as _manifest_file_entry
+from app.agents.source_manifest import summarize_manifest
 from app.core.database import get_db
 from app.core.models import (
     ExtractedChunk,
@@ -159,6 +161,7 @@ class UnderstandingWorkspaceResponse(BaseModel):
     latest_job: UnderstandingJobResponse | None
     acceptance: dict[str, Any]
     proposal_focus: dict[str, Any]
+    source_manifest: dict[str, Any] | None = None
 
 
 def _proposal_focus_from_facts(facts: dict[str, Any]) -> dict[str, Any]:
@@ -306,6 +309,7 @@ async def get_understanding_workspace(
     job = job_result.scalar_one_or_none()
     if job:
         await reconcile_understanding_job(job, db)
+    source_files = list(source_result.scalars().all())
     requirements = requirement_result.scalars().all()
     proposal_scopes = {"proposal_content", "proposal_format", "evaluation_rule"}
     proposal_requirements = [
@@ -336,8 +340,13 @@ async def get_understanding_workspace(
     return UnderstandingWorkspaceResponse(
         sources=[
             {"id": file.id, "filename": file.filename}
-            for file in source_result.scalars().all()
+            for file in source_files
         ],
+        # K-06/WP-02: every tender file with its extraction coverage, so an
+        # incomplete source is visible before requirements are confirmed.
+        source_manifest=summarize_manifest(
+            [_manifest_file_entry(file) for file in source_files]
+        ),
         requirements=requirements,
         wbs_items=wbs_result.scalars().all(),
         fact_sheet=fact_sheet,

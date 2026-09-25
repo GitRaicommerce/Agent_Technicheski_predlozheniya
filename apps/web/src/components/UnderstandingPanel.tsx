@@ -50,6 +50,25 @@ const SCOPE_LABELS: Record<UnderstandingRequirementScope, string> = {
 };
 const WBS_KINDS = ["etap", "activity", "subactivity", "task"] as const;
 
+function sourceIssueLabel(issue: string): string {
+  if (issue.startsWith("pages_missing:")) {
+    return `липсващи страници ${issue.slice("pages_missing:".length)}`;
+  }
+  if (issue.startsWith("ingest_status:")) {
+    return `обработка: ${issue.slice("ingest_status:".length)}`;
+  }
+  switch (issue) {
+    case "extraction_error":
+      return "грешка при извличане";
+    case "page_coverage_unknown":
+      return "покритието по страници не може да се провери";
+    case "page_coverage_not_recorded":
+      return "покритието по страници не е проверено (качете файла отново)";
+    default:
+      return issue;
+  }
+}
+
 export default function UnderstandingPanel({ projectId }: { projectId: string }) {
   const [workspace, setWorkspace] = useState<UnderstandingWorkspace | null>(null);
   const [contentPlan, setContentPlan] = useState<ContentPlan | null>(null);
@@ -140,8 +159,27 @@ export default function UnderstandingPanel({ projectId }: { projectId: string })
   const jobActive = job && ["queued", "processing"].includes(job.status);
   const jobResumable = job && ["error", "cancelled", "timed_out"].includes(job.status);
 
+  const manifest = workspace?.source_manifest;
+
   return (
     <div data-testid="understanding-panel" className="space-y-3 text-xs">
+      {manifest && !manifest.complete && manifest.file_count > 0 && (
+        <div
+          data-testid="source-manifest-incomplete"
+          className="rounded border border-amber-300 bg-amber-50 p-2 text-amber-900"
+        >
+          <p className="font-medium">
+            Непълно покритие на документацията — анализът може да пропусне изисквания:
+          </p>
+          <ul className="mt-1 list-disc space-y-0.5 pl-4">
+            {manifest.incomplete_files.map((file) => (
+              <li key={file.file_id}>
+                {file.filename}: {file.issues.map(sourceIssueLabel).join("; ")}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       {error && (
         <p className="rounded border border-red-200 bg-red-50 p-2 text-red-700">
           {error}

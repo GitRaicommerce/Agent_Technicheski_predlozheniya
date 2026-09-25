@@ -46,6 +46,50 @@ class FileResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+async def _commit_and_enqueue(
+    project_file: ProjectFile,
+    project_id: str,
+    module: str,
+    db: AsyncSession,
+) -> ProjectFile:
+    """Make the file record durable, then enqueue its ingestion (K-21).
+
+    ``flush`` is not visible to another transaction, so a fast worker could
+    start before the request's final commit, find no file and exit silently,
+    leaving the record ``pending`` forever. The record and the related stale
+    marking are committed first; an enqueue failure becomes a visible error
+    status instead of an apparently started ingestion.
+    """
+    db.add(project_file)
+    # Mark existing generations as stale — evidence base has changed
+    # (schedule uploads don't directly affect existing text generations)
+    if module in ("tender_docs", "examples", "legislation"):
+        await db.execute(
+            update(Generation)
+            .where(
+                Generation.project_id == project_id,
+                Generation.evidence_status == "ok",
+            )
+            .values(evidence_status="stale")
+        )
+    await db.commit()
+
+    from app.ingestion.worker import enqueue_ingest
+
+    try:
+        enqueue_ingest(project_file.id)
+    except Exception as exc:
+        project_file.ingest_status = "error"
+        project_file.ingest_error = (
+            "Файлът е записан, но обработката не беше поставена в опашката: "
+            f"{exc}. Качете файла отново или проверете Redis/worker."
+        )
+        await db.commit()
+
+    await db.refresh(project_file)
+    return project_file
+
+
 @router.post(
     "/{project_id}/upload",
     response_model=FileResponse,
@@ -95,28 +139,7 @@ async def upload_file(
         ingest_status="pending",
         ingest_quality_status="pending",
     )
-    db.add(project_file)
-    await db.flush()
-
-    # Enqueue ingest job
-    from app.ingestion.worker import enqueue_ingest
-
-    enqueue_ingest(file_id)
-
-    # Mark existing generations as stale — evidence base has changed
-    # (schedule uploads don't directly affect existing text generations)
-    if module in ("tender_docs", "examples", "legislation"):
-        await db.execute(
-            update(Generation)
-            .where(
-                Generation.project_id == project_id,
-                Generation.evidence_status == "ok",
-            )
-            .values(evidence_status="stale")
-        )
-
-    await db.refresh(project_file)
-    return project_file
+    return await _commit_and_enqueue(project_file, project_id, module, db)
 
 
 @router.post("/{project_id}/upload-chunk", status_code=200)
@@ -202,25 +225,7 @@ async def upload_finalize(
         ingest_status="pending",
         ingest_quality_status="pending",
     )
-    db.add(project_file)
-    await db.flush()
-
-    from app.ingestion.worker import enqueue_ingest
-
-    enqueue_ingest(file_id)
-
-    if module in ("tender_docs", "examples", "legislation"):
-        await db.execute(
-            update(Generation)
-            .where(
-                Generation.project_id == project_id,
-                Generation.evidence_status == "ok",
-            )
-            .values(evidence_status="stale")
-        )
-
-    await db.refresh(project_file)
-    return project_file
+    return await _commit_and_enqueue(project_file, project_id, module, db)
 
 
 @router.get("/{project_id}/files", response_model=list[FileResponse])

@@ -194,6 +194,67 @@ async def test_upload_ok(client, mock_db):
 
 
 @pytest.mark.asyncio
+async def test_upload_commits_file_before_enqueue(client, mock_db):
+    """T-20: a worker that starts immediately must already see the file."""
+    from unittest.mock import patch, AsyncMock as AM
+    from tests.conftest import _make_project
+
+    project = _make_project()
+    events: list[str] = []
+    mock_db.get = AM(return_value=project)
+    mock_db.refresh = AM(return_value=None)
+    mock_db.execute = AM(return_value=MagicMock())
+    mock_db.commit = AM(side_effect=lambda: events.append("commit"))
+
+    def fake_enqueue(file_id):
+        events.append("enqueue")
+
+    with (
+        patch("app.routers.files.storage.put_object", new=AM(return_value=None)),
+        patch("app.ingestion.worker.enqueue_ingest", side_effect=fake_enqueue),
+    ):
+        resp = await client.post(
+            f"/api/v1/files/{project.id}/upload",
+            data={"module": "tender_docs"},
+            files={"file": ("report.pdf", b"%PDF-1.4 content", "application/pdf")},
+        )
+
+    assert resp.status_code == 201
+    assert events[:2] == ["commit", "enqueue"]
+
+
+@pytest.mark.asyncio
+async def test_upload_reports_enqueue_failure_as_visible_error(client, mock_db):
+    """T-20: a refused queue is not reported as a started ingestion."""
+    from unittest.mock import patch, AsyncMock as AM
+    from tests.conftest import _make_project
+
+    project = _make_project()
+    mock_db.get = AM(return_value=project)
+    mock_db.refresh = AM(return_value=None)
+    mock_db.execute = AM(return_value=MagicMock())
+
+    with (
+        patch("app.routers.files.storage.put_object", new=AM(return_value=None)),
+        patch(
+            "app.ingestion.worker.enqueue_ingest",
+            side_effect=ConnectionError("redis unavailable"),
+        ),
+    ):
+        resp = await client.post(
+            f"/api/v1/files/{project.id}/upload",
+            data={"module": "tender_docs"},
+            files={"file": ("report.pdf", b"%PDF-1.4 content", "application/pdf")},
+        )
+
+    assert resp.status_code == 201
+    body = resp.json()
+    assert body["ingest_status"] == "error"
+    assert "опашката" in body["ingest_error"]
+    assert mock_db.commit.await_count == 2
+
+
+@pytest.mark.asyncio
 async def test_delete_file_marks_stale(client, mock_db):
     """Изтриването на evidence файл маркира генерациите като stale."""
     from unittest.mock import patch, AsyncMock as AM

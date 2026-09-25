@@ -193,6 +193,24 @@ describe("UnderstandingPanel", () => {
     expect(getContentPlanMock).not.toHaveBeenCalled();
   });
 
+  it("warns when the source manifest has incomplete coverage", async () => {
+    getMock.mockResolvedValueOnce({
+      ...workspace,
+      source_manifest: {
+        file_count: 1,
+        manifest_hash: "hash",
+        complete: false,
+        incomplete_files: [
+          { file_id: "file-1", filename: "tender.pdf", issues: ["pages_missing:4"] },
+        ],
+      },
+    });
+    render(<UnderstandingPanel projectId="project-1" />);
+
+    const warning = await screen.findByTestId("source-manifest-incomplete");
+    expect(warning).toHaveTextContent("tender.pdf: липсващи страници 4");
+  });
+
   it("shows the three Bulgarian review panels and their source links", async () => {
     render(<UnderstandingPanel projectId="project-1" />);
 
