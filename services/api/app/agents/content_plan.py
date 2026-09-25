@@ -13,6 +13,10 @@ from typing import Any
 from pypdf import PdfReader
 from sqlalchemy import func, select
 
+from app.agents.requirement_dispositions import (
+    compute_dispositions,
+    redistribute_parent_criteria,
+)
 from app.core.storage import storage
 from app.core.models import (
     ContentPlanItem,
@@ -567,10 +571,43 @@ async def sync_outline_from_content_plan(outline_id: str, db) -> TpOutline:
         ]
 
     generatable = sum(1 for item in items if item.generation_uid)
+    previous = outline.outline_json or {}
+    resolutions = dict(previous.get("requirement_resolutions") or {})
+    requirement_result = await db.execute(
+        select(RequirementRegister)
+        .where(
+            RequirementRegister.project_id == outline.project_id,
+            RequirementRegister.status == "confirmed",
+            RequirementRegister.scope.in_(PROPOSAL_SCOPES),
+        )
+        .order_by(RequirementRegister.source_page, RequirementRegister.created_at, RequirementRegister.id)
+    )
+    requirements = list(requirement_result.scalars().all())
+    by_id = {item.id: item for item in items}
+
+    def under_schedule_root(item: ContentPlanItem) -> bool:
+        node: ContentPlanItem | None = item
+        while node is not None:
+            if _normalized(node.title) == _normalized(SCHEDULE_ROOT):
+                return True
+            node = by_id.get(node.parent_id) if node.parent_id else None
+        return False
+
+    coverage = compute_dispositions(
+        items,
+        requirements,
+        resolutions,
+        schedule_item_ids={item.id for item in items if under_schedule_root(item)},
+    )
     outline.outline_json = {
         "source": "understanding_content_plan",
         "content_plan_version": 1,
-        "understanding_status": (outline.outline_json or {}).get("understanding_status", {}),
+        "understanding_status": previous.get("understanding_status", {}),
+        **{
+            key: previous[key]
+            for key in ("mandatory_structure_source", "plan_author")
+            if key in previous
+        },
         "sections": build(None),
         "coverage_summary": {
             "content_plan_items": len(items),
@@ -582,6 +619,11 @@ async def sync_outline_from_content_plan(outline_id: str, db) -> TpOutline:
                 if isinstance(entry, dict) and entry.get("requirement_id")
             }),
         },
+        # K-03: every confirmed applicable requirement is accounted for.
+        "requirement_coverage": coverage["summary"],
+        "requirement_dispositions": coverage["dispositions"],
+        "global_controls": coverage["global_controls"],
+        "requirement_resolutions": resolutions,
     }
     await db.flush()
     return outline
@@ -632,15 +674,23 @@ async def _populate_from_mandatory_headings(
         all_nodes.append(item)
 
     for requirement in requirements:
-        if requirement.scope != "proposal_content":
+        # Evaluation rules are global controls (see requirement_dispositions);
+        # format/prohibition/cross-reference constraints are also attached to
+        # the point they anchor to, but never create decorative subpoints.
+        if requirement.scope not in {"proposal_content", "proposal_format"}:
             continue
         heading = _heading_anchor(requirement, headings)
         if not heading:
+            # Not silently dropped: compute_dispositions reports it unresolved.
             continue
         target = nodes_by_number[heading.number]
         raw_path = [_clean(part) for part in (requirement.proposal_path_json or []) if _clean(part)]
         leaf_title = _title(raw_path[-1]) if raw_path else heading.title
-        if not _is_heading_level_requirement(requirement, heading) and leaf_title:
+        if (
+            requirement.scope == "proposal_content"
+            and not _is_heading_level_requirement(requirement, heading)
+            and leaf_title
+        ):
             key = (target.id, _normalized(leaf_title))
             child = supplemental.get(key)
             if child is None:
@@ -717,23 +767,31 @@ async def _populate_from_mandatory_headings(
             child.number = f"{parent.number}.{next_index + offset}"
             child.order_index = next_index + offset
 
+    # Only leaves are drafted. Give every leaf its generation uid first, then
+    # move requirements that landed on a parent to an explicit receiver leaf
+    # (K-03) — a parent obligation must reach a concrete writer and verifier.
+    for item in all_nodes:
+        if not children_by_parent.get(item.id):
+            item.generation_uid = str(uuid.uuid4())
+    redistribute_parent_criteria(all_nodes)
+
     for item in all_nodes:
         criteria = [entry for entry in item.acceptance_criteria_json if isinstance(entry, dict)]
         item.linked_wbs_ids = _wbs_links(item.title, criteria, wbs_items)
         item.linked_fact_keys = _fact_links(item.title, criteria, facts)
-        if not children_by_parent.get(item.id):
-            if not criteria:
-                criterion_text = f"Разработена е задължителната точка „{item.title}“ от минималното съдържание."
-                item.acceptance_criteria_json = [{
-                    "id": str(uuid.uuid5(uuid.NAMESPACE_URL, f"mandatory:{outline.id}:{item.number}")),
-                    "text": criterion_text,
-                    "kind": "content",
-                    "source_quote": item.source_quotes_json[0]["source_quote"],
-                    "requirement_id": "",
-                    "requirement_text": criterion_text,
-                    "scope": "proposal_content",
-                }]
-            item.generation_uid = str(uuid.uuid4())
+        if item.generation_uid and not criteria:
+            criterion_text = f"Разработена е задължителната точка „{item.title}“ от минималното съдържание."
+            item.acceptance_criteria_json = [{
+                "id": str(uuid.uuid5(uuid.NAMESPACE_URL, f"mandatory:{outline.id}:{item.number}")),
+                "text": criterion_text,
+                "kind": "content",
+                "source_quote": item.source_quotes_json[0]["source_quote"],
+                "requirement_id": "",
+                "requirement_text": criterion_text,
+                "scope": "proposal_content",
+                # Synthetic: it never substitutes for an original requirement.
+                "synthetic": True,
+            }]
 
     await db.flush()
 
@@ -895,6 +953,7 @@ async def build_content_plan(project_id: str, db) -> TpOutline:
             assign_numbers(item.id, item.number)
 
     assign_numbers(None)
+    redistribute_parent_criteria(list(nodes.values()))
     await db.flush()
     await sync_outline_from_content_plan(outline.id, db)
     outline.outline_json = {

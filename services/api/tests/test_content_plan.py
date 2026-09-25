@@ -274,6 +274,97 @@ async def test_content_plan_approval_does_not_require_wbs_or_fact_sheet(
 
 
 @pytest.mark.asyncio
+async def test_approval_is_blocked_by_unresolved_requirements(client, mock_db, v2_pipeline):
+    project_id = "11111111-1111-1111-1111-111111111111"
+    outline = SimpleNamespace(
+        id="22222222-2222-2222-2222-222222222222",
+        project_id=project_id,
+        version=4,
+        status_locked=False,
+        approved_at=None,
+        outline_json={},
+    )
+    item = SimpleNamespace(
+        generation_uid="33333333-3333-3333-3333-333333333333",
+        number="1",
+        acceptance_criteria_json=[{"id": "c1", "text": "Критерий"}],
+    )
+    mock_db.execute.side_effect = [
+        SimpleNamespace(scalars=lambda: SimpleNamespace(all=lambda: [item])),
+    ]
+
+    async def fake_sync(outline_id, db):
+        outline.outline_json = {
+            "requirement_coverage": {
+                "unresolved": 1,
+                "unresolved_requirement_ids": ["req-lost"],
+            }
+        }
+        return outline
+
+    with (
+        patch("app.routers.content_plan._latest_plan", new=AsyncMock(return_value=outline)),
+        patch("app.routers.content_plan.sync_outline_from_content_plan", new=fake_sync),
+    ):
+        response = await client.post(f"/api/v1/content-plan/{project_id}/approve")
+
+    assert response.status_code == 409
+    assert response.json()["detail"]["unresolved_requirement_ids"] == ["req-lost"]
+    assert outline.status_locked is False
+
+
+@pytest.mark.asyncio
+async def test_exclusion_requires_a_reason(client, mock_db, v2_pipeline):
+    project_id = "11111111-1111-1111-1111-111111111111"
+    outline = SimpleNamespace(
+        id="outline-1", project_id=project_id, status_locked=False, outline_json={}
+    )
+    requirement = SimpleNamespace(id="req-1", project_id=project_id)
+    mock_db.get.return_value = requirement
+
+    with patch("app.routers.content_plan._latest_plan", new=AsyncMock(return_value=outline)):
+        response = await client.post(
+            f"/api/v1/content-plan/{project_id}/requirements/req-1/resolution",
+            json={"action": "exclude", "reason": "  "},
+        )
+
+    assert response.status_code == 422
+    assert outline.outline_json == {}
+
+
+@pytest.mark.asyncio
+async def test_human_exclusion_is_recorded_with_reason(client, mock_db, v2_pipeline):
+    project_id = "11111111-1111-1111-1111-111111111111"
+    outline = SimpleNamespace(
+        id="outline-1", project_id=project_id, status_locked=False, outline_json={}
+    )
+    requirement = SimpleNamespace(id="req-1", project_id=project_id)
+    mock_db.get.return_value = requirement
+    response_payload = {
+        "outline_id": "outline-1",
+        "version": 1,
+        "status_locked": False,
+        "source": "understanding_content_plan",
+        "items": [],
+    }
+
+    with (
+        patch("app.routers.content_plan._latest_plan", new=AsyncMock(return_value=outline)),
+        patch("app.routers.content_plan.sync_outline_from_content_plan", new=AsyncMock()),
+        patch("app.routers.content_plan._response", new=AsyncMock(return_value=response_payload)),
+    ):
+        response = await client.post(
+            f"/api/v1/content-plan/{project_id}/requirements/req-1/resolution",
+            json={"action": "exclude", "reason": "Отнася се само до обособена позиция 2."},
+        )
+
+    assert response.status_code == 200
+    resolution = outline.outline_json["requirement_resolutions"]["req-1"]
+    assert resolution["action"] == "exclude"
+    assert resolution["reason"] == "Отнася се само до обособена позиция 2."
+
+
+@pytest.mark.asyncio
 async def test_mandatory_heading_title_cannot_be_changed(client, mock_db, v2_pipeline):
     project_id = "11111111-1111-1111-1111-111111111111"
     item_id = "22222222-2222-2222-2222-222222222222"

@@ -112,6 +112,7 @@ TP AI is a monorepo for an AI-assisted workflow that prepares technical proposal
   - `apps/web/src/components/OutlinePanel.tsx`
   - `apps/web/src/components/RequirementChecklistPanel.test.tsx`
   - `apps/web/src/components/RequirementChecklistPanel.tsx`
+  - `apps/web/src/components/RequirementCoveragePanel.tsx`
   - `apps/web/src/components/SchedulePanel.test.tsx`
   - `apps/web/src/components/SchedulePanel.tsx`
   - `apps/web/src/components/ToastProvider.tsx`
@@ -142,6 +143,7 @@ TP AI is a monorepo for an AI-assisted workflow that prepares technical proposal
   - `services/api/app/agents/proposal_quality.py`
   - `services/api/app/agents/proposal_timing.py`
   - `services/api/app/agents/requirement_coverage.py`
+  - `services/api/app/agents/requirement_dispositions.py`
   - `services/api/app/agents/requirements.py`
   - `services/api/app/agents/schedule.py`
   - `services/api/app/agents/source_manifest.py`
@@ -195,12 +197,12 @@ TP AI is a monorepo for an AI-assisted workflow that prepares technical proposal
 
 ## Test Inventory
 
-- Total backend tests discovered: `341`
+- Total backend tests discovered: `349`
 - `test_agents.py`: `45`
 - `test_common_proposal_scenarios.py`: `21`
 - `test_config.py`: `2`
 - `test_consistency.py`: `5`
-- `test_content_plan.py`: `15`
+- `test_content_plan.py`: `18`
 - `test_criteria_verifier.py`: `6`
 - `test_drafting_blueprint.py`: `5`
 - `test_drafting_v2.py`: `6`
@@ -224,6 +226,7 @@ TP AI is a monorepo for an AI-assisted workflow that prepares technical proposal
 - `test_requirement_checklist.py`: `11`
 - `test_requirement_coverage.py`: `2`
 - `test_requirement_coverage_strictness.py`: `9`
+- `test_requirement_dispositions.py`: `5`
 - `test_schedule.py`: `2`
 - `test_schedule_integrity.py`: `6`
 - `test_schedule_parser.py`: `2`

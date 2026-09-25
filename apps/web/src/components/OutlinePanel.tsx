@@ -8,6 +8,7 @@ import {
   type ContentPlanItem,
   type TpOutline,
 } from "@/lib/api";
+import RequirementCoveragePanel from "@/components/RequirementCoveragePanel";
 
 interface Props {
   projectId: string;
@@ -152,6 +153,14 @@ export default function OutlinePanel({ projectId, refreshKey = 0 }: Props) {
         ))}
       </ul>
 
+      <RequirementCoveragePanel
+        plan={plan}
+        busy={busy}
+        onResolve={(requirementId, resolution) =>
+          act(() => api.contentPlan.resolveRequirement(projectId, requirementId, resolution))
+        }
+      />
+
       {plan.status_locked ? (
         <div className="flex items-center justify-between border-t pt-2">
           <span className="text-xs font-medium text-green-700">✓ Планът е одобрен</span>
@@ -169,7 +178,11 @@ export default function OutlinePanel({ projectId, refreshKey = 0 }: Props) {
         <button
           type="button"
           data-testid="content-plan-approve-button"
-          disabled={busy || generatableCount === 0}
+          disabled={
+            busy ||
+            generatableCount === 0 ||
+            (plan.requirement_coverage?.unresolved ?? 0) > 0
+          }
           onClick={() => act(() => api.contentPlan.approve(projectId))}
           className="w-full rounded bg-green-600 px-3 py-1.5 text-xs text-white disabled:opacity-50"
         >

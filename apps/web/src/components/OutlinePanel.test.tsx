@@ -19,6 +19,7 @@ vi.mock("@/lib/api", async () => {
         updateItem: vi.fn(),
         approve: vi.fn(),
         unlock: vi.fn(),
+        resolveRequirement: vi.fn(),
       },
     },
   };
@@ -97,6 +98,54 @@ describe("OutlinePanel Phase 2", () => {
     expect(await screen.findByTestId("content-plan-v2-disabled")).toBeInTheDocument();
     expect(api.contentPlan.get).not.toHaveBeenCalled();
     expect(screen.queryByTestId("content-plan-build-button")).not.toBeInTheDocument();
+  });
+
+  it("blocks approval and resolves a requirement without a receiver", async () => {
+    const blocked: ContentPlan = {
+      ...plan,
+      requirement_coverage: {
+        total: 2,
+        target: 1,
+        global_control: 0,
+        excluded: 0,
+        unresolved: 1,
+        unresolved_requirement_ids: ["req-lost"],
+      },
+      requirement_dispositions: [
+        {
+          requirement_id: "req-lost",
+          text: "Мерки за проверка на сертификатите",
+          source_quote: "Участникът следва да опише мерките",
+          source_page: 4,
+          disposition: "unresolved",
+        },
+      ],
+    };
+    vi.mocked(api.contentPlan.get).mockResolvedValue(blocked);
+    vi.mocked(api.contentPlan.resolveRequirement).mockResolvedValue({
+      ...blocked,
+      requirement_coverage: { ...blocked.requirement_coverage!, target: 2, unresolved: 0, unresolved_requirement_ids: [] },
+      requirement_dispositions: [],
+    });
+    render(<OutlinePanel projectId="project-1" />);
+
+    expect(await screen.findByTestId("requirement-unresolved-list")).toHaveTextContent(
+      "Мерки за проверка на сертификатите",
+    );
+    expect(screen.getByTestId("content-plan-approve-button")).toBeDisabled();
+
+    await userEvent.click(screen.getByRole("button", { name: "Към подточката" }));
+
+    await waitFor(() =>
+      expect(api.contentPlan.resolveRequirement).toHaveBeenCalledWith(
+        "project-1",
+        "req-lost",
+        { action: "assign", item_id: plan.items.find((item) => item.generation_uid)!.id },
+      ),
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("content-plan-approve-button")).not.toBeDisabled(),
+    );
   });
 
   it("offers a deterministic build when no content plan exists", async () => {

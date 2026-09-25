@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from datetime import datetime, timezone
 from typing import Any, Literal
 
@@ -13,7 +14,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.agents.content_plan import build_content_plan, sync_outline_from_content_plan
 from app.agents.understanding import ensure_v2_enabled
 from app.core.database import get_db
-from app.core.models import ContentPlanItem, Project, ProjectFactSheet, TpOutline, WbsItem
+from app.core.models import (
+    ContentPlanItem,
+    Project,
+    ProjectFactSheet,
+    RequirementRegister,
+    TpOutline,
+    WbsItem,
+)
 
 router = APIRouter()
 
@@ -52,6 +60,17 @@ class ContentPlanResponse(BaseModel):
     source: str
     understanding_status: dict[str, bool] = Field(default_factory=dict)
     items: list[ContentPlanItemResponse]
+    # K-03: disposition of every confirmed applicable requirement.
+    requirement_coverage: dict[str, Any] | None = None
+    requirement_dispositions: list[dict[str, Any]] = Field(default_factory=list)
+    global_controls: list[dict[str, Any]] = Field(default_factory=list)
+    plan_author: dict[str, Any] | None = None
+
+
+class RequirementResolution(BaseModel):
+    action: Literal["assign", "exclude", "global_control"]
+    item_id: str | None = None
+    reason: str | None = Field(default=None, max_length=2000)
 
 
 class ContentPlanItemUpdate(BaseModel):
@@ -82,6 +101,7 @@ async def _response(outline: TpOutline, db: AsyncSession) -> ContentPlanResponse
         .order_by(ContentPlanItem.order_index, ContentPlanItem.id)
     )
     understanding_status = await _understanding_status(outline.project_id, db)
+    outline_json = outline.outline_json if isinstance(outline.outline_json, dict) else {}
     return ContentPlanResponse(
         outline_id=outline.id,
         version=outline.version,
@@ -89,6 +109,10 @@ async def _response(outline: TpOutline, db: AsyncSession) -> ContentPlanResponse
         source="understanding_content_plan",
         understanding_status=understanding_status,
         items=list(result.scalars().all()),
+        requirement_coverage=outline_json.get("requirement_coverage"),
+        requirement_dispositions=list(outline_json.get("requirement_dispositions") or []),
+        global_controls=list(outline_json.get("global_controls") or []),
+        plan_author=outline_json.get("plan_author"),
     )
 
 
@@ -170,6 +194,84 @@ async def update_content_plan_item(
     return item
 
 
+@router.post(
+    "/{project_id}/requirements/{requirement_id}/resolution",
+    response_model=ContentPlanResponse,
+)
+async def resolve_requirement_disposition(
+    project_id: str,
+    requirement_id: str,
+    data: RequirementResolution,
+    db: AsyncSession = Depends(get_db),
+):
+    """Human decision for a requirement: assign a receiver, keep as a global
+    rule, or exclude with a recorded reason. There is no reason-less override."""
+    _require_v2()
+    outline = await _latest_plan(project_id, db)
+    if not outline:
+        raise HTTPException(status_code=404, detail="Content plan not found")
+    if outline.status_locked:
+        raise HTTPException(status_code=409, detail="Одобреният план първо трябва да бъде отключен.")
+    requirement = await db.get(RequirementRegister, requirement_id)
+    if not requirement or requirement.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Requirement not found")
+    outline_json = dict(outline.outline_json or {})
+    resolutions = dict(outline_json.get("requirement_resolutions") or {})
+    if data.action == "exclude":
+        if not (data.reason or "").strip() or len(data.reason.strip()) < 10:
+            raise HTTPException(
+                status_code=422,
+                detail="Изключването изисква обосновка (поне 10 знака).",
+            )
+        resolutions[requirement_id] = {
+            "action": "exclude",
+            "reason": data.reason.strip(),
+            "decided_at": datetime.now(timezone.utc).isoformat(),
+        }
+    elif data.action == "global_control":
+        resolutions[requirement_id] = {
+            "action": "global_control",
+            "reason": (data.reason or "").strip() or None,
+            "decided_at": datetime.now(timezone.utc).isoformat(),
+        }
+    else:
+        item = await db.get(ContentPlanItem, data.item_id) if data.item_id else None
+        if not item or item.outline_id != outline.id or not item.generation_uid:
+            raise HTTPException(
+                status_code=422,
+                detail="Посочете работна подточка от текущия план.",
+            )
+        criteria_texts = [
+            str(value).strip()
+            for value in (requirement.acceptance_criteria_json or [])
+            if str(value).strip()
+        ] or [requirement.normalized_text]
+        criteria = list(item.acceptance_criteria_json or [])
+        for index, text in enumerate(criteria_texts, start=1):
+            criterion_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"{requirement.id}:{index}:{text}"))
+            if any(entry.get("id") == criterion_id for entry in criteria if isinstance(entry, dict)):
+                continue
+            criteria.append(
+                {
+                    "id": criterion_id,
+                    "text": text,
+                    "kind": requirement.kind,
+                    "source_quote": requirement.source_quote,
+                    "requirement_id": requirement.id,
+                    "requirement_text": requirement.normalized_text,
+                    "scope": requirement.scope,
+                    "assigned_by": "human",
+                }
+            )
+        item.acceptance_criteria_json = criteria
+        resolutions.pop(requirement_id, None)
+    outline_json["requirement_resolutions"] = resolutions
+    outline.outline_json = outline_json
+    await db.flush()
+    await sync_outline_from_content_plan(outline.id, db)
+    return await _response(outline, db)
+
+
 @router.post("/{project_id}/approve", response_model=ContentPlanResponse)
 async def approve_content_plan(project_id: str, db: AsyncSession = Depends(get_db)):
     _require_v2()
@@ -188,6 +290,21 @@ async def approve_content_plan(project_id: str, db: AsyncSession = Depends(get_d
         raise HTTPException(
             status_code=409,
             detail="Липсват критерии за приемане в точки: " + ", ".join(missing),
+        )
+    # K-03: recompute dispositions from the current items and confirmed
+    # requirements; an unaccounted requirement blocks approval.
+    await sync_outline_from_content_plan(outline.id, db)
+    coverage = (getattr(outline, "outline_json", None) or {}).get("requirement_coverage")
+    if isinstance(coverage, dict) and coverage.get("unresolved"):
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": (
+                    "Има потвърдени изисквания без получател в плана. Посочете "
+                    "подточка, глобално правило или обосновано изключение."
+                ),
+                "unresolved_requirement_ids": coverage.get("unresolved_requirement_ids", []),
+            },
         )
     await db.execute(
         update(TpOutline)

@@ -278,6 +278,31 @@ export interface ContentPlan {
     fact_sheet_confirmed?: boolean;
   };
   items: ContentPlanItem[];
+  requirement_coverage?: RequirementCoverageSummary | null;
+  requirement_dispositions?: RequirementDisposition[];
+  global_controls?: Array<RequirementDisposition & { category: string }>;
+  plan_author?: Record<string, unknown> | null;
+}
+
+export interface RequirementCoverageSummary {
+  total: number;
+  target: number;
+  global_control: number;
+  excluded: number;
+  unresolved: number;
+  unresolved_requirement_ids: string[];
+}
+
+export interface RequirementDisposition {
+  requirement_id: string;
+  kind?: string | null;
+  scope?: string | null;
+  text?: string | null;
+  source_quote?: string | null;
+  source_page?: number | null;
+  disposition: "target" | "global_control" | "excluded" | "unresolved";
+  targets?: Array<{ item_id: string; number: string; title: string }>;
+  resolution?: { action: string; reason?: string | null } | null;
 }
 
 export interface ScheduleResource {
@@ -888,6 +913,19 @@ export const api = {
       apiFetch<ContentPlan>(`/api/v1/content-plan/${projectId}/unlock`, {
         method: "POST",
       }),
+    resolveRequirement: (
+      projectId: string,
+      requirementId: string,
+      resolution: {
+        action: "assign" | "exclude" | "global_control";
+        item_id?: string;
+        reason?: string;
+      },
+    ) =>
+      apiFetch<ContentPlan>(
+        `/api/v1/content-plan/${projectId}/requirements/${encodeURIComponent(requirementId)}/resolution`,
+        { method: "POST", body: JSON.stringify(resolution) },
+      ),
   },
   understanding: {
     get: (projectId: string) =>
