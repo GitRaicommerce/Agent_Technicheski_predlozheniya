@@ -452,7 +452,8 @@ export interface GenerationJob {
   completed_at?: string | null;
 }
 
-export type UnderstandingItemStatus = "extracted" | "confirmed" | "rejected";
+// "superseded": no longer produced by the current sources (kept for old plans).
+export type UnderstandingItemStatus = "extracted" | "confirmed" | "rejected" | "superseded";
 export type UnderstandingRequirementScope =
   | "proposal_content"
   | "proposal_format"

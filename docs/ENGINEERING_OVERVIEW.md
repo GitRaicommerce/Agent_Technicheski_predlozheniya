@@ -149,6 +149,7 @@ TP AI is a monorepo for an AI-assisted workflow that prepares technical proposal
   - `services/api/app/agents/requirement_coverage.py`
   - `services/api/app/agents/requirement_dispositions.py`
   - `services/api/app/agents/requirements.py`
+  - `services/api/app/agents/review_preservation.py`
   - `services/api/app/agents/schedule.py`
   - `services/api/app/agents/source_manifest.py`
   - `services/api/app/agents/tender_struct.py`
@@ -201,7 +202,7 @@ TP AI is a monorepo for an AI-assisted workflow that prepares technical proposal
 
 ## Test Inventory
 
-- Total backend tests discovered: `363`
+- Total backend tests discovered: `368`
 - `test_agents.py`: `45`
 - `test_common_proposal_scenarios.py`: `21`
 - `test_config.py`: `2`
@@ -233,6 +234,7 @@ TP AI is a monorepo for an AI-assisted workflow that prepares technical proposal
 - `test_requirement_coverage.py`: `2`
 - `test_requirement_coverage_strictness.py`: `9`
 - `test_requirement_dispositions.py`: `5`
+- `test_review_preservation.py`: `5`
 - `test_schedule.py`: `2`
 - `test_schedule_integrity.py`: `6`
 - `test_schedule_parser.py`: `2`

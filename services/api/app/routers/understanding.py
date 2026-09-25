@@ -16,6 +16,11 @@ from app.agents.understanding import (
     reconcile_understanding_job,
     request_understanding_job_stop,
 )
+from app.agents.review_preservation import (
+    MACHINE_ORIGINS,
+    REVIEW_FIELDS,
+    record_human_decision,
+)
 from app.agents.source_manifest import _file_entry as _manifest_file_entry
 from app.agents.source_manifest import summarize_manifest
 from app.core.database import get_db
@@ -90,6 +95,9 @@ class RequirementResponse(RequirementCreate):
     project_id: str
     created_at: datetime
     origin: Literal["map", "audit", "proposal_audit", "manual"]
+    # Responses may also carry "superseded" (K-07); inputs cannot set it.
+    status: Literal["extracted", "confirmed", "rejected", "superseded"] = "extracted"
+    human_decision_json: dict[str, Any] | None = None
 
     model_config = {"from_attributes": True}
 
@@ -121,6 +129,7 @@ class WbsUpdate(BaseModel):
 class WbsResponse(WbsCreate):
     id: str
     project_id: str
+    status: Literal["extracted", "confirmed", "rejected", "superseded"] = "extracted"
 
     model_config = {"from_attributes": True}
 
@@ -319,6 +328,7 @@ async def get_understanding_workspace(
         item
         for item in proposal_requirements
         if item.origin in ("map", "audit", "proposal_audit")
+        and item.status != "superseded"
     ]
     accepted_machine = [item for item in machine if item.status != "rejected"]
     noise = [item for item in machine if item.status == "rejected"]
@@ -488,8 +498,20 @@ async def update_requirement(
         await _validate_requirement_source(
             project_id, source_file_id, source_quote, db
         )
+    edited_fields = [
+        field
+        for field, value in values.items()
+        if field in REVIEW_FIELDS and getattr(item, field, None) != value
+    ]
     for field, value in values.items():
         setattr(item, field, value)
+    if item.origin in MACHINE_ORIGINS:
+        # K-07: remember what the reviewer decided and edited.
+        record_human_decision(
+            item,
+            status=values.get("status"),
+            edited_fields=edited_fields,
+        )
     await db.flush()
     return item
 
@@ -506,6 +528,8 @@ async def delete_requirement(
         raise HTTPException(status_code=404, detail="Requirement not found")
     # Preserve review evidence so precision/noise remains measurable.
     item.status = "rejected"
+    if item.origin in MACHINE_ORIGINS:
+        record_human_decision(item, status="rejected")
     await db.flush()
 
 
@@ -516,14 +540,21 @@ async def confirm_requirements(
     _require_v2()
     await _project_or_404(project_id, db)
     result = await db.execute(
-        update(RequirementRegister)
-        .where(
+        select(RequirementRegister).where(
             RequirementRegister.project_id == project_id,
-            RequirementRegister.status != "rejected",
+            # Superseded records belong to an older source set and are never
+            # re-confirmed in bulk (K-07).
+            RequirementRegister.status.not_in(["rejected", "superseded"]),
         )
-        .values(status="confirmed")
     )
-    return {"status": "confirmed", "updated": result.rowcount or 0}
+    updated = 0
+    for item in result.scalars().all():
+        item.status = "confirmed"
+        if item.origin in MACHINE_ORIGINS:
+            record_human_decision(item, status="confirmed")
+        updated += 1
+    await db.flush()
+    return {"status": "confirmed", "updated": updated}
 
 
 @router.post(
@@ -588,7 +619,7 @@ async def confirm_wbs(project_id: str, db: AsyncSession = Depends(get_db)):
     await _project_or_404(project_id, db)
     result = await db.execute(
         update(WbsItem)
-        .where(WbsItem.project_id == project_id, WbsItem.status != "rejected")
+        .where(WbsItem.project_id == project_id, WbsItem.status.not_in(["rejected", "superseded"]))
         .values(status="confirmed")
     )
     return {"status": "confirmed", "updated": result.rowcount or 0}

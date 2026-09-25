@@ -18,6 +18,11 @@ from typing import Any, Awaitable, Callable
 import structlog
 from sqlalchemy import delete, func, select
 
+from app.agents.review_preservation import (
+    MACHINE_ORIGINS,
+    reconcile_requirements,
+    reconcile_wbs,
+)
 from app.core.config import settings
 from app.core.database import AsyncSessionLocal
 from app.core.llm_gateway import llm_gateway
@@ -1085,51 +1090,49 @@ async def run_understanding(
     )
     completed_steps += 1
 
-    await db.execute(
-        delete(RequirementRegister).where(
-            RequirementRegister.project_id == project_id,
-            RequirementRegister.origin.in_(["map", "audit", "proposal_audit"]),
-        )
-    )
-    await db.execute(delete(WbsItem).where(WbsItem.project_id == project_id))
-
-    for item in reduced["requirements"]:
-        ref = item["source_ref"]
-        db.add(
-            RequirementRegister(
-                id=str(uuid.uuid4()),
-                project_id=project_id,
-                source_file_id=ref["file_id"],
-                source_page=ref.get("page"),
-                source_quote=item["source_quote"],
-                normalized_text=item["normalized_text"],
-                kind=item["kind"],
-                scope=item.get("scope", "execution_constraint"),
-                target_section_hint=item.get("target_section_hint"),
-                proposal_path_json=item.get("proposal_path") or [],
-                acceptance_criteria_json=item.get("acceptance_criteria") or [],
-                status="extracted",
-                origin=item.get("origin", "map"),
+    # K-07: reconcile with the existing register instead of deleting it, so
+    # human review decisions and ids referenced by plans survive reanalysis.
+    existing_requirements = list(
+        (
+            await db.execute(
+                select(RequirementRegister).where(
+                    RequirementRegister.project_id == project_id,
+                    RequirementRegister.origin.in_(list(MACHINE_ORIGINS)),
+                )
             )
         )
+        .scalars()
+        .all()
+    )
+    requirement_changes = reconcile_requirements(
+        existing_requirements,
+        reduced["requirements"],
+        project_id=project_id,
+        model_factory=RequirementRegister,
+    )
+    for record in requirement_changes["created"]:
+        db.add(record)
+    for record in requirement_changes["deleted"]:
+        await db.delete(record)
 
-    wbs_models: dict[str, WbsItem] = {}
-    for item in reduced["wbs_items"]:
-        model = WbsItem(
-            id=str(uuid.uuid4()),
-            project_id=project_id,
-            parent_id=None,
-            level=item["level"],
-            kind=item["kind"],
-            title=item["title"],
-            description=item.get("description"),
-            source_refs_json=item.get("source_refs") or [],
-            schedule_task_uid=item.get("schedule_task_uid"),
-            order_index=item["order_index"],
-            status="extracted",
+    existing_wbs = list(
+        (
+            await db.execute(select(WbsItem).where(WbsItem.project_id == project_id))
         )
-        wbs_models[item["key"]] = model
+        .scalars()
+        .all()
+    )
+    wbs_changes = reconcile_wbs(
+        existing_wbs,
+        reduced["wbs_items"],
+        project_id=project_id,
+        model_factory=WbsItem,
+    )
+    wbs_models: dict[str, WbsItem] = wbs_changes["models"]
+    for model in wbs_changes["created"]:
         db.add(model)
+    for model in wbs_changes["deleted"]:
+        await db.delete(model)
     await db.flush()
     for item in reduced["wbs_items"]:
         if item.get("parent_key") in wbs_models:
@@ -1167,6 +1170,12 @@ async def run_understanding(
             for item in reduced["requirements"]
             if item.get("scope") in PROPOSAL_SCOPES
         ),
+        # K-07 reconciliation evidence.
+        "requirements_preserved": len(requirement_changes["kept"]),
+        "requirements_new": len(requirement_changes["created"]),
+        "requirements_superseded": len(requirement_changes["superseded"]),
+        "requirements_needing_review": len(requirement_changes["needs_review"]),
+        "wbs_preserved": len(wbs_changes["models"]) - len(wbs_changes["created"]),
     }
 
 

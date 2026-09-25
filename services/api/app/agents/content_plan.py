@@ -836,7 +836,7 @@ async def build_content_plan(project_id: str, db) -> TpOutline:
 
     wbs_result = await db.execute(
         select(WbsItem)
-        .where(WbsItem.project_id == project_id, WbsItem.status != "rejected")
+        .where(WbsItem.project_id == project_id, WbsItem.status.not_in(["rejected", "superseded"]))
         .order_by(WbsItem.order_index, WbsItem.id)
     )
     wbs_items = list(wbs_result.scalars().all())

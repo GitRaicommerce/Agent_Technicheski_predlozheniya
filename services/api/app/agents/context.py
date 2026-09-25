@@ -293,7 +293,7 @@ async def build_project_grounding_context_v2(
 
     wbs_result = await db.execute(
         select(WbsItem)
-        .where(WbsItem.project_id == project_id, WbsItem.status != "rejected")
+        .where(WbsItem.project_id == project_id, WbsItem.status.not_in(["rejected", "superseded"]))
         .order_by(WbsItem.order_index, WbsItem.id)
     )
     all_wbs = list(wbs_result.scalars().all())

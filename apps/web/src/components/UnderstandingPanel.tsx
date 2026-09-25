@@ -351,7 +351,10 @@ function RequirementsEditor({
     status: "extracted",
   });
   const proposalRequirements = workspace.requirements.filter(
-    (item) => item.status !== "rejected" && PROPOSAL_SCOPES.includes(item.scope),
+    (item) =>
+      item.status !== "rejected" &&
+      item.status !== "superseded" &&
+      PROPOSAL_SCOPES.includes(item.scope),
   );
   const contentRequirements = proposalRequirements.filter((item) => item.scope === "proposal_content");
   const mandatoryItems = (contentPlan?.items ?? [])

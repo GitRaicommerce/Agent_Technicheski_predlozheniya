@@ -120,7 +120,7 @@ async def _response(outline: TpOutline, db: AsyncSession) -> ContentPlanResponse
 
 async def _understanding_status(project_id: str, db: AsyncSession) -> dict[str, bool]:
     wbs_result = await db.execute(
-        select(WbsItem).where(WbsItem.project_id == project_id, WbsItem.status != "rejected")
+        select(WbsItem).where(WbsItem.project_id == project_id, WbsItem.status.not_in(["rejected", "superseded"]))
     )
     wbs_items = list(wbs_result.scalars().all())
     fact_result = await db.execute(
