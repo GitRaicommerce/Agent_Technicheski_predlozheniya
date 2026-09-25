@@ -538,6 +538,54 @@ async def test_understanding_concurrent_runner_propagates_batch_errors():
             )
 
 
+@pytest.mark.parametrize("origin", ["map", "proposal_audit"])
+@pytest.mark.parametrize(
+    "text,expected",
+    [
+        (
+            "В техническото предложение участникът трябва да опише проверката "
+            "на сертификатите за вложените материали.",
+            "proposal_content",
+        ),
+        (
+            "В техническото предложение участникът описва как ще проверява "
+            "удостоверенията за правоспособност на подизпълнителите.",
+            "proposal_content",
+        ),
+        (
+            "Участникът трябва да притежава сертификат ISO 9001, което се "
+            "декларира в ЕЕДОП.",
+            "qualification_admin",
+        ),
+        (
+            "Експертът следва да има пълна проектантска правоспособност, което "
+            "се доказва с удостоверение.",
+            "qualification_admin",
+        ),
+    ],
+)
+def test_certificate_control_in_proposal_is_not_qualification(origin, text, expected):
+    """T-03 / K-02: describing a control stays proposal content."""
+    from app.agents.understanding import _classify_requirement_scope
+
+    assert _classify_requirement_scope(text, "content", "", origin) == expected
+
+
+def test_scope_fixture_certificate_cases_classify_correctly():
+    from app.agents.understanding import _classify_requirement_scope
+    from tests.scope_fixture import load_scope_fixture
+
+    fixture = load_scope_fixture()
+    by_key = {
+        entry["key"]: entry
+        for entry in fixture["expected_requirements"] + fixture["expected_exclusions"]
+    }
+    certificates = by_key["R-last-page-certificates"]
+    iso = by_key["X-qualification-iso"]
+    assert _classify_requirement_scope(certificates["quote"], "content", "", "map") == "proposal_content"
+    assert _classify_requirement_scope(iso["quote"], "obligation", "", "map") == "qualification_admin"
+
+
 def test_understanding_job_response_does_not_send_checkpoint_payload_to_ui():
     now = datetime.now(timezone.utc)
     job = SimpleNamespace(

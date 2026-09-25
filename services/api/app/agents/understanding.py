@@ -101,9 +101,14 @@ PROPOSAL_AUDIT_SYSTEM_PROMPT = """Ти си независим одитор за
 изисква те да бъдат описани в ТП. Открий липсващите спрямо текущия регистър.
 Не превръщай в изисквания към ТП финансов оборот, застраховки, свързаност,
 основания за отстраняване, ЕЕДОП, образование, правоспособност, сертификати,
-години/обекти опит на експертите. От критериите за подбор са релевантни само
+години/обекти опит на експертите, когато става дума за това участникът да ги
+притежава или докаже. От критериите за подбор са релевантни само
 наименованията и броят на ключовите роли, когато са нужни за организационната
 част на ТП; конкретният опит и доказателствата остават извън ТП.
+Изключение: ако документът изисква В ТП да се опише как участникът ще
+проверява, контролира или управлява сертификати, удостоверения или
+правоспособност (например на материали, подизпълнители или работници), това е
+изискване към съдържанието на ТП и трябва да бъде извлечено.
 Провери особено забрани, ограничения, минимални елементи, връзки „за всяка“
 и критерии за оценка. Запази йерархията раздел → подточка → задължителен
 елемент. Върни строг JSON:
@@ -225,11 +230,50 @@ def _classify_requirement_scope(
     is_team_presentation_rule = any(
         marker in normalized for marker in proposal_team_presentation_markers
     )
+    # K-02: "certificate", "licence" etc. are evidence of the bidder's
+    # qualification only when the bidder must *hold or prove* them. When the
+    # sentence asks the bidder to *describe in the proposal* how such documents
+    # are controlled (a method/control), it is proposal content.
+    has_possession_or_proof = any(
+        marker in normalized
+        for marker in (
+            "да притежава",
+            "притежава валиден",
+            "притежава сертификат",
+            "декларира",
+            "доказва",
+            "доказателство",
+            "еедоп",
+            "критерий за подбор",
+            "критерии за подбор",
+            "технически и професионални способности",
+            "да разполага с",
+            "следва да има",
+        )
+    )
+    describes_in_proposal = any(
+        marker in normalized
+        for marker in (
+            "техническото предложение",
+            "техническо предложение",
+            "в предложението",
+            "в програмата",
+            "предложение за изпълнение",
+        )
+    ) and bool(
+        re.search(
+            r"\b(опише|описва|описание|представи|представя|посочи|посочва|"
+            r"предложи|предлага|разработи|включи|включва|обясни)\w*",
+            normalized,
+        )
+    )
+    is_proposal_description = describes_in_proposal and not has_possession_or_proof
     if any(marker in normalized for marker in administrative_markers):
         return "qualification_admin"
     if (
         any(marker in normalized for marker in qualification_evidence_markers)
         and not is_team_presentation_rule
+        and not is_proposal_description
     ):
         return "qualification_admin"
 
