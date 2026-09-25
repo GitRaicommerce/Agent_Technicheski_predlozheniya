@@ -321,9 +321,9 @@ Lead: Claude (Cowork), branch `main`, local commits pushed by the user. Test env
 
 ## Next Recommended Steps
 
-1. On a separate implementation assignment, start WP-00 from the GPT-6 Sol implementation plan; verify ownership and current source rather than repeating the full audit.
-2. Deliver milestone M1: reliable sources, conserved requirements, model-assisted planning, fixed inputs and independent plan acceptance. Follow explicit package dependencies.
-3. Deliver milestone M2: the complete deterministic test journey through drafting, verification and DOCX, including the accepted model-role policy and all applicable regression cases.
+1. **M1 is technically complete (2026-09-25, WP-00..WP-05)** on controlled/mocked inputs: backend 444 passed under both `v1` and `v2` environments (tests no longer depend on `.env`), frontend lint+tsc+Vitest 89/89, scripts 95/95, migration chain single-head `b4c5d6e7f8a9` validated in offline SQL mode (additive only). M1 is a plan-quality milestone, not a completed proposal, and has **not** been run on a live stack or with real model calls.
+2. Before using the new flow on a real project: push to GitHub, run `alembic upgrade head` on a *copy* of the production database first, then production; switch `GENERATION_PIPELINE=v2`; keep `LLM_ROLE_POLICY_MODE=legacy` until API access to `gpt-6-astra`/`gpt-6-sol` is confirmed, then set `roles`. Under v2 every drafting start now requires a passed plan audit — run Understanding → content plan → (optional) plan author → plan audit → approve → generate.
+3. Next package: WP-06 (exact accepted criteria/evidence/brief handoff to the selected routine/complex writer), then WP-08 (lossless assembly, exact-content verification, DOCX calendar policy), WP-07 (edit preservation, authoritative selection UI), WP-09 (integrated journey, startup truthfulness) for milestone M2.
 4. Deliver milestone M3 only with supplied real sources, expert review, API access and an approved spending cap. Compare model/auditor configurations and report actual coverage and cost; do not restart historical paid calibration automatically.
 
 ## Notes

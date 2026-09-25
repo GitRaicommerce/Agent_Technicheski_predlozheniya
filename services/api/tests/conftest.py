@@ -21,6 +21,23 @@ from app.core.database import get_db
 from app.main import app
 
 
+@pytest.fixture(autouse=True)
+def _deterministic_runtime_settings(monkeypatch):
+    """Tests must not depend on the developer's or container's .env.
+
+    The suite runs inside the Docker api container (Agent.md), whose
+    environment may enable v2, the plan-audit gate or the role model policy.
+    Every test starts from the documented defaults; tests of v2 behavior opt
+    in explicitly with monkeypatch.
+    """
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "generation_pipeline", "v1")
+    monkeypatch.setattr(settings, "plan_audit_required", True)
+    monkeypatch.setattr(settings, "llm_role_policy_mode", "legacy")
+    monkeypatch.setattr(settings, "llm_role_policy", "")
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

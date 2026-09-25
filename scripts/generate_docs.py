@@ -52,9 +52,54 @@ def parse_services(compose_text: str) -> list[str]:
     return services
 
 
+_TRACKED: set[str] | None = None
+
+
+def tracked_paths() -> set[str] | None:
+    """Paths tracked by git (files and their parent directories).
+
+    The overview must describe the repository, not the local working
+    directory: untracked folders (agent worktrees, scratch output) would make
+    the committed document differ from the one CI regenerates on a clean
+    checkout. Falls back to the file system when git is unavailable.
+    """
+    global _TRACKED
+    if _TRACKED is not None:
+        return _TRACKED
+    import subprocess
+
+    try:
+        output = subprocess.run(
+            ["git", "ls-files", "-z"],
+            cwd=ROOT,
+            check=True,
+            capture_output=True,
+        ).stdout.decode("utf-8")
+    except Exception:
+        return None
+    paths: set[str] = set()
+    for entry in output.split("\0"):
+        if not entry:
+            continue
+        parts = entry.split("/")
+        for index in range(1, len(parts) + 1):
+            paths.add("/".join(parts[:index]))
+    _TRACKED = paths
+    return _TRACKED
+
+
+def _is_tracked(path: Path) -> bool:
+    tracked = tracked_paths()
+    if tracked is None:
+        return True
+    return path.relative_to(ROOT).as_posix() in tracked
+
+
 def top_level_tree() -> list[str]:
     items: list[str] = []
     for path in sorted(ROOT.iterdir(), key=lambda p: (not p.is_dir(), p.name.lower())):
+        if not _is_tracked(path):
+            continue
         if path.name in {
             ".git",
             ".next",
@@ -81,6 +126,8 @@ def app_tree(base: Path, depth: int = 2) -> list[str]:
             return
         for child in sorted(path.iterdir(), key=lambda p: (not p.is_dir(), p.name.lower())):
             if child.name in {"__pycache__", ".next", "node_modules"}:
+                continue
+            if not _is_tracked(child):
                 continue
             indent = "  " * level
             suffix = "/" if child.is_dir() else ""
