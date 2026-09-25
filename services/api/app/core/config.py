@@ -29,6 +29,15 @@ class Settings(BaseSettings):
     llm_fallback_model: str = "claude-3-5-sonnet-20241022"
     llm_max_tokens: int = 16384
     llm_temperature: float = 0.2
+    # Per-role model policy overrides (JSON object keyed by role), e.g.
+    # {"drafting_routine": {"model": "gpt-6-sol", "effort": "high"}}.
+    # Roles and defaults live in app/core/model_policy.py.
+    llm_role_policy: str = ""
+    llm_policy_version: str = ""
+    # "legacy": every role uses llm_default_model (pre-policy behavior, safe
+    # until account access to the role models is verified).
+    # "roles": the per-role GPT-6 profiles from model_policy.py are active.
+    llm_role_policy_mode: str = "legacy"
 
     # Generation architecture. v2 remains opt-in until the rework is complete.
     generation_pipeline: str = "v1"

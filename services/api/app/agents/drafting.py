@@ -28,7 +28,7 @@ from app.agents.requirement_coverage import (
     format_requirement_items_for_prompt,
     normalize_requirement_items,
 )
-from app.core.llm_gateway import llm_gateway
+from app.core.llm_gateway import collect_llm_calls, llm_gateway
 from app.core.models import Generation
 
 if TYPE_CHECKING:
@@ -163,6 +163,7 @@ async def _repair_concrete_calendar_dates(
     text: str,
     *,
     trace_id: str,
+    writer_role: str | None = None,
 ) -> str:
     dates = find_concrete_calendar_dates(text)
     if not dates:
@@ -178,6 +179,8 @@ async def _repair_concrete_calendar_dates(
         ),
         agent="drafting_calendar_guard",
         trace_id=trace_id,
+        # Repairs inherit the writer's approved model class.
+        role_override=writer_role,
     )
     repaired = str(result.get("text") or "").strip()
     remaining = find_concrete_calendar_dates(repaired)
@@ -783,7 +786,13 @@ def _format_section_drafting_guidance(guidance: dict[str, Any] | None) -> str:
     return "\n".join(lines) if len(lines) > 1 else ""
 
 
-async def run_drafting(
+async def run_drafting(*args: Any, **kwargs: Any) -> dict[str, Any]:
+    """Draft one section/subpoint and persist it with its model-call records."""
+    with collect_llm_calls() as llm_calls:
+        return await _run_drafting(*args, llm_calls=llm_calls, **kwargs)
+
+
+async def _run_drafting(
     project_id: str,
     section_uid: str,
     section_title: str,
@@ -800,6 +809,8 @@ async def run_drafting(
     parent_section_uid: str | None = None,
     use_drafting_blueprint: bool = True,
     section_source_quotes: list[dict[str, Any]] | None = None,
+    writer_role: str | None = None,
+    llm_calls: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     trace_id = trace_id or str(uuid.uuid4())
     section_uid = _safe_section_uuid(section_uid)
@@ -949,6 +960,7 @@ async def run_drafting(
         user_message=user_message,
         agent="drafting",
         trace_id=trace_id,
+        role_override=writer_role,
     )
 
     variant_data = llm_result.get("variant_1") or {}
@@ -991,6 +1003,7 @@ async def run_drafting(
                     ),
                     agent="drafting",
                     trace_id=trace_id,
+                    role_override=writer_role,
                 )
                 repaired_variant = repaired_result.get("variant_1") or {}
                 if repaired_variant.get("text"):
@@ -1047,6 +1060,7 @@ async def run_drafting(
             variant_text = await _repair_concrete_calendar_dates(
                 variant_text,
                 trace_id=trace_id,
+                writer_role=writer_role,
             )
             variant_data["text"] = variant_text
             requirement_coverage = assess_requirement_coverage(
@@ -1099,6 +1113,9 @@ async def run_drafting(
                 "deterministic_requirement_assurance_ids": (
                     deterministic_assurance_ids
                 ),
+                # Requested vs actual model/effort, latency and usage of every
+                # LLM call that produced this text (K-24 evidence).
+                "llm_calls": list(llm_calls or []),
             }
             used_sources: dict[str, Any] = {}
             if project_grounding_context:

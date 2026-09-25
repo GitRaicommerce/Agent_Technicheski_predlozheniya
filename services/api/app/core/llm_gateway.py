@@ -1,18 +1,34 @@
 """
 LLM Gateway — единен интерфейс за OpenAI и Anthropic.
 Смяната на provider/модел не изисква промяна на бизнес логиката.
+
+Моделът и reasoning effort се избират по роля (``app.core.model_policy``):
+всяко извикване подава ``agent`` етикет, който се съпоставя с роля и профил.
+Критичните роли не падат тихо към по-слаб модел; JSON поправката използва
+доставчика, който реално е върнал повредения отговор.
 """
 
 from __future__ import annotations
 
+import contextlib
+import contextvars
 import json
+import time
 import uuid
-from typing import Any
+from typing import Any, Iterator
 
 import structlog
 from tenacity import retry, retry_if_not_exception_type, stop_after_attempt, wait_exponential
 
 from app.core.config import settings
+from app.core.model_policy import (
+    ModelPolicyError,
+    ModelProfile,
+    explicit_profile,
+    policy_mode,
+    policy_version,
+    resolve_profile,
+)
 
 log = structlog.get_logger()
 
@@ -22,10 +38,50 @@ class LLMNotConfiguredError(Exception):
     pass
 
 
+class LLMModelUnavailableError(LLMNotConfiguredError):
+    """The role's configured model cannot be reached and no approved fallback exists."""
+
+    pass
+
+
 class LLMOutputTruncatedError(RuntimeError):
     """Raised when retrying unchanged input cannot overcome the output cap."""
 
     pass
+
+
+# Active call-record collectors for the current logical operation (see
+# collect_llm_calls). A tuple so collectors nest: a job-level collector and a
+# per-generation collector both receive the same record.
+_call_records: contextvars.ContextVar[tuple[list[dict[str, Any]], ...]] = (
+    contextvars.ContextVar("llm_call_records", default=())
+)
+# Usage of the most recent provider response in this task.
+_last_usage: contextvars.ContextVar[dict[str, Any] | None] = contextvars.ContextVar(
+    "llm_last_usage", default=None
+)
+
+
+@contextlib.contextmanager
+def collect_llm_calls() -> Iterator[list[dict[str, Any]]]:
+    """Collect a record of every LLM call made inside the block.
+
+    Records hold requested and actual provider/model/effort, role, policy
+    version, latency and returned token usage. Unknown usage stays ``None``;
+    it is never reported as zero cost.
+    """
+    records: list[dict[str, Any]] = []
+    token = _call_records.set((*_call_records.get(), records))
+    try:
+        yield records
+    finally:
+        _call_records.reset(token)
+
+
+def _record(entry: dict[str, Any]) -> None:
+    log.info("llm_call_record", **entry)
+    for records in _call_records.get():
+        records.append(entry)
 
 
 class LLMGateway:
@@ -51,7 +107,7 @@ class LLMGateway:
         stop=stop_after_attempt(2),
         wait=wait_exponential(multiplier=1, min=2, max=10),
         retry=retry_if_not_exception_type(
-            (LLMNotConfiguredError, LLMOutputTruncatedError)
+            (LLMNotConfiguredError, LLMOutputTruncatedError, ModelPolicyError)
         ),
         reraise=True,
     )
@@ -64,84 +120,123 @@ class LLMGateway:
         model: str | None = None,
         provider: str | None = None,
         messages: list | None = None,
+        role_override: str | None = None,
     ) -> dict[str, Any]:
         """
         Извиква LLM и върна валиден JSON dict.
-        При невалиден JSON прави еднократен repair call (без промяна на смисъла).
+        При невалиден JSON прави еднократен repair call (без промяна на смисъла)
+        през доставчика, който реално е върнал отговора.
         Ако е подаден `messages` (история), той се ползва вместо единичния user_message.
+        ``role_override`` позволява на поправка да наследи ролята на писателя.
         """
         trace_id = trace_id or str(uuid.uuid4())
-        provider = provider or settings.llm_default_provider
-        model = model or settings.llm_default_model
+        if model:
+            profile = explicit_profile(
+                provider or settings.llm_default_provider, model
+            )
+        else:
+            profile = resolve_profile(agent, role_override)
 
-        # Early check — both keys missing means no LLM is available
-        openai_ok = bool(settings.openai_api_key and settings.openai_api_key.strip())
-        anthropic_ok = bool(settings.anthropic_api_key and settings.anthropic_api_key.strip())
-
-        if not openai_ok and not anthropic_ok:
+        if not _provider_has_key("openai") and not _provider_has_key("anthropic"):
             raise LLMNotConfiguredError(
                 "LLM API ключовете не са конфигурирани. "
                 "Моля добавете OPENAI_API_KEY или ANTHROPIC_API_KEY в .env файла."
             )
 
-        # If the chosen provider has no key, switch to the other
-        if provider == "openai" and not openai_ok and anthropic_ok:
-            log.warning("llm_openai_key_missing_switching_to_anthropic")
-            provider = settings.llm_fallback_provider
-            model = settings.llm_fallback_model
-        elif provider == "anthropic" and not anthropic_ok and openai_ok:
-            log.warning("llm_anthropic_key_missing_switching_to_openai")
-            provider = settings.llm_default_provider
-            model = settings.llm_default_model
-
-        log.info(
-            "llm_call", agent=agent, provider=provider, model=model, trace_id=trace_id
-        )
+        started = time.monotonic()
+        actual = _primary_target(profile)
+        fallback_used = actual != (profile.provider, profile.model, profile.effort)
+        if fallback_used:
+            log.warning(
+                "llm_primary_key_missing_using_approved_fallback",
+                agent=agent,
+                role=profile.role,
+                fallback_provider=actual[0],
+                fallback_model=actual[1],
+                trace_id=trace_id,
+            )
 
         try:
             raw_text = await self._call_provider(
-                provider=provider,
-                model=model,
+                provider=actual[0],
+                model=actual[1],
                 system_prompt=system_prompt,
                 user_message=user_message,
                 messages=messages,
+                effort=actual[2],
             )
+        except LLMOutputTruncatedError:
+            # Identical input cannot fit a fallback either; callers split input.
+            raise
         except Exception as primary_exc:
-            fallback_provider = settings.llm_fallback_provider
-            fallback_model = settings.llm_fallback_model
-            if (
-                fallback_provider
-                and fallback_model
-                and _provider_has_key(fallback_provider)
-                and (fallback_provider != provider or fallback_model != model)
-            ):
-                log.warning(
-                    "llm_fallback",
-                    primary_provider=provider,
-                    fallback_provider=fallback_provider,
-                    error=str(primary_exc),
-                    trace_id=trace_id,
-                )
-                raw_text = await self._call_provider(
-                    provider=fallback_provider,
-                    model=fallback_model,
-                    system_prompt=system_prompt,
-                    user_message=user_message,
-                    messages=messages,
-                )
-            else:
+            fallback = _fallback_target(profile)
+            if fallback is None or fallback == actual:
                 raise
+            log.warning(
+                "llm_fallback",
+                agent=agent,
+                role=profile.role,
+                primary_provider=actual[0],
+                primary_model=actual[1],
+                fallback_provider=fallback[0],
+                fallback_model=fallback[1],
+                error=str(primary_exc),
+                trace_id=trace_id,
+            )
+            actual = fallback
+            fallback_used = True
+            raw_text = await self._call_provider(
+                provider=actual[0],
+                model=actual[1],
+                system_prompt=system_prompt,
+                user_message=user_message,
+                messages=messages,
+                effort=actual[2],
+            )
 
+        usage = _last_usage.get()
+        json_repaired = False
         try:
-            return json.loads(raw_text)
+            result = json.loads(raw_text)
         except json.JSONDecodeError:
-            log.warning("llm_json_repair", agent=agent, trace_id=trace_id)
-            return await self._repair_json(
-                provider=provider,
-                model=model,
+            log.warning(
+                "llm_json_repair",
+                agent=agent,
+                provider=actual[0],
+                model=actual[1],
+                trace_id=trace_id,
+            )
+            # K-22: repair through the provider that actually returned the text.
+            result = await self._repair_json(
+                provider=actual[0],
+                model=actual[1],
+                effort=actual[2],
                 broken_text=raw_text,
                 trace_id=trace_id,
             )
+            json_repaired = True
+
+        _record(
+            {
+                "agent": agent,
+                "role": profile.role,
+                "policy_mode": policy_mode(),
+                "policy_version": policy_version(),
+                "critical": profile.critical,
+                "requested_provider": profile.provider,
+                "requested_model": profile.model,
+                "requested_effort": profile.effort,
+                "actual_provider": actual[0],
+                "actual_model": actual[1],
+                "actual_effort": actual[2],
+                "fallback_used": fallback_used,
+                "json_repaired": json_repaired,
+                "latency_ms": int((time.monotonic() - started) * 1000),
+                "usage": usage,
+                "trace_id": trace_id,
+            }
+        )
+        return result
 
     async def _call_provider(
         self,
@@ -150,11 +245,13 @@ class LLMGateway:
         system_prompt: str,
         user_message: str = "",
         messages: list | None = None,
+        effort: str | None = None,
     ) -> str:
         # Build messages list: use provided history or single user_message
         built_messages = (
             messages if messages else [{"role": "user", "content": user_message}]
         )
+        _last_usage.set(None)
 
         if provider == "openai":
             client = self._get_openai()
@@ -167,7 +264,11 @@ class LLMGateway:
                 "response_format": {"type": "json_object"},
             }
             if _uses_completion_token_limit(model):
+                # Reasoning models: no sampling parameters; effort goes in the
+                # request body so older SDK releases pass it through unchanged.
                 request_kwargs["max_completion_tokens"] = settings.llm_max_tokens
+                if effort:
+                    request_kwargs["extra_body"] = {"reasoning_effort": effort}
             else:
                 request_kwargs["max_tokens"] = settings.llm_max_tokens
                 request_kwargs["temperature"] = settings.llm_temperature
@@ -175,6 +276,7 @@ class LLMGateway:
             response = await client.chat.completions.create(
                 **request_kwargs,
             )
+            _last_usage.set(_openai_usage(response))
             choice = response.choices[0]
             if choice.finish_reason == "length":
                 raise LLMOutputTruncatedError(
@@ -190,6 +292,7 @@ class LLMGateway:
                 messages=built_messages,
                 max_tokens=settings.llm_max_tokens,
             )
+            _last_usage.set(_anthropic_usage(response))
             if response.stop_reason == "max_tokens":
                 raise LLMOutputTruncatedError(
                     "LLM response was truncated by the output token limit."
@@ -205,6 +308,7 @@ class LLMGateway:
         model: str,
         broken_text: str,
         trace_id: str,
+        effort: str | None = None,
     ) -> dict[str, Any]:
         repair_prompt = (
             "The following text should be a valid JSON object but is malformed. "
@@ -216,6 +320,7 @@ class LLMGateway:
             model=model,
             system_prompt=repair_prompt,
             user_message=broken_text,
+            effort=effort,
         )
         try:
             return json.loads(fixed)
@@ -236,6 +341,56 @@ def _provider_has_key(provider: str) -> bool:
     return False
 
 
+Target = tuple[str, str, "str | None"]
+
+
+def _fallback_target(profile: ModelProfile) -> Target | None:
+    if not (profile.fallback_provider and profile.fallback_model):
+        return None
+    if not _provider_has_key(profile.fallback_provider):
+        return None
+    return (profile.fallback_provider, profile.fallback_model, profile.fallback_effort)
+
+
+def _primary_target(profile: ModelProfile) -> Target:
+    """Primary target, or an approved fallback when the primary key is missing."""
+    if _provider_has_key(profile.provider):
+        return (profile.provider, profile.model, profile.effort)
+    fallback = _fallback_target(profile)
+    if fallback is not None:
+        return fallback
+    raise LLMModelUnavailableError(
+        f"Моделът за роля '{profile.role}' ({profile.provider}/{profile.model}) "
+        "не е достъпен: липсва API ключ за доставчика и няма одобрен "
+        "равностоен резервен модел. Критичните роли не се понижават тихо."
+    )
+
+
+def _openai_usage(response: Any) -> dict[str, Any] | None:
+    usage = getattr(response, "usage", None)
+    if usage is None:
+        return None
+    details = getattr(usage, "completion_tokens_details", None)
+    return {
+        "input_tokens": getattr(usage, "prompt_tokens", None),
+        "output_tokens": getattr(usage, "completion_tokens", None),
+        "reasoning_tokens": getattr(details, "reasoning_tokens", None)
+        if details is not None
+        else None,
+    }
+
+
+def _anthropic_usage(response: Any) -> dict[str, Any] | None:
+    usage = getattr(response, "usage", None)
+    if usage is None:
+        return None
+    return {
+        "input_tokens": getattr(usage, "input_tokens", None),
+        "output_tokens": getattr(usage, "output_tokens", None),
+        "reasoning_tokens": None,
+    }
+
+
 def _uses_completion_token_limit(model: str) -> bool:
     normalized = model.lower()
-    return normalized.startswith(("gpt-5", "o1", "o3", "o4"))
+    return normalized.startswith(("gpt-6", "gpt-5", "o1", "o3", "o4"))

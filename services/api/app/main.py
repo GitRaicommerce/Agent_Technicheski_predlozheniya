@@ -76,7 +76,28 @@ async def capabilities():
     explicit signal the UI cannot tell "feature disabled" from a real error,
     and a disabled-feature 404 could hide existing generated text.
     """
+    from app.core.model_policy import (
+        ModelPolicyError,
+        policy_mode,
+        policy_version,
+        validate_policy,
+    )
+
     v2_enabled = settings.generation_pipeline == "v2"
+    try:
+        model_policy: dict = {
+            "mode": policy_mode(),
+            "version": policy_version(),
+            "roles": {
+                role: {
+                    key: profile[key]
+                    for key in ("provider", "model", "effort", "critical")
+                }
+                for role, profile in validate_policy().items()
+            },
+        }
+    except ModelPolicyError as exc:
+        model_policy = {"error": str(exc)}
     return {
         "generation_pipeline": settings.generation_pipeline,
         "features": {
@@ -85,6 +106,7 @@ async def capabilities():
             "criteria_verification": v2_enabled,
             "consistency_check": v2_enabled,
         },
+        "model_policy": model_policy,
     }
 
 
