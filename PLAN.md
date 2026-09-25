@@ -19,7 +19,8 @@
 
 ## Completed Work
 
-- Added a Bulgarian repository analysis at `docs/REPOSITORY_ANALYSIS_2026-09-25_BG.md`, grounded in commit `7652435cbe6afc87ecb136a8773be87e92ed1e84`, exact-head CI, offline probes, 74 frontend tests and 95 script tests. The report separates architectural recommendations from bounded code-fix cards, with particular attention to scope and context preservation. It is an analysis deliverable, not implementation or runtime acceptance of its recommendations.
+- Updated the Bulgarian repository analysis to revision 2 and added `docs/IMPLEMENTATION_PLAN_GPT6_SOL.md`. The accepted direction prioritizes scope completeness, runtime models by role, Astra-assisted planning and an independent source-to-plan audit. GPT-6 Sol is the planned development lead. The documents contain 27 cards, 28 acceptance scenarios, work-package dependencies and an explicitly qualified 88–136 active-hour estimate. No implementation, paid model run or deployment was started by this documentation task.
+- Completed the original audit against commit `7652435cbe6afc87ecb136a8773be87e92ed1e84`, with exact-head CI and offline probes; 74 frontend tests and 95 script tests passed locally. Baseline backend CI had 311 passing and 3 failing content-plan tests. These are audit-baseline results, not a claim that the new architecture has been implemented or tested.
 
 - Made Phase 4 assembly output-limit safe: large parent sections are now assembled deterministically from the complete persisted subpoint texts instead of asking the model to echo tens of thousands of words into one JSON response; truncated or content-dropping edits also fall back to the same lossless path without a second provider call. The real September project recovered its two failed assemblies (`Разработване на инвестиционен проект` and `Изпълнение на строително-монтажни работи`) as a 2/2 completed job with preservation ratios above 1.00 and no further OpenAI call during the successful recovery.
 - Re-ran the hierarchical Pernik calibration bundle after completing all nine parent assemblies. The effective generated proposal now has 55,332 word-like tokens against 56,692 in the reference (`0.98` volume ratio, up from `0.15`), all eight universal topic families are covered, and operational-detail coverage is `0.92`; strict DOCX readiness is now blocked only by eight missing-requirement checks, with no duplicate, stale, shallow, or missing-generation blockers.
@@ -282,19 +283,48 @@
 - Parallelized the Understanding pass: independent map and proposal-audit batches now run concurrently (configurable via `UNDERSTANDING_MAX_CONCURRENCY`, default 4) with deterministic result order, lock-protected progress/checkpoint persistence, and regression tests for concurrency limits and error propagation — roughly a 4x wall-clock speedup on real projects.
 - Added a universal calendar-date guard for technical-proposal generation: conditional schedule start/finish dates are removed from drafting and consistency context while durations, dependencies, and resources remain available; drafting repairs a violating model response once and refuses to persist it if concrete dates remain; schedule summaries and section assembly also fail closed, and DOCX readiness hard-blocks older selected text that still contains concrete calendar dates until it is regenerated.
 
+## Accepted Implementation Direction (2026-09-25)
+
+- Priority: scope completeness, correct interpretation, traceability, text quality, then time/cost. Code simplicity is secondary to demonstrated coverage.
+- Development lead: GPT-6 Sol; initial recommended reasoning effort `high`. At most two disjoint helpers are planned after a separate implementation assignment; none are launched by this planning update.
+- Runtime application roles: Astra for understanding, semantic plan authoring, independent plan audit and final verification; Sol for well-defined drafting/routing roles, with explicit stronger-model selection for complex methodology.
+- The plan auditor forms an independent source inventory before comparing the plan. Current, complete audit acceptance is required for the exact inputs used in new drafting; author and auditor are distinct roles/contexts.
+- Preserve immutable job inputs, stable requirement provenance, human edits, required headings, existing outputs and permitted draft export. Keep the calendar-date restriction.
+- Source documents: `docs/REPOSITORY_ANALYSIS_2026-09-25_BG.md` holds audit evidence and cards; `docs/IMPLEMENTATION_PLAN_GPT6_SOL.md` holds execution contracts, dependencies and estimates. This file is the only current execution-status ledger.
+- Current authorization covers the documentation PR. Implementation, merging, production migration/deployment and paid model execution remain separate actions requiring the applicable assignment/budget. This program uses focused PRs rather than direct main changes.
+
+## Implementation Execution Status
+
+All work packages are unstarted. The lead must fill owner, branch/head, evidence, gaps and exact next action when implementation is explicitly started; model-role design is not itself execution authority.
+
+| Package | State | Assigned owner / branch / head | Acceptance evidence / next action |
+|---|---|---|---|
+| WP-00 | PLANNED | Unassigned | Refresh baseline and establish supported test environment |
+| WP-01 | PLANNED | Unassigned | Model-role and API compatibility policy after WP-00 |
+| WP-02 | PLANNED | Unassigned | Source/schedule/queue integrity after WP-00 |
+| WP-03 | PLANNED | Unassigned | Requirement conservation and Astra plan author |
+| WP-04 | PLANNED | Unassigned | Immutable inputs, human decisions and durable brief |
+| WP-05 | PLANNED | Unassigned | Independent plan audit and drafting eligibility |
+| WP-06 | PLANNED | Unassigned | Exact criteria/evidence handoff to selected writer |
+| WP-07 | PLANNED | Unassigned | Editing, authoritative selection and verification UI |
+| WP-08 | PLANNED | Unassigned | Exact final-content verification and DOCX |
+| WP-09 | PLANNED | Unassigned | Integrated workflow, migrations and readiness |
+| WP-10 | PLANNED; paid runs NOT APPROVED | Unassigned | Controlled comparison and human acceptance |
+| WP-11 | CONDITIONAL; NOT STARTED | Unassigned | Access boundary only if shared/public deployment is requested |
+
 ## Active Goals
 
 1. Turn the application into a reference-quality technical proposal generator that produces detailed, tender-specific Bulgarian proposals rather than short generic sections.
-2. Use the winning Pernik technical proposal comparison as the first calibration baseline for outline granularity, grounding coverage, drafting depth, and export readiness.
+2. Preserve the complete accepted tender scope through independent plan audit, immutable execution inputs and final-content verification. Use the Pernik comparison as a calibration source, not as proof of completeness by volume alone.
 3. Keep documentation as a reliable source of truth tied to the real repository state.
 4. Add regression protection around generation quality so improvements do not silently regress.
 
 ## Next Recommended Steps
 
-1. Re-run the Pernik calibration bundle against the now-ready selected proposal and compare it with the pre-remediation hierarchical manifest, without executing further paid regeneration actions.
-2. Inspect the new subpoint and assembly traces to calibrate semantic tender retrieval and automatic forlage precision/recall across different content kinds.
-3. Begin Phase 5: criterion-level verification and project-wide consistency checks against the schedule and fact sheet.
-4. Continue broadening common tender regression coverage with more real-world noisy PDF extraction, DOCX readiness combinations, and operational-action coverage cases.
+1. On a separate implementation assignment, start WP-00 from the GPT-6 Sol implementation plan; verify ownership and current source rather than repeating the full audit.
+2. Deliver milestone M1: reliable sources, conserved requirements, model-assisted planning, fixed inputs and independent plan acceptance. Follow explicit package dependencies.
+3. Deliver milestone M2: the complete deterministic test journey through drafting, verification and DOCX, including the accepted model-role policy and all applicable regression cases.
+4. Deliver milestone M3 only with supplied real sources, expert review, API access and an approved spending cap. Compare model/auditor configurations and report actual coverage and cost; do not restart historical paid calibration automatically.
 
 ## Notes
 
