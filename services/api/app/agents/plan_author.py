@@ -473,10 +473,19 @@ async def run_plan_author(project_id: str, db, trace_id: str | None = None) -> d
         .scalars()
         .all()
     )
+    from app.agents.job_inputs import latest_brief
+
+    brief = await latest_brief(project_id, db)
+    user_message = build_author_input(items, requirements)
+    if brief is not None and (brief.content or "").strip():
+        user_message += (
+            "\n\nPROJECT BRIEF (approved scope decisions and exclusions — respect them):\n"
+            + brief.content.strip()
+        )
     with collect_llm_calls() as calls:
         raw = await llm_gateway.call(
             system_prompt=SYSTEM_PROMPT,
-            user_message=build_author_input(items, requirements),
+            user_message=user_message,
             agent="content_plan_author",
             trace_id=trace_id,
         )

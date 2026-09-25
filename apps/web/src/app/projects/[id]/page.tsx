@@ -14,6 +14,7 @@ import GenerationsPanel from "@/components/GenerationsPanel";
 import UnderstandingPanel from "@/components/UnderstandingPanel";
 import CriteriaPanel from "@/components/CriteriaPanel";
 import ConsistencyPanel from "@/components/ConsistencyPanel";
+import ProjectBriefPanel from "@/components/ProjectBriefPanel";
 
 type Module = "examples" | "tender_docs" | "schedule" | "legislation";
 
@@ -51,6 +52,7 @@ export default function ProjectPage() {
   const [showCriteria, setShowCriteria] = useState(false);
   const [criteriaRefreshKey, setCriteriaRefreshKey] = useState(0);
   const [showConsistency, setShowConsistency] = useState(false);
+  const [showBrief, setShowBrief] = useState(false);
   const [consistencyRefreshKey, setConsistencyRefreshKey] = useState(0);
   const [outlineRefreshKey, setOutlineRefreshKey] = useState(0);
   const [scheduleRefreshKey, setScheduleRefreshKey] = useState(0);
@@ -428,6 +430,23 @@ export default function ProjectPage() {
                 </button>
               ))}
             </div>
+          </div>
+
+          {/* Постоянно задание (K-11) */}
+          <div className="border-b">
+            <button
+              onClick={() => setShowBrief((value) => !value)}
+              data-testid="project-brief-toggle"
+              className="w-full px-3 py-2.5 text-left text-sm font-semibold text-gray-700 flex justify-between items-center hover:bg-gray-50 transition"
+            >
+              <span>📌 Постоянно задание</span>
+              <span className="text-gray-400 text-xs">{showBrief ? "▾" : "▸"}</span>
+            </button>
+            {showBrief && (
+              <div className="px-3 pb-3">
+                <ProjectBriefPanel projectId={project.id} />
+              </div>
+            )}
           </div>
 
           {/* Разбиране на изискванията */}

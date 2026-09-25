@@ -166,6 +166,7 @@ async def test_invalid_model_plan_is_not_saved(monkeypatch):
         side_effect=[
             SimpleNamespace(scalars=lambda: SimpleNamespace(all=lambda: items)),
             SimpleNamespace(scalars=lambda: SimpleNamespace(all=lambda: REQUIREMENTS)),
+            SimpleNamespace(scalar_one_or_none=lambda: None),  # project brief
         ]
     )
     db.flush = AsyncMock()

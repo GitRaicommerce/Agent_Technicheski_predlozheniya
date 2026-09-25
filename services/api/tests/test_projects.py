@@ -299,3 +299,68 @@ async def test_project_stats_returns_counts(client, mock_db):
     assert stat["outline_locked"] is True
     assert stat["sections_generated"] == 5
     assert stat["sections_selected"] == 2
+
+
+# ── K-11: durable project brief ──────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_brief_save_creates_versions_only_when_content_changes(client, mock_db):
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock, MagicMock
+
+    project = _make_project()
+    mock_db.get = AsyncMock(return_value=project)
+    latest = SimpleNamespace(
+        id="brief-1",
+        project_id=project.id,
+        version=1,
+        content="Не включвай част Електро.",
+        content_hash=__import__("hashlib").sha256("Не включвай част Електро.".encode()).hexdigest(),
+        created_at=None,
+    )
+    result = MagicMock()
+    result.scalar_one_or_none = MagicMock(return_value=latest)
+    mock_db.execute = AsyncMock(return_value=result)
+    added = []
+    mock_db.add = MagicMock(side_effect=added.append)
+
+    same = await client.put(
+        f"/api/v1/projects/{project.id}/brief",
+        json={"content": "  Не включвай част Електро.  "},
+    )
+    assert same.status_code == 200
+    assert same.json()["version"] == 1
+    assert added == []
+
+    changed = await client.put(
+        f"/api/v1/projects/{project.id}/brief",
+        json={"content": "Не включвай части Електро и ОВК."},
+    )
+    assert changed.status_code == 200
+    assert changed.json()["version"] == 2
+    assert latest.content == "Не включвай част Електро."  # old version untouched
+    assert added[0].content == "Не включвай части Електро и ОВК."
+
+
+@pytest.mark.asyncio
+async def test_brief_is_empty_version_zero_before_first_save(client, mock_db):
+    from unittest.mock import AsyncMock, MagicMock
+
+    project = _make_project()
+    mock_db.get = AsyncMock(return_value=project)
+    result = MagicMock()
+    result.scalar_one_or_none = MagicMock(return_value=None)
+    mock_db.execute = AsyncMock(return_value=result)
+
+    response = await client.get(f"/api/v1/projects/{project.id}/brief")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "id": None,
+        "project_id": project.id,
+        "version": 0,
+        "content": "",
+        "content_hash": None,
+        "created_at": None,
+    }

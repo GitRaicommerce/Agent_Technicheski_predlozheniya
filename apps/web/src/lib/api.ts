@@ -101,6 +101,15 @@ async function apiNoContent(path: string, options?: RequestInit): Promise<void> 
   await ensureOk(response);
 }
 
+export interface ProjectBrief {
+  id?: string | null;
+  project_id: string;
+  version: number;
+  content: string;
+  content_hash?: string | null;
+  created_at?: string | null;
+}
+
 export interface Capabilities {
   generation_pipeline: "v1" | "v2" | string;
   features: {
@@ -756,6 +765,13 @@ export const api = {
       apiFetch<Project[]>(`/api/v1/projects?limit=${limit}&offset=${offset}`),
     stats: () => apiFetch<Record<string, ProjectStat>>("/api/v1/projects/stats"),
     get: (id: string) => apiFetch<Project>(`/api/v1/projects/${id}`),
+    getBrief: (id: string) =>
+      apiFetch<ProjectBrief>(`/api/v1/projects/${id}/brief`),
+    saveBrief: (id: string, content: string) =>
+      apiFetch<ProjectBrief>(`/api/v1/projects/${id}/brief`, {
+        method: "PUT",
+        body: JSON.stringify({ content }),
+      }),
     create: (data: Partial<Project>) =>
       apiFetch<Project>("/api/v1/projects", {
         method: "POST",

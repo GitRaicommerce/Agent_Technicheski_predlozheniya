@@ -23,7 +23,9 @@ log = structlog.get_logger()
 SYSTEM_PROMPT = """Ти си AI оркестратор за съставяне на Технически предложения (ТП) за обществени поръчки.
 Потребителят комуникира САМО с теб. Ти избираш и извикваш подходящия специализиран агент.
 
-Получаваш ТЕКУЩО СЪСТОЯНИЕ НА ПРОЕКТА с полета:
+Получаваш ТЕКУЩО СЪСТОЯНИЕ НА ПРОЕКТА с полета (project_brief е одобреното от
+потребителя постоянно задание — обхват, изключения и ограничения; спазвай го и
+не го променяй въз основа на отделна реплика в чата):
 - uploaded_files: брой файлове по модул (tender_docs, examples, schedule, legislation)
 - outline: дали има извлечена структура, дали е одобрена, кои са разделите (с uid, title, requirements)
 - generated_sections: кои раздели вече са генерирани
@@ -164,6 +166,16 @@ async def run_orchestrator(
         "outline": outline_state,
         "generated_sections": generated_sections,
     }
+    # K-11: the durable, versioned project brief is part of every turn — it
+    # does not depend on the last 20 chat messages or on the browser.
+    from app.agents.job_inputs import latest_brief
+
+    brief = await latest_brief(project.id, db)
+    if brief is not None and (brief.content or "").strip():
+        project_state["project_brief"] = {
+            "version": brief.version,
+            "content": brief.content,
+        }
     project_context = json.dumps(project_state, ensure_ascii=False)
     # ───────────────────────────────────────────────────────────────────────
 

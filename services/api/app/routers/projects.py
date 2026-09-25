@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 import uuid
 
 from app.core.database import get_db
-from app.core.models import Project, ProjectFile, TpOutline, Generation
+from app.core.models import Generation, Project, ProjectBrief, ProjectFile, TpOutline
 from app.core.storage import storage
 
 router = APIRouter()
@@ -262,3 +262,85 @@ async def delete_project(project_id: str, db: AsyncSession = Depends(get_db)):
         await storage.delete_object(pf.storage_key)
 
     await db.delete(project)
+
+
+
+# ── K-11: durable, versioned project brief ───────────────────────────────────
+
+
+class ProjectBriefUpdate(BaseModel):
+    content: str
+
+
+class ProjectBriefResponse(BaseModel):
+    id: str | None = None
+    project_id: str
+    version: int
+    content: str
+    content_hash: str | None = None
+    created_at: datetime | None = None
+
+
+def _brief_hash(content: str) -> str:
+    import hashlib
+
+    return hashlib.sha256(content.encode("utf-8")).hexdigest()
+
+
+async def _latest_project_brief(project_id: str, db: AsyncSession) -> ProjectBrief | None:
+    result = await db.execute(
+        select(ProjectBrief)
+        .where(ProjectBrief.project_id == project_id)
+        .order_by(ProjectBrief.version.desc())
+        .limit(1)
+    )
+    return result.scalar_one_or_none()
+
+
+def _brief_response(project_id: str, brief: ProjectBrief | None) -> ProjectBriefResponse:
+    if brief is None:
+        return ProjectBriefResponse(project_id=project_id, version=0, content="")
+    return ProjectBriefResponse(
+        id=brief.id,
+        project_id=project_id,
+        version=brief.version,
+        content=brief.content,
+        content_hash=brief.content_hash,
+        created_at=brief.created_at,
+    )
+
+
+@router.get("/{project_id}/brief", response_model=ProjectBriefResponse)
+async def get_project_brief(project_id: str, db: AsyncSession = Depends(get_db)):
+    if not await db.get(Project, project_id):
+        raise HTTPException(status_code=404, detail="Project not found")
+    return _brief_response(project_id, await _latest_project_brief(project_id, db))
+
+
+@router.put("/{project_id}/brief", response_model=ProjectBriefResponse)
+async def save_project_brief(
+    project_id: str,
+    data: ProjectBriefUpdate,
+    db: AsyncSession = Depends(get_db),
+):
+    """Save the brief explicitly. A changed text is a new immutable version;
+    running jobs keep the version they recorded (K-05)."""
+    if not await db.get(Project, project_id):
+        raise HTTPException(status_code=404, detail="Project not found")
+    content = data.content.strip()
+    if len(content) > 20000:
+        raise HTTPException(status_code=422, detail="Заданието е твърде дълго (над 20 000 знака).")
+    latest = await _latest_project_brief(project_id, db)
+    content_hash = _brief_hash(content)
+    if latest is not None and latest.content_hash == content_hash:
+        return _brief_response(project_id, latest)
+    brief = ProjectBrief(
+        id=str(uuid.uuid4()),
+        project_id=project_id,
+        version=(latest.version if latest else 0) + 1,
+        content=content,
+        content_hash=content_hash,
+    )
+    db.add(brief)
+    await db.flush()
+    return _brief_response(project_id, brief)

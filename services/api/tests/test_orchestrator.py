@@ -16,13 +16,20 @@ def _outline_result(outline: TpOutline) -> MagicMock:
     return result
 
 
+def _brief_result(brief=None) -> MagicMock:
+    """The orchestrator reads the durable project brief after the state (K-11)."""
+    result = MagicMock()
+    result.scalar_one_or_none = MagicMock(return_value=brief)
+    return result
+
+
 @pytest.mark.asyncio
 async def test_run_orchestrator_enqueues_drafting_all_job(mock_db):
     project = _make_project()
 
     no_outline_result = MagicMock()
     no_outline_result.scalar_one_or_none = MagicMock(return_value=None)
-    mock_db.execute = AsyncMock(side_effect=[[], no_outline_result, []])
+    mock_db.execute = AsyncMock(side_effect=[[], no_outline_result, [], _brief_result()])
 
     job = MagicMock()
     job.id = str(uuid.uuid4())
@@ -80,7 +87,7 @@ async def test_new_generation_phrase_forces_full_regeneration(mock_db):
         version=1,
     )
     mock_db.execute = AsyncMock(
-        side_effect=[[], _outline_result(outline), []]
+        side_effect=[[], _outline_result(outline), [], _brief_result()]
     )
     job = MagicMock(id=str(uuid.uuid4()), status="queued")
 
@@ -139,6 +146,7 @@ async def test_new_generation_uses_approved_outline_behind_newer_draft(mock_db):
             [],
             _outline_result(draft_outline),
             [],
+            _brief_result(),
             _outline_result(approved_outline),
         ]
     )
@@ -315,3 +323,36 @@ async def test_run_drafting_all_continues_when_legislation_fails(mock_db):
 
     assert result["generated_count"] == 1
     assert run_drafting.await_args.kwargs["lex_citations"] == []
+
+
+@pytest.mark.asyncio
+async def test_project_brief_reaches_the_model_after_many_messages(mock_db):
+    """T-13: "не включвай X" stays in the prompt after 25 messages and a new client."""
+    from types import SimpleNamespace
+
+    project = _make_project()
+    brief = SimpleNamespace(version=2, content="Не включвай част Електро в обхвата.")
+    no_outline = MagicMock()
+    no_outline.scalar_one_or_none = MagicMock(return_value=None)
+    mock_db.execute = AsyncMock(side_effect=[[], no_outline, [], _brief_result(brief)])
+    history = [
+        {"role": "user" if index % 2 == 0 else "assistant", "content": f"съобщение {index}"}
+        for index in range(25)
+    ]
+    call = AsyncMock(
+        return_value={
+            "schema_version": "v1.3",
+            "status": "ok",
+            "assistant_message": "Добре.",
+            "ui_actions": [],
+            "agent_called": None,
+            "agent_params": {},
+            "questions_to_user": [],
+        }
+    )
+
+    with patch("app.agents.orchestrator.llm_gateway.call", new=call):
+        await run_orchestrator(project=project, message="Какво следва?", history=history, db=mock_db)
+
+    last_user_message = call.await_args.kwargs["messages"][-1]["content"]
+    assert "Не включвай част Електро в обхвата." in last_user_message
