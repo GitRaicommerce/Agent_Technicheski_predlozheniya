@@ -1,7 +1,9 @@
 # TP AI — анализ на състоянието и план за подобрения
 
-Дата: **25 септември 2026 г.**  
-Водещо хранилище: [GitRaicommerce/Agent_Technicheski_predlozheniya](https://github.com/GitRaicommerce/Agent_Technicheski_predlozheniya).  
+Дата: **25 септември 2026 г.**
+
+Водещо хранилище: [GitRaicommerce/Agent_Technicheski_predlozheniya](https://github.com/GitRaicommerce/Agent_Technicheski_predlozheniya).
+
 Проверена основа: [`7652435cbe6afc87ecb136a8773be87e92ed1e84`](https://github.com/GitRaicommerce/Agent_Technicheski_predlozheniya/commit/7652435cbe6afc87ecb136a8773be87e92ed1e84), `main`, „fix(api): prevent calendar dates in proposals“.
 
 Докладът е резултат от три независими прегледа на различни части и обединяваща проверка. Той съдържа предложения за последващо изпълнение. Този PR добавя документация; не променя приложението, не внедрява поправки и не разрешава платени генерации.
