@@ -196,6 +196,10 @@ async def update_content_plan_item(
     return item
 
 
+class PlanAuthorStart(BaseModel):
+    correction_audit_id: str | None = None
+
+
 class PlanAuthorJobResponse(BaseModel):
     id: str
     status: str
@@ -221,8 +225,14 @@ def _author_job_response(job: GenerationJob) -> PlanAuthorJobResponse:
     response_model=PlanAuthorJobResponse,
     status_code=status.HTTP_202_ACCEPTED,
 )
-async def start_plan_author(project_id: str, db: AsyncSession = Depends(get_db)):
-    """K-26: the plan author proposes a detailed draft on the protected structure."""
+async def start_plan_author(
+    project_id: str,
+    data: PlanAuthorStart | None = None,
+    db: AsyncSession = Depends(get_db),
+):
+    """K-26: the plan author proposes a detailed draft on the protected structure.
+    With ``correction_audit_id`` it corrects the plan by the audit's findings
+    (bounded number of automated cycles, K-25)."""
     _require_v2()
     project = await db.get(Project, project_id)
     if not project:
@@ -230,7 +240,11 @@ async def start_plan_author(project_id: str, db: AsyncSession = Depends(get_db))
     from app.agents.plan_author import create_plan_author_job
 
     try:
-        job = await create_plan_author_job(project, db)
+        job = await create_plan_author_job(
+            project,
+            db,
+            correction_audit_id=data.correction_audit_id if data else None,
+        )
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return _author_job_response(job)

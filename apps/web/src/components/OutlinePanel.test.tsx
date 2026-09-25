@@ -12,6 +12,11 @@ vi.mock("@/lib/api", async () => {
     api: {
       ...actual.api,
       capabilities: { get: vi.fn() },
+      planAudit: {
+        get: vi.fn().mockResolvedValue({ audit: null, eligibility: { eligible: false, reason: "no_audit" } }),
+        start: vi.fn(),
+        resolve: vi.fn(),
+      },
       agents: { ...actual.api.agents, getOutline: vi.fn() },
       contentPlan: {
         get: vi.fn(),

@@ -42,6 +42,12 @@ class Settings(BaseSettings):
     # Generation architecture. v2 remains opt-in until the rework is complete.
     generation_pipeline: str = "v1"
 
+    # K-25: under v2, new drafting requires a current, passed independent plan
+    # audit for exactly the plan, sources and brief being drafted.
+    plan_audit_required: bool = True
+    # Automated author-correction cycles allowed after the first failed audit.
+    plan_audit_max_correction_cycles: int = 2
+
     # Understanding pass: how many document batches are analyzed concurrently.
     # Higher values speed up the analysis linearly until the provider's rate
     # limits are reached; 1 restores the fully sequential legacy behavior.

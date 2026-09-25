@@ -441,7 +441,43 @@ def apply_author_proposal(
     return list(created.values())
 
 
-async def run_plan_author(project_id: str, db, trace_id: str | None = None) -> dict[str, Any]:
+def correction_brief(report: dict[str, Any]) -> str:
+    """Findings the author must address, taken verbatim from the audit.
+
+    The author receives the auditor's findings, never the reverse; the auditor
+    re-checks the corrected version independently.
+    """
+    obligations = {
+        entry["id"]: entry
+        for entry in ((report.get("inventory") or {}).get("obligations") or [])
+    }
+    resolutions = report.get("resolutions") or {}
+    lines = []
+    for finding in report.get("findings") or []:
+        if finding["verdict"] == "covered" or f"finding:{finding['inventory_id']}" in resolutions:
+            continue
+        source = obligations.get(finding["inventory_id"], {})
+        lines.append(
+            f"- [{finding['verdict']}] „{source.get('quote', '')}“ (стр. {source.get('page')}); "
+            f"точки: {', '.join(finding.get('plan_item_ids') or []) or 'няма'}; "
+            f"корекция: {finding.get('required_correction') or finding.get('rationale')}"
+        )
+    for addition in report.get("plan_additions") or []:
+        if addition["verdict"] != "unsupported_addition" or f"addition:{addition['plan_item_id']}" in resolutions:
+            continue
+        lines.append(
+            f"- [unsupported_addition] точка {addition['plan_item_id']}: "
+            f"{addition.get('required_correction') or addition.get('rationale')}"
+        )
+    return "\n".join(lines)
+
+
+async def run_plan_author(
+    project_id: str,
+    db,
+    trace_id: str | None = None,
+    correction: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """Build a fresh deterministic draft, then apply the validated author proposal."""
     from app.agents.content_plan import build_content_plan, sync_outline_from_content_plan
     from app.agents.requirement_dispositions import redistribute_parent_criteria
@@ -482,6 +518,12 @@ async def run_plan_author(project_id: str, db, trace_id: str | None = None) -> d
             "\n\nPROJECT BRIEF (approved scope decisions and exclusions — respect them):\n"
             + brief.content.strip()
         )
+    if correction and correction.get("findings_text"):
+        user_message += (
+            "\n\nINDEPENDENT AUDIT FINDINGS TO CORRECT (address every item; do not "
+            "argue with the auditor — add receivers, criteria or remove unsupported "
+            "obligations):\n" + correction["findings_text"]
+        )
     with collect_llm_calls() as calls:
         raw = await llm_gateway.call(
             system_prompt=SYSTEM_PROMPT,
@@ -509,6 +551,8 @@ async def run_plan_author(project_id: str, db, trace_id: str | None = None) -> d
             "author_unresolved": proposal["unresolved"],
             "llm_calls": calls,
             "approved": False,
+            "correction_of_audit": (correction or {}).get("audit_id"),
+            "correction_cycle": int((correction or {}).get("cycle") or 0),
         },
     }
     await db.flush()
@@ -525,8 +569,39 @@ async def run_plan_author(project_id: str, db, trace_id: str | None = None) -> d
 # ── Background job plumbing ──────────────────────────────────────────────────
 
 
-async def create_plan_author_job(project: Project, db) -> GenerationJob:
+async def _correction_request(project_id: str, audit_id: str, db) -> dict[str, Any]:
+    audit = await db.get(GenerationJob, audit_id)
+    if not audit or audit.project_id != project_id or audit.job_type != "plan_audit":
+        raise ValueError("Одитът за корекция не е намерен.")
+    report = audit.result_json if isinstance(audit.result_json, dict) else {}
+    from app.agents.plan_audit import overall_status
+
+    if audit.status != "done" or overall_status(report) != "changes_required":
+        raise ValueError(
+            "Автоматична корекция се пуска само по завършен одит с конкретни "
+            "констатации. Непълен одит се повтаря след поправка на източниците."
+        )
+    plan = await db.get(TpOutline, (report.get("input_fingerprint") or {}).get("plan_id"))
+    previous_cycle = int(((plan.outline_json or {}).get("plan_author") or {}).get("correction_cycle") or 0) if plan else 0
+    cycle = previous_cycle + 1
+    if cycle > settings.plan_audit_max_correction_cycles:
+        raise ValueError(
+            f"Достигнат е лимитът от {settings.plan_audit_max_correction_cycles} "
+            "автоматични корекции. Прегледайте констатациите и запишете човешко "
+            "тълкуване за спорните точки или коригирайте плана ръчно."
+        )
+    return {"audit_id": audit_id, "cycle": cycle, "findings_text": correction_brief(report)}
+
+
+async def create_plan_author_job(
+    project: Project, db, correction_audit_id: str | None = None
+) -> GenerationJob:
     ensure_v2_enabled()
+    correction = (
+        await _correction_request(project.id, correction_audit_id, db)
+        if correction_audit_id
+        else None
+    )
     active = await db.execute(
         select(GenerationJob)
         .where(
@@ -544,6 +619,7 @@ async def create_plan_author_job(project: Project, db) -> GenerationJob:
         job_type="plan_author",
         status="queued",
         trace_id=str(uuid.uuid4()),
+        result_json={"correction": correction} if correction else None,
     )
     db.add(job)
     await db.flush()
@@ -581,7 +657,10 @@ async def _process_plan_author_job_async(job_id: str) -> None:
         job.updated_at = datetime.now(timezone.utc)
         await db.commit()
         try:
-            result = await run_plan_author(job.project_id, db, trace_id=job.trace_id)
+            correction = (job.result_json or {}).get("correction")
+            result = await run_plan_author(
+                job.project_id, db, trace_id=job.trace_id, correction=correction
+            )
             job.status = "done"
             job.result_json = result
         except PlanAuthorValidationError as exc:

@@ -73,6 +73,7 @@ async def orchestrator_chat(
         raise HTTPException(status_code=404, detail="Project not found")
 
     from app.agents.orchestrator import run_orchestrator
+    from app.agents.plan_audit import DraftingNotEligibleError
     from app.core.llm_gateway import LLMNotConfiguredError
 
     try:
@@ -82,6 +83,18 @@ async def orchestrator_chat(
             history=req.history,
             db=db,
         )
+    except DraftingNotEligibleError as exc:
+        # K-25: the drafting gate is a normal, explained state — not a crash.
+        result = {
+            "schema_version": "v1.3",
+            "status": "needs_user_action",
+            "trace_id": "",
+            "assistant_message": f"⛔ Генерирането не е разрешено: {exc}",
+            "ui_actions": [],
+            "questions_to_user": [],
+            "agent_called": None,
+            "drafting_gate": {"reason": exc.reason, "audit_id": exc.audit_id},
+        }
     except LLMNotConfiguredError as exc:
         result = {
             "schema_version": "v1.3",
@@ -1113,6 +1126,18 @@ async def regenerate_section(
     project = await db.get(Project, project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
+
+    # K-25: single-section regeneration produces new text, so it passes the
+    # same drafting gate as bulk jobs.
+    from app.agents.plan_audit import DraftingNotEligibleError, ensure_drafting_eligible
+
+    try:
+        await ensure_drafting_eligible(project_id, db)
+    except DraftingNotEligibleError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={"message": str(exc), "reason": exc.reason, "audit_id": exc.audit_id},
+        ) from exc
 
     # Load the latest outline to resolve section title + requirements
     from sqlalchemy import select

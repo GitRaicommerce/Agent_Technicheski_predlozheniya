@@ -17,6 +17,7 @@ from app.routers import (
     content_plan,
     criteria,
     consistency,
+    plan_audit,
 )
 
 limiter = Limiter(key_func=get_remote_address, default_limits=["200/minute"])
@@ -66,6 +67,11 @@ app.include_router(
     prefix="/api/v1/consistency",
     tags=["consistency"],
 )
+app.include_router(
+    plan_audit.router,
+    prefix="/api/v1/plan-audit",
+    tags=["plan-audit"],
+)
 
 
 @app.get("/api/v1/capabilities", tags=["capabilities"])
@@ -105,7 +111,9 @@ async def capabilities():
             "content_plan": v2_enabled,
             "criteria_verification": v2_enabled,
             "consistency_check": v2_enabled,
+            "plan_audit": v2_enabled,
         },
+        "plan_audit_required": v2_enabled and settings.plan_audit_required,
         "model_policy": model_policy,
     }
 

@@ -101,6 +101,61 @@ async function apiNoContent(path: string, options?: RequestInit): Promise<void> 
   await ensureOk(response);
 }
 
+export interface PlanAuditFinding {
+  inventory_id: string;
+  plan_item_ids: string[];
+  verdict: "covered" | "partial" | "missing" | "contradiction" | "ambiguous" | string;
+  rationale?: string;
+  required_correction?: string | null;
+}
+
+export interface PlanAuditReport {
+  overall?: string;
+  summary?: {
+    obligations: number;
+    findings: Record<string, number>;
+    unsupported_additions: number;
+    unanswered: number;
+    resolved_by_human: number;
+  };
+  coverage?: {
+    complete: boolean;
+    missing_or_partial_locations?: Array<Record<string, unknown>>;
+  };
+  inventory?: {
+    obligations: Array<{ id: string; quote: string; text: string; page?: number | null }>;
+  };
+  findings?: PlanAuditFinding[];
+  plan_additions?: Array<{
+    plan_item_id: string;
+    verdict: string;
+    rationale?: string;
+    required_correction?: string | null;
+  }>;
+  plan_snapshot?: Array<{ id: string; number: string; title: string }>;
+  resolutions?: Record<string, { interpretation: string; reason: string }>;
+  error?: string;
+}
+
+export interface PlanAuditState {
+  audit: {
+    id: string;
+    status: string;
+    error?: string | null;
+    overall?: string | null;
+    stale: boolean;
+    report?: PlanAuditReport | null;
+    created_at: string;
+    completed_at?: string | null;
+  } | null;
+  eligibility: {
+    eligible: boolean;
+    reason: string;
+    message?: string;
+    audit_id?: string | null;
+  };
+}
+
 export interface ProjectBrief {
   id?: string | null;
   project_id: string;
@@ -944,9 +999,12 @@ export const api = {
       apiFetch<ContentPlan>(`/api/v1/content-plan/${projectId}/unlock`, {
         method: "POST",
       }),
-    startAuthor: (projectId: string) =>
+    startAuthor: (projectId: string, correctionAuditId?: string) =>
       apiFetch<PlanAuthorJob>(`/api/v1/content-plan/${projectId}/author`, {
         method: "POST",
+        body: JSON.stringify(
+          correctionAuditId ? { correction_audit_id: correctionAuditId } : {},
+        ),
       }),
     latestAuthorJob: (projectId: string) =>
       apiFetch<PlanAuthorJob | null>(`/api/v1/content-plan/${projectId}/author/latest`),
@@ -1054,6 +1112,23 @@ export const api = {
       apiFetch<UnderstandingFactSheet>(
         `/api/v1/understanding/${projectId}/fact-sheet/confirm`,
         { method: "POST" },
+      ),
+  },
+  planAudit: {
+    get: (projectId: string) =>
+      apiFetch<PlanAuditState>(`/api/v1/plan-audit/${projectId}`),
+    start: (projectId: string) =>
+      apiFetch<Record<string, unknown>>(`/api/v1/plan-audit/${projectId}/jobs`, {
+        method: "POST",
+      }),
+    resolve: (
+      projectId: string,
+      auditId: string,
+      resolution: { key: string; interpretation: string; reason: string },
+    ) =>
+      apiFetch<Record<string, unknown>>(
+        `/api/v1/plan-audit/${projectId}/audits/${auditId}/resolutions`,
+        { method: "POST", body: JSON.stringify(resolution) },
       ),
   },
   criteria: {

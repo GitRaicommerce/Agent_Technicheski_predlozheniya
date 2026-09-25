@@ -387,7 +387,10 @@ async def _run_drafting_all(
     Събира примерите, графика и нормативната база веднъж и ги преизползва.
     """
     from sqlalchemy import select, func
+    from app.agents.plan_audit import ensure_drafting_eligible
     from app.core.models import TpOutline, Generation
+
+    await ensure_drafting_eligible(project.id, db)
 
     # Draft only against an explicitly approved structure. A newer outline
     # draft may be under review and can have unrelated section identifiers.
@@ -537,6 +540,9 @@ async def _run_drafting_pipeline(
     Оркестрира пълен pipeline за генериране на раздел от ТП:
     examples → schedule → legislation → drafting → verifier
     """
+    from app.agents.plan_audit import ensure_drafting_eligible
+
+    await ensure_drafting_eligible(project_id, db)
     section_title = params.get("section_title", "")
     section_uid = params.get("section_uid", str(uuid.uuid4()))
     section_requirements = params.get("section_requirements", [])
@@ -806,6 +812,9 @@ async def _dispatch_agent(
         elif agent_name == "drafting":
             from app.agents.drafting import run_drafting
             from app.agents.context import build_project_grounding_context
+            from app.agents.plan_audit import ensure_drafting_eligible
+
+            await ensure_drafting_eligible(project_id, db)
 
             section_title = params.get("section_title", "")
             section_requirements = params.get("section_requirements", [])

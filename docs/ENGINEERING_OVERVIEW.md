@@ -110,6 +110,8 @@ TP AI is a monorepo for an AI-assisted workflow that prepares technical proposal
   - `apps/web/src/components/GenerationsPanel.tsx`
   - `apps/web/src/components/OutlinePanel.test.tsx`
   - `apps/web/src/components/OutlinePanel.tsx`
+  - `apps/web/src/components/PlanAuditPanel.test.tsx`
+  - `apps/web/src/components/PlanAuditPanel.tsx`
   - `apps/web/src/components/PlanAuthorControl.test.tsx`
   - `apps/web/src/components/PlanAuthorControl.tsx`
   - `apps/web/src/components/ProjectBriefPanel.test.tsx`
@@ -145,6 +147,7 @@ TP AI is a monorepo for an AI-assisted workflow that prepares technical proposal
   - `services/api/app/agents/job_inputs.py`
   - `services/api/app/agents/legislation.py`
   - `services/api/app/agents/orchestrator.py`
+  - `services/api/app/agents/plan_audit.py`
   - `services/api/app/agents/plan_author.py`
   - `services/api/app/agents/proposal_quality.py`
   - `services/api/app/agents/proposal_timing.py`
@@ -186,6 +189,7 @@ TP AI is a monorepo for an AI-assisted workflow that prepares technical proposal
   - `services/api/app/routers/criteria.py`
   - `services/api/app/routers/export.py`
   - `services/api/app/routers/files.py`
+  - `services/api/app/routers/plan_audit.py`
   - `services/api/app/routers/projects.py`
   - `services/api/app/routers/understanding.py`
 - `services/api/app/__init__.py`
@@ -199,12 +203,13 @@ TP AI is a monorepo for an AI-assisted workflow that prepares technical proposal
 - `services/api/app/routers/criteria.py`
 - `services/api/app/routers/export.py`
 - `services/api/app/routers/files.py`
+- `services/api/app/routers/plan_audit.py`
 - `services/api/app/routers/projects.py`
 - `services/api/app/routers/understanding.py`
 
 ## Test Inventory
 
-- Total backend tests discovered: `371`
+- Total backend tests discovered: `385`
 - `test_agents.py`: `45`
 - `test_common_proposal_scenarios.py`: `21`
 - `test_config.py`: `2`
@@ -228,6 +233,7 @@ TP AI is a monorepo for an AI-assisted workflow that prepares technical proposal
 - `test_model_policy.py`: `14`
 - `test_orchestrator.py`: `6`
 - `test_parsers.py`: `8`
+- `test_plan_audit.py`: `14`
 - `test_plan_author.py`: `5`
 - `test_projects.py`: `17`
 - `test_proposal_quality.py`: `16`

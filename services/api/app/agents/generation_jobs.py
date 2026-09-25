@@ -21,6 +21,11 @@ from app.agents.job_inputs import (
     load_job_outline,
     validate_target_units,
 )
+from app.agents.plan_audit import (
+    drafting_eligibility,
+    ensure_drafting_eligible,
+    gate_active,
+)
 from app.core.models import Generation, GenerationJob, Project, TpOutline
 
 log = structlog.get_logger()
@@ -671,6 +676,11 @@ async def create_drafting_job(
             latest_outline = await _latest_outline(project.id, db)
             raise ValueError(_missing_approved_outline_message(latest_outline))
         input_snapshot = await capture_job_inputs(project.id, outline, db)
+    # K-25: the single drafting gate — a current, passed independent audit of
+    # exactly this plan, these sources and this brief (also on resume).
+    eligibility = await ensure_drafting_eligible(project.id, db, outline)
+    if eligibility.get("audit_id"):
+        input_snapshot = {**input_snapshot, "accepted_plan_audit_id": eligibility["audit_id"]}
     unknown_targets = validate_target_units(
         target_section_uids, _plan_units(outline)
     )
@@ -1151,6 +1161,11 @@ async def _run_drafting_v2_job(job: GenerationJob, db) -> None:
                 continue
             if await _pause_job_if_requested(job, db, refresh=True):
                 return
+            # K-25: recheck acceptance immediately before each paid unit. A
+            # change to sources/brief/plan stops new paid work at this safe
+            # boundary; completed units stay persisted.
+            if await _stop_if_no_longer_eligible(job, project_id, outline, db):
+                return
             title = str(unit.get("title") or "")
             requirements = list(unit.get("requirements") or [])
             requirement_items = list(unit.get("requirement_checklist_items") or [])
@@ -1345,6 +1360,26 @@ async def _pause_job_if_requested(
     job.status = "paused"
     job.current_section_uid = None
     job.current_section_title = None
+    job.updated_at = datetime.now(timezone.utc)
+    await db.commit()
+    return True
+
+
+async def _stop_if_no_longer_eligible(job: GenerationJob, project_id: str, outline: Any, db) -> bool:
+    if not gate_active():
+        return False
+    eligibility = await drafting_eligibility(project_id, db, outline)
+    if eligibility["eligible"]:
+        return False
+    job.status = "error"
+    job.error = (
+        "Генерирането е спряно преди следващата платена подточка: "
+        + str(eligibility.get("message") or eligibility["reason"])
+        + " Завършените подточки са запазени."
+    )
+    job.current_section_uid = None
+    job.current_section_title = None
+    job.completed_at = datetime.now(timezone.utc)
     job.updated_at = datetime.now(timezone.utc)
     await db.commit()
     return True

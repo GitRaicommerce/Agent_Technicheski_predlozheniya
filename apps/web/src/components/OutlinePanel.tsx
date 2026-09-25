@@ -8,6 +8,7 @@ import {
   type ContentPlanItem,
   type TpOutline,
 } from "@/lib/api";
+import PlanAuditPanel from "@/components/PlanAuditPanel";
 import PlanAuthorControl from "@/components/PlanAuthorControl";
 import RequirementCoveragePanel from "@/components/RequirementCoveragePanel";
 
@@ -161,6 +162,8 @@ export default function OutlinePanel({ projectId, refreshKey = 0 }: Props) {
           act(() => api.contentPlan.resolveRequirement(projectId, requirementId, resolution))
         }
       />
+
+      <PlanAuditPanel projectId={projectId} refreshKey={plan.version} />
 
       {plan.status_locked ? (
         <div className="flex items-center justify-between border-t pt-2">
