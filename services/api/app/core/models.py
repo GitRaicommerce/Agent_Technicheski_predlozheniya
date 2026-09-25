@@ -464,8 +464,14 @@ class RequirementRegister(Base):
     target_section_hint: Mapped[Optional[str]] = mapped_column(String(1024))
     proposal_path_json: Mapped[list] = mapped_column(JSONB, default=list)
     acceptance_criteria_json: Mapped[list] = mapped_column(JSONB, default=list)
+    # extracted|confirmed|rejected|superseded (superseded = no longer produced
+    # by the current sources; kept so older plans stay resolvable).
     status: Mapped[str] = mapped_column(String(16), default="extracted")
     origin: Mapped[str] = mapped_column(String(16), default="map")
+    # K-07: stable identity of the underlying source statement and the human
+    # review decision (status + edited field values) that must survive reanalysis.
+    identity_key: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    human_decision_json: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -528,6 +534,27 @@ class CriterionCheck(Base):
     )
 
     project: Mapped[Project] = relationship(back_populates="criterion_checks")
+
+
+class ProjectBrief(Base):
+    """K-11: the durable, versioned project assignment (approved scope,
+    exclusions, constraints). Each change creates a new immutable version;
+    chat messages never change it silently."""
+
+    __tablename__ = "project_briefs"
+
+    id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), primary_key=True, default=_uuid
+    )
+    project_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("projects.id", ondelete="CASCADE")
+    )
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    content: Mapped[str] = mapped_column(Text, default="")
+    content_hash: Mapped[str] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
 
 
 class ProjectFactSheet(Base):

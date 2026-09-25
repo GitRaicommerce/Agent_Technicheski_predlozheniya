@@ -20,8 +20,29 @@ from app.agents.generation_jobs import (
     request_generation_job_pause,
     resume_generation_job,
 )
+from app.agents.job_inputs import plan_content_hash
 from app.core.models import TpOutline
 from tests.conftest import _make_project
+
+
+TEST_SNAPSHOT = {"schema_version": 1, "outline_id": "outline-12", "marker": "captured"}
+
+
+def _with_snapshot(outline, result_json=None):
+    """Jobs record their exact inputs (K-05); tests build the same snapshot."""
+    outline.status_locked = True
+    return {
+        **(result_json or {}),
+        "input_snapshot": {
+            "schema_version": 1,
+            "outline_id": outline.id,
+            "outline_version": getattr(outline, "version", None),
+            "plan_content_hash": plan_content_hash(outline),
+            "fact_sheet": {"facts": {}},
+            "schedule": {"id": None},
+            "brief": {"content": ""},
+        },
+    }
 
 
 def _outline_result(outline: TpOutline) -> MagicMock:
@@ -102,6 +123,7 @@ async def test_v2_job_generates_subpoints_then_assembles_their_section(mock_db):
         completed_at=None,
         updated_at=None,
     )
+    job.result_json = _with_snapshot(outline, job.result_json)
     selected_result = MagicMock()
     selected_result.scalars.return_value.all.return_value = []
     mock_db.get = AsyncMock(return_value=project)
@@ -209,6 +231,7 @@ async def test_v2_retry_runs_missing_assembly_without_regenerating_subpoints(moc
         completed_at=None,
         updated_at=None,
     )
+    job.result_json = _with_snapshot(outline, job.result_json)
     subpoint_rows = [
         SimpleNamespace(section_uid=first_uid, evidence_status="ok"),
         SimpleNamespace(section_uid=second_uid, evidence_status="ok"),
@@ -295,7 +318,7 @@ async def test_v2_assembly_failure_preserves_original_error_after_rollback(mock_
         skipped_sections=0,
         current_section_uid=None,
         current_section_title=None,
-        result_json=None,
+        result_json=_with_snapshot(outline),
         error=None,
         completed_at=None,
         updated_at=None,
@@ -411,6 +434,7 @@ async def test_resume_targeted_job_only_enqueues_remaining_sections(mock_db):
                 "section-2": {"instructions": ["expand"]},
             },
             "sections": [{"section_uid": "section-1"}],
+            "input_snapshot": {"outline_id": "outline-A", "marker": "recorded"},
         },
     )
     next_job = SimpleNamespace(id="next-job")
@@ -429,6 +453,8 @@ async def test_resume_targeted_job_only_enqueues_remaining_sections(mock_db):
         target_reason="quality_review",
         target_guidance={"section-2": {"instructions": ["expand"]}},
         job_type="drafting_quality",
+        # K-05: resume keeps the recorded input set instead of re-reading.
+        input_snapshot={"outline_id": "outline-A", "marker": "recorded"},
     )
 
 
@@ -446,6 +472,7 @@ async def test_resume_v2_job_can_continue_with_assembly_only(mock_db):
                 {"section_uid": "subpoint-1", "unit_kind": "subpoint"},
                 {"section_uid": "subpoint-2", "unit_kind": "subpoint"},
             ],
+            "input_snapshot": {"outline_id": "outline-A", "marker": "recorded"},
         },
     )
     next_job = SimpleNamespace(id="next-v2-job")
@@ -468,6 +495,7 @@ async def test_resume_v2_job_can_continue_with_assembly_only(mock_db):
         target_reason="regenerate_all",
         target_guidance=None,
         job_type="drafting_all",
+        input_snapshot={"outline_id": "outline-A", "marker": "recorded"},
     )
 
 
@@ -588,6 +616,7 @@ async def test_generation_job_records_failed_section_and_keeps_progress(mock_db)
         completed_at=None,
         updated_at=None,
     )
+    job.result_json = _with_snapshot(outline, job.result_json)
 
     mock_db.get = AsyncMock(side_effect=[project, job, job])
     mock_db.execute = AsyncMock(side_effect=[_outline_result(outline), []])
@@ -668,6 +697,7 @@ async def test_generation_job_continues_when_schedule_summary_fails(mock_db):
         completed_at=None,
         updated_at=None,
     )
+    job.result_json = _with_snapshot(outline, job.result_json)
 
     mock_db.get = AsyncMock(side_effect=[project, job])
     mock_db.execute = AsyncMock(side_effect=[_outline_result(outline), []])
@@ -737,6 +767,7 @@ async def test_generation_job_continues_when_legislation_fails(mock_db):
         completed_at=None,
         updated_at=None,
     )
+    job.result_json = _with_snapshot(outline, job.result_json)
 
     mock_db.get = AsyncMock(side_effect=[project, job])
     mock_db.execute = AsyncMock(side_effect=[_outline_result(outline), []])
@@ -839,6 +870,7 @@ async def test_generation_job_targets_requested_sections(mock_db):
         completed_at=None,
         updated_at=None,
     )
+    job.result_json = _with_snapshot(outline, job.result_json)
 
     generation_rows = [
         SimpleNamespace(section_uid=skipped_uid, evidence_status="ok"),
@@ -955,6 +987,7 @@ async def test_generation_job_targets_multiple_requested_sections(mock_db):
         completed_at=None,
         updated_at=None,
     )
+    job.result_json = _with_snapshot(outline, job.result_json)
 
     generation_rows = [
         SimpleNamespace(section_uid=skipped_uid, evidence_status="ok"),
@@ -1027,11 +1060,18 @@ async def test_create_drafting_stale_job_targets_selected_stale_sections(mock_db
             "app.agents.generation_jobs._approved_outline",
             new=AsyncMock(return_value=SimpleNamespace(id="outline-12", version=12)),
         ),
+        patch(
+            "app.agents.generation_jobs.capture_job_inputs",
+            new=AsyncMock(return_value=TEST_SNAPSHOT),
+        ),
+        # Target validation has dedicated tests; these focus on job targeting.
+        patch("app.agents.generation_jobs.validate_target_units", return_value=[]),
     ):
         job = await create_drafting_stale_job(project, mock_db)
 
     assert job.job_type == "drafting_stale"
     assert job.result_json == {
+        "input_snapshot": TEST_SNAPSHOT,
         "outline_id": "outline-12",
         "outline_version": 12,
         "target_section_uids": [stale_uid],
@@ -1054,6 +1094,12 @@ async def test_create_drafting_quality_job_targets_quality_sections(mock_db):
             "app.agents.generation_jobs._approved_outline",
             new=AsyncMock(return_value=SimpleNamespace(id="outline-12", version=12)),
         ),
+        patch(
+            "app.agents.generation_jobs.capture_job_inputs",
+            new=AsyncMock(return_value=TEST_SNAPSHOT),
+        ),
+        # Target validation has dedicated tests; these focus on job targeting.
+        patch("app.agents.generation_jobs.validate_target_units", return_value=[]),
         patch(
             "app.routers.export._load_selected_generations",
             new=AsyncMock(return_value=selected_generations),
@@ -1110,6 +1156,7 @@ async def test_create_drafting_quality_job_targets_quality_sections(mock_db):
 
     assert job.job_type == "drafting_quality"
     assert job.result_json == {
+        "input_snapshot": TEST_SNAPSHOT,
         "outline_id": "outline-12",
         "outline_version": 12,
         "target_section_uids": ["sec-quality"],
@@ -1191,6 +1238,12 @@ async def test_create_drafting_requirements_job_filters_requested_missing_sectio
             "app.agents.generation_jobs._approved_outline",
             new=AsyncMock(return_value=SimpleNamespace(id="outline-12", version=12)),
         ),
+        patch(
+            "app.agents.generation_jobs.capture_job_inputs",
+            new=AsyncMock(return_value=TEST_SNAPSHOT),
+        ),
+        # Target validation has dedicated tests; these focus on job targeting.
+        patch("app.agents.generation_jobs.validate_target_units", return_value=[]),
         patch(
             "app.routers.export._load_selected_generations",
             new=AsyncMock(return_value=selected_generations),
@@ -1292,6 +1345,12 @@ async def test_create_drafting_requirements_job_targets_missing_requirement_sect
             new=AsyncMock(return_value=SimpleNamespace(id="outline-12", version=12)),
         ),
         patch(
+            "app.agents.generation_jobs.capture_job_inputs",
+            new=AsyncMock(return_value=TEST_SNAPSHOT),
+        ),
+        # Target validation has dedicated tests; these focus on job targeting.
+        patch("app.agents.generation_jobs.validate_target_units", return_value=[]),
+        patch(
             "app.routers.export._load_selected_generations",
             new=AsyncMock(return_value=selected_generations),
         ) as load_selected,
@@ -1357,6 +1416,7 @@ async def test_create_drafting_requirements_job_targets_missing_requirement_sect
 
     assert job.job_type == "drafting_requirements"
     assert job.result_json == {
+        "input_snapshot": TEST_SNAPSHOT,
         "outline_id": "outline-12",
         "outline_version": 12,
         "target_section_uids": ["sec-missing"],

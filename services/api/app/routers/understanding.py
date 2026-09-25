@@ -609,9 +609,19 @@ async def update_fact_sheet(
         .limit(1)
     )
     fact_sheet = result.scalar_one_or_none()
-    if fact_sheet:
-        fact_sheet.facts_json = data.facts_json
+    if fact_sheet and fact_sheet.facts_json == data.facts_json:
+        # Unchanged content: only the review status changes.
         fact_sheet.status = data.status
+    elif fact_sheet:
+        # K-05: changed facts are a new immutable version, never an in-place
+        # edit under the same version number.
+        fact_sheet = ProjectFactSheet(
+            project_id=project_id,
+            version=(fact_sheet.version or 0) + 1,
+            facts_json=data.facts_json,
+            status=data.status,
+        )
+        db.add(fact_sheet)
     else:
         fact_sheet = ProjectFactSheet(
             project_id=project_id,

@@ -11,6 +11,16 @@ from sqlalchemy import select
 
 from app.core.config import settings
 from app.core.database import AsyncSessionLocal
+from app.agents.job_inputs import (
+    JobInputsChangedError,
+    capture_job_inputs,
+    frozen_brief,
+    frozen_fact_sheet_meta,
+    frozen_facts,
+    frozen_schedule_id,
+    load_job_outline,
+    validate_target_units,
+)
 from app.core.models import Generation, GenerationJob, Project, TpOutline
 
 log = structlog.get_logger()
@@ -306,6 +316,7 @@ async def resume_generation_job(
             target_reason=previous_result.get("target_reason"),
             target_guidance=previous_result.get("target_guidance"),
             job_type=job.job_type,
+            input_snapshot=previous_result.get("input_snapshot"),
         )
 
     if (
@@ -347,6 +358,7 @@ async def resume_generation_job(
         target_reason=previous_result.get("target_reason"),
         target_guidance=target_guidance,
         job_type=job.job_type,
+        input_snapshot=previous_result.get("input_snapshot"),
     )
 
 
@@ -645,15 +657,33 @@ async def create_drafting_job(
     target_reason: str | None = None,
     target_guidance: dict[str, dict[str, Any]] | None = None,
     job_type: str = "drafting_all",
+    input_snapshot: dict[str, Any] | None = None,
 ) -> GenerationJob:
-    outline = await _approved_outline(project.id, db)
-    if not outline:
-        latest_outline = await _latest_outline(project.id, db)
-        raise ValueError(_missing_approved_outline_message(latest_outline))
+    if input_snapshot is not None:
+        # Resume/continuation: keep exactly the recorded inputs (K-05). The
+        # recorded plan must still exist unchanged; never switch to a newer one.
+        outline = await load_job_outline(
+            SimpleNamespace(result_json={"input_snapshot": input_snapshot}), db
+        )
+    else:
+        outline = await _approved_outline(project.id, db)
+        if not outline:
+            latest_outline = await _latest_outline(project.id, db)
+            raise ValueError(_missing_approved_outline_message(latest_outline))
+        input_snapshot = await capture_job_inputs(project.id, outline, db)
+    unknown_targets = validate_target_units(
+        target_section_uids, _plan_units(outline)
+    )
+    if unknown_targets:
+        raise ValueError(
+            "Заявените точки не съществуват в плана на задачата: "
+            + ", ".join(unknown_targets)
+        )
     trace_id = str(uuid.uuid4())
     result_json: dict[str, Any] = {
         "outline_id": outline.id,
         "outline_version": outline.version,
+        "input_snapshot": input_snapshot,
     }
     if target_section_uids is not None:
         result_json.update({
@@ -743,11 +773,11 @@ async def _run_drafting_all_job(job: GenerationJob, db) -> None:
         await db.commit()
         return
 
-    outline = await _approved_outline(project.id, db)
-    if not outline:
+    try:
+        outline = await load_job_outline(job, db)
+    except JobInputsChangedError as exc:
         job.status = "error"
-        latest_outline = await _latest_outline(project.id, db)
-        job.error = _missing_approved_outline_message(latest_outline)
+        job.error = str(exc)
         job.completed_at = datetime.now(timezone.utc)
         await db.commit()
         return
@@ -785,6 +815,7 @@ async def _run_drafting_all_job(job: GenerationJob, db) -> None:
             project_id=project.id,
             db=db,
             trace_id=job.trace_id,
+            schedule_id=frozen_schedule_id(job),
         )
         schedule_summary = (
             schedule_result.get("tp_section_text")
@@ -881,6 +912,7 @@ async def _run_drafting_all_job(job: GenerationJob, db) -> None:
                 section_title=title,
                 section_requirements=requirements,
                 db=db,
+                schedule_id=frozen_schedule_id(job),
             )
             drafting_result = await run_drafting(
                 project_id=project.id,
@@ -895,6 +927,7 @@ async def _run_drafting_all_job(job: GenerationJob, db) -> None:
                 project_grounding_context=project_grounding_context,
                 section_requirement_items=requirement_items,
                 section_drafting_guidance=drafting_guidance,
+                project_brief=frozen_brief(job),
             )
             generation_ids = drafting_result.get("generation_ids")
             if not isinstance(generation_ids, dict) or not any(
@@ -985,14 +1018,20 @@ async def _run_drafting_v2_job(job: GenerationJob, db) -> None:
         job.completed_at = datetime.now(timezone.utc)
         await db.commit()
         return
-    outline = await _approved_outline(project_id, db)
-    if not outline:
+    try:
+        outline = await load_job_outline(job, db)
+    except JobInputsChangedError as exc:
         job.status = "error"
-        job.error = _missing_approved_outline_message(await _latest_outline(project_id, db))
+        job.error = str(exc)
         job.completed_at = datetime.now(timezone.utc)
         await db.commit()
         return
 
+    # Plain values: the job ORM object may be expired by a rollback later.
+    job_facts = frozen_facts(job)
+    job_fact_meta = frozen_fact_sheet_meta(job)
+    job_schedule_id = frozen_schedule_id(job)
+    job_brief = frozen_brief(job)
     groups = build_generation_groups(outline.outline_json.get("sections", []))
     outline_snapshot = SimpleNamespace(id=str(outline.id), version=outline.version)
     all_units = [unit for group in groups for unit in group["units"]]
@@ -1062,7 +1101,10 @@ async def _run_drafting_v2_job(job: GenerationJob, db) -> None:
     if pending_units:
         try:
             schedule_result = await run_schedule(
-                project_id=project_id, db=db, trace_id=trace_id
+                project_id=project_id,
+                db=db,
+                trace_id=trace_id,
+                schedule_id=job_schedule_id,
             )
             schedule_summary = (
                 schedule_result.get("tp_section_text")
@@ -1150,6 +1192,11 @@ async def _run_drafting_v2_job(job: GenerationJob, db) -> None:
                     db=db,
                     linked_wbs_ids=list(unit.get("linked_wbs_ids") or []),
                     linked_fact_keys=list(unit.get("linked_fact_keys") or []),
+                    # K-05: the facts and schedule recorded by the job, even if
+                    # they were edited after the job started.
+                    frozen_facts=job_facts,
+                    frozen_fact_meta=job_fact_meta,
+                    schedule_id=job_schedule_id,
                 )
                 drafting_result = await run_drafting(
                     project_id=project_id,
@@ -1168,6 +1215,7 @@ async def _run_drafting_v2_job(job: GenerationJob, db) -> None:
                     parent_section_uid=assembly_uid if group["requires_assembly"] else None,
                     use_drafting_blueprint=False,
                     section_source_quotes=list(unit.get("source_quotes") or []),
+                    project_brief=job_brief,
                 )
                 generation_id = str(drafting_result["generation_ids"]["variant_1"])
                 text = str((drafting_result.get("variant_1") or {}).get("text") or "")
@@ -1300,6 +1348,22 @@ async def _pause_job_if_requested(
     job.updated_at = datetime.now(timezone.utc)
     await db.commit()
     return True
+
+
+def _plan_units(outline: Any) -> list[dict[str, Any]]:
+    """Every generatable unit of a plan, for target validation."""
+    sections = (outline.outline_json or {}).get("sections", []) if isinstance(
+        getattr(outline, "outline_json", None), dict
+    ) else []
+    units: list[dict[str, Any]] = []
+    _collect_sections(sections, units)
+    if settings.generation_pipeline == "v2":
+        from app.agents.generation_structure import build_generation_groups
+
+        for group in build_generation_groups(sections):
+            units.extend(group["units"])
+            units.append({"uid": group["assembly_uid"]})
+    return units
 
 
 def _collect_sections(sections: list[dict[str, Any]], result: list[dict[str, Any]]) -> None:

@@ -811,6 +811,7 @@ async def _run_drafting(
     section_source_quotes: list[dict[str, Any]] | None = None,
     writer_role: str | None = None,
     llm_calls: list[dict[str, Any]] | None = None,
+    project_brief: str | None = None,
 ) -> dict[str, Any]:
     trace_id = trace_id or str(uuid.uuid4())
     section_uid = _safe_section_uuid(section_uid)
@@ -903,6 +904,15 @@ async def _run_drafting(
         part
         for part in [
             f"SECTION: {section_title}\nREQUIREMENTS:\n{requirements_text}",
+            (
+                "PROJECT BRIEF (approved by the bidder; binding scope decisions, "
+                "exclusions and constraints for the whole proposal — follow it "
+                "unless it conflicts with the tender documents, in which case "
+                "flag the conflict):\n"
+                f"[BRIEF START]\n{project_brief.strip()}\n[BRIEF END]"
+                if project_brief and project_brief.strip()
+                else None
+            ),
             (
                 "REVISION CONTEXT:\n"
                 f"This will be version {revision_number} of the section. Compare the new "
@@ -1126,6 +1136,8 @@ async def _run_drafting(
                 used_sources["section_drafting_guidance"] = section_drafting_guidance
             if section_source_quotes:
                 used_sources["section_source_quotes"] = section_source_quotes
+            if project_brief and project_brief.strip():
+                used_sources["project_brief"] = project_brief.strip()
             if (
                 drafting_blueprint.get("groups")
                 or drafting_blueprint.get("additional_groups")

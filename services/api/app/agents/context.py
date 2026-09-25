@@ -106,6 +106,7 @@ async def build_project_grounding_context(
     db: "AsyncSession",
     max_tender_chunks: int = 14,
     max_schedule_tasks: int = 24,
+    schedule_id: str | None = None,
 ) -> dict[str, Any]:
     """Build a compact evidence pack for drafting and verification.
 
@@ -116,9 +117,14 @@ async def build_project_grounding_context(
 
     keywords = _keyword_set(section_title, section_requirements)
 
+    schedule_query = select(ScheduleNormalized).where(
+        ScheduleNormalized.project_id == project_id
+    )
+    if schedule_id:
+        # K-05: the schedule version recorded by the job, not the latest one.
+        schedule_query = schedule_query.where(ScheduleNormalized.id == schedule_id)
     schedule_result = await db.execute(
-        select(ScheduleNormalized)
-        .where(ScheduleNormalized.project_id == project_id)
+        schedule_query
         .order_by(ScheduleNormalized.version.desc())
         .limit(1)
     )
@@ -215,8 +221,15 @@ async def build_project_grounding_context_v2(
     linked_fact_keys: list[str] | None = None,
     max_tender_chunks: int = 18,
     max_schedule_tasks: int = 24,
+    frozen_facts: dict[str, Any] | None = None,
+    frozen_fact_meta: dict[str, Any] | None = None,
+    schedule_id: str | None = None,
 ) -> dict[str, Any]:
-    """Build Phase 4 context with semantic tender retrieval and linked artifacts."""
+    """Build Phase 4 context with semantic tender retrieval and linked artifacts.
+
+    ``frozen_facts``/``schedule_id`` come from the job's recorded input set, so
+    every unit of one job sees the same facts and schedule (K-05).
+    """
     base = await build_project_grounding_context(
         project_id=project_id,
         section_title=section_title,
@@ -224,6 +237,7 @@ async def build_project_grounding_context_v2(
         db=db,
         max_tender_chunks=max_tender_chunks,
         max_schedule_tasks=max_schedule_tasks,
+        schedule_id=schedule_id,
     )
     query = "\n".join([section_title, *section_requirements]).strip()
 
@@ -306,20 +320,32 @@ async def build_project_grounding_context_v2(
         for item in selected_wbs
     ]
 
-    fact_result = await db.execute(
-        select(ProjectFactSheet)
-        .where(ProjectFactSheet.project_id == project_id)
-        .order_by(ProjectFactSheet.version.desc())
-        .limit(1)
-    )
-    fact_sheet = fact_result.scalar_one_or_none()
-    facts = fact_sheet.facts_json if fact_sheet and isinstance(fact_sheet.facts_json, dict) else {}
+    if frozen_facts is not None:
+        facts = dict(frozen_facts)
+        sheet_meta = frozen_fact_meta or {}
+        fact_version = sheet_meta.get("version")
+        fact_status = sheet_meta.get("status")
+    else:
+        fact_result = await db.execute(
+            select(ProjectFactSheet)
+            .where(ProjectFactSheet.project_id == project_id)
+            .order_by(ProjectFactSheet.version.desc())
+            .limit(1)
+        )
+        fact_sheet = fact_result.scalar_one_or_none()
+        facts = (
+            fact_sheet.facts_json
+            if fact_sheet and isinstance(fact_sheet.facts_json, dict)
+            else {}
+        )
+        fact_version = fact_sheet.version if fact_sheet else None
+        fact_status = fact_sheet.status if fact_sheet else None
     requested_keys = [str(key) for key in linked_fact_keys or [] if key]
     if requested_keys:
         facts = {key: facts[key] for key in requested_keys if key in facts}
     base["project_fact_sheet"] = {
-        "version": fact_sheet.version if fact_sheet else None,
-        "status": fact_sheet.status if fact_sheet else None,
+        "version": fact_version,
+        "status": fact_status,
         "facts": facts,
     }
     return base

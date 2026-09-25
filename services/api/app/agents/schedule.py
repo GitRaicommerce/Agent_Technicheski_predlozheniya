@@ -62,16 +62,17 @@ async def run_schedule(
     project_id: str,
     db: "AsyncSession",
     trace_id: str | None = None,
+    schedule_id: str | None = None,
 ) -> dict[str, Any]:
     trace_id = trace_id or str(uuid.uuid4())
     log.info("agent_schedule_start", project_id=project_id, trace_id=trace_id)
 
-    # Load latest normalized schedule for this project
+    # A job passes the schedule version it recorded (K-05); otherwise latest.
+    query = select(ScheduleNormalized).where(ScheduleNormalized.project_id == project_id)
+    if schedule_id:
+        query = query.where(ScheduleNormalized.id == schedule_id)
     result = await db.execute(
-        select(ScheduleNormalized)
-        .where(ScheduleNormalized.project_id == project_id)
-        .order_by(ScheduleNormalized.version.desc())
-        .limit(1)
+        query.order_by(ScheduleNormalized.version.desc()).limit(1)
     )
     schedule = result.scalar_one_or_none()
 
