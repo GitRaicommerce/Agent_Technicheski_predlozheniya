@@ -264,6 +264,55 @@ def facts_hash(facts: dict[str, Any]) -> str:
     ).hexdigest()
 
 
+async def consistency_stale_reasons(
+    project_id: str,
+    report: dict[str, Any],
+    selected_generations: list[Any],
+    db: Any,
+) -> list[str]:
+    """Why a finished consistency report no longer describes current inputs.
+
+    Shared by export readiness and the consistency panel (K-10, K-15): the
+    report is current only while it covers exactly the selected texts and the
+    schedule and fact sheet it was computed against.
+    """
+    checked_ids = {
+        str(item) for item in report.get("checked_generation_ids") or [] if item
+    }
+    expected_ids = checkable_generation_ids(selected_generations)
+    reasons: list[str] = []
+    if not checked_ids or checked_ids != expected_ids:
+        reasons.append("generation_set_changed")
+    fingerprint = report.get("input_fingerprint")
+    if not isinstance(fingerprint, dict):
+        reasons.append("no_input_fingerprint")
+        return reasons
+    schedule_result = await db.execute(
+        select(ScheduleNormalized)
+        .where(ScheduleNormalized.project_id == project_id)
+        .order_by(ScheduleNormalized.version.desc())
+        .limit(1)
+    )
+    schedule = schedule_result.scalar_one_or_none()
+    if (str(schedule.id) if schedule is not None else None) != fingerprint.get("schedule_id"):
+        reasons.append("schedule_changed")
+    fact_result = await db.execute(
+        select(ProjectFactSheet)
+        .where(ProjectFactSheet.project_id == project_id)
+        .order_by(ProjectFactSheet.version.desc())
+        .limit(1)
+    )
+    fact_sheet = fact_result.scalar_one_or_none()
+    current_facts = (
+        fact_sheet.facts_json
+        if fact_sheet is not None and isinstance(fact_sheet.facts_json, dict)
+        else {}
+    )
+    if facts_hash(current_facts) != fingerprint.get("facts_hash"):
+        reasons.append("facts_changed")
+    return reasons
+
+
 async def extract_section_claims(
     section: dict[str, Any], trace_id: str
 ) -> list[dict[str, Any]]:

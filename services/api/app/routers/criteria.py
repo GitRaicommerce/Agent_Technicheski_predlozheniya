@@ -15,7 +15,7 @@ from app.agents.criteria_verifier import (
     ensure_v2_enabled,
 )
 from app.core.database import get_db
-from app.core.models import CriterionCheck, GenerationJob, Project
+from app.core.models import CriterionCheck, Generation, GenerationJob, Project
 
 router = APIRouter()
 
@@ -40,6 +40,9 @@ class CriterionCheckResponse(BaseModel):
     evidence: str | None = None
     note: str | None = None
     created_at: datetime
+    # K-15: a verdict is current only for the selected version it checked.
+    is_current: bool = True
+    generation_revision: int | None = None
 
     model_config = {"from_attributes": True}
 
@@ -103,17 +106,36 @@ async def get_criteria_workspace(
         )
     )
     checks = list(checks_result.scalars().all())
+    selected_result = await db.execute(
+        select(Generation).where(
+            Generation.project_id == project_id,
+            Generation.selected.is_(True),
+        )
+    )
+    selected = {
+        str(generation.id): generation for generation in selected_result.scalars().all()
+    }
+    responses: list[CriterionCheckResponse] = []
+    for check in checks:
+        response = CriterionCheckResponse.model_validate(check)
+        generation = selected.get(str(check.generation_id))
+        response.is_current = generation is not None
+        revision = getattr(generation, "revision_number", None) if generation else None
+        response.generation_revision = revision if isinstance(revision, int) else None
+        responses.append(response)
+    current = [response for response in responses if response.is_current]
     totals = {
-        "total": len(checks),
+        "total": len(current),
+        "stale": len(responses) - len(current),
         "covered": 0,
         "partial": 0,
         "missing": 0,
         "violated": 0,
         "unchecked": 0,
     }
-    for check in checks:
-        if check.verdict in totals:
-            totals[check.verdict] += 1
+    for response in current:
+        if response.verdict in totals and response.verdict not in {"total", "stale"}:
+            totals[response.verdict] += 1
     job_result = await db.execute(
         select(GenerationJob)
         .where(
@@ -125,7 +147,7 @@ async def get_criteria_workspace(
     )
     job = job_result.scalar_one_or_none()
     return CriteriaWorkspaceResponse(
-        checks=checks,
+        checks=responses,
         totals=totals,
         latest_job=_job_response(job) if job else None,
     )

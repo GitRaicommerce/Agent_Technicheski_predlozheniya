@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import GenerationsPanel from "./GenerationsPanel";
-import { api, type ContentPlan } from "@/lib/api";
+import { api, ApiError, RateLimitError, type ContentPlan } from "@/lib/api";
 
 vi.mock("@/lib/api", async () => {
   const actual = await vi.importActual<typeof import("@/lib/api")>("@/lib/api");
@@ -1463,5 +1463,57 @@ describe("GenerationsPanel", () => {
     await waitFor(() => {
       expect(listGenerationsMock).toHaveBeenCalledTimes(2);
     });
+  });
+
+  const oneSection = [
+    {
+      section_uid: "sec-1",
+      section_title: "Section 1",
+      variants: [
+        {
+          id: "gen-1",
+          section_uid: "sec-1",
+          variant: 1,
+          text: "Old text",
+          evidence_status: "ok",
+          selected: true,
+          created_at: "2026-04-20T10:00:00.000Z",
+        },
+      ],
+    },
+  ];
+
+  it.each([
+    ["409", new ApiError("Одобреният план е заключен", 409)],
+    ["429", new RateLimitError("Твърде много заявки", 30)],
+    ["500", new ApiError("Вътрешна грешка", 500)],
+    ["network", new TypeError("Failed to fetch")],
+  ])("keeps content and shows a %s regenerate failure without retrying (K-15)", async (_label, failure) => {
+    listGenerationsMock.mockResolvedValue(oneSection);
+    regenerateSectionMock.mockRejectedValue(failure);
+
+    const { container } = render(<GenerationsPanel projectId="project-1" />);
+    await screen.findByText("Section 1");
+    await userEvent.click(container.querySelectorAll("button[title]")[1]!);
+
+    expect(await screen.findByTestId("generation-action-error")).toHaveTextContent(
+      `Регенерирането не беше изпълнено: ${(failure as Error).message}`,
+    );
+    expect(screen.getByText("Section 1")).toBeInTheDocument();
+    expect(regenerateSectionMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the last known content when a refresh fails (K-15)", async () => {
+    listGenerationsMock
+      .mockResolvedValueOnce(oneSection)
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    regenerateSectionMock.mockResolvedValue({ generation_ids: { variant_1: "gen-2" }, trace_id: "t" });
+
+    const { container } = render(<GenerationsPanel projectId="project-1" />);
+    await screen.findByText("Section 1");
+    await userEvent.click(container.querySelectorAll("button[title]")[1]!);
+
+    expect(await screen.findByTestId("generation-refresh-error")).toHaveTextContent("Failed to fetch");
+    expect(screen.getByText("Section 1")).toBeInTheDocument();
   });
 });

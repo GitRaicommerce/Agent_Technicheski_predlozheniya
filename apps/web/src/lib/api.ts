@@ -727,6 +727,9 @@ export interface CriterionCheck {
   evidence?: string | null;
   note?: string | null;
   created_at: string;
+  /** False when the verdict belongs to a version that is no longer selected. */
+  is_current?: boolean;
+  generation_revision?: number | null;
 }
 
 export interface CriteriaJob {
@@ -787,6 +790,8 @@ export interface ConsistencyJob {
   created_at: string;
   updated_at: string;
   completed_at?: string | null;
+  stale?: boolean | null;
+  stale_reasons?: string[];
 }
 
 export interface ExportQualitySection {

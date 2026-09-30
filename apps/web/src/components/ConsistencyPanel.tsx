@@ -19,6 +19,13 @@ function isActiveJob(job: ConsistencyJob | null | undefined): boolean {
   return !!job && (job.status === "queued" || job.status === "processing");
 }
 
+const STALE_REASON_LABELS: Record<string, string> = {
+  generation_set_changed: "текстовете са променени",
+  no_input_fingerprint: "няма отпечатък на входните данни",
+  schedule_changed: "графикът е променен",
+  facts_changed: "данните за проекта са променени",
+};
+
 export default function ConsistencyPanel({ projectId, refreshKey = 0 }: Props) {
   const [job, setJob] = useState<ConsistencyJob | null>(null);
   const [loading, setLoading] = useState(false);
@@ -104,7 +111,10 @@ export default function ConsistencyPanel({ projectId, refreshKey = 0 }: Props) {
     }
   };
 
-  const report = job?.status === "done" ? job.result_json : null;
+  const finished = job?.status === "done" ? job.result_json : null;
+  // K-15: a report computed on other texts/schedule/facts is not shown as current.
+  const stale = Boolean(finished && job?.stale);
+  const report = stale ? null : finished;
   const conflicts: ConsistencyConflict[] = report?.conflicts ?? [];
   const criticalCount = report?.critical_count ?? 0;
   const warningCount = report?.warning_count ?? 0;
@@ -138,6 +148,12 @@ export default function ConsistencyPanel({ projectId, refreshKey = 0 }: Props) {
       )}
       {job?.status === "error" && (
         <p className="text-xs text-red-600">{job.error}</p>
+      )}
+
+      {stale && (
+        <p className="rounded bg-amber-50 px-2 py-1 text-xs text-amber-900" data-testid="consistency-stale">
+          {`Последният доклад е остарял (${(job?.stale_reasons ?? []).map((reason) => STALE_REASON_LABELS[reason] ?? reason).join("; ")}). Резултатите му не се показват — пусни проверката отново.`}
+        </p>
       )}
 
       {report && (

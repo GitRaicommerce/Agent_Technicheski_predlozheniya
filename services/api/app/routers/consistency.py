@@ -12,12 +12,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.consistency import (
+    consistency_stale_reasons,
     create_consistency_job,
     ensure_v2_enabled,
     render_consistency_report,
 )
 from app.core.database import get_db
-from app.core.models import GenerationJob, Project
+from app.core.models import Generation, GenerationJob, Project
 
 router = APIRouter()
 
@@ -41,6 +42,9 @@ class ConsistencyJobResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     completed_at: datetime | None = None
+    # K-15: a finished report is shown as current only while its inputs are.
+    stale: bool | None = None
+    stale_reasons: list[str] = []
 
 
 def _job_response(job: GenerationJob) -> ConsistencyJobResponse:
@@ -88,7 +92,22 @@ async def get_latest_consistency_job(
     _require_v2()
     await _project_or_404(project_id, db)
     job = await _latest_job(project_id, db)
-    return _job_response(job) if job else None
+    if not job:
+        return None
+    response = _job_response(job)
+    if job.status == "done" and isinstance(job.result_json, dict):
+        selected = await db.execute(
+            select(Generation).where(
+                Generation.project_id == project_id,
+                Generation.selected.is_(True),
+            )
+        )
+        reasons = await consistency_stale_reasons(
+            project_id, job.result_json, list(selected.scalars().all()), db
+        )
+        response.stale = bool(reasons)
+        response.stale_reasons = reasons
+    return response
 
 
 @router.get("/{project_id}/report", response_class=PlainTextResponse)

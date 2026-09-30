@@ -385,45 +385,13 @@ async def _consistency_state(
     )
     if not report:
         return None
-    from app.agents.consistency import checkable_generation_ids, facts_hash
-    from app.core.models import ProjectFactSheet, ScheduleNormalized
+    from app.agents.consistency import consistency_stale_reasons
 
-    checked_ids = {
-        str(item) for item in report.get("checked_generation_ids") or [] if item
-    }
     # K-10: the report must cover exactly the texts that would be exported —
     # a new or regenerated section (not only a removed one) makes it stale.
-    expected_ids = checkable_generation_ids(selected_generations)
-    stale_reasons: list[str] = []
-    if not checked_ids or checked_ids != expected_ids:
-        stale_reasons.append("generation_set_changed")
-    fingerprint = report.get("input_fingerprint")
-    if not isinstance(fingerprint, dict):
-        stale_reasons.append("no_input_fingerprint")
-    else:
-        schedule_result = await db.execute(
-            select(ScheduleNormalized)
-            .where(ScheduleNormalized.project_id == project_id)
-            .order_by(ScheduleNormalized.version.desc())
-            .limit(1)
-        )
-        schedule = schedule_result.scalar_one_or_none()
-        if (str(schedule.id) if schedule is not None else None) != fingerprint.get("schedule_id"):
-            stale_reasons.append("schedule_changed")
-        fact_result = await db.execute(
-            select(ProjectFactSheet)
-            .where(ProjectFactSheet.project_id == project_id)
-            .order_by(ProjectFactSheet.version.desc())
-            .limit(1)
-        )
-        fact_sheet = fact_result.scalar_one_or_none()
-        current_facts = (
-            fact_sheet.facts_json
-            if fact_sheet is not None and isinstance(fact_sheet.facts_json, dict)
-            else {}
-        )
-        if facts_hash(current_facts) != fingerprint.get("facts_hash"):
-            stale_reasons.append("facts_changed")
+    stale_reasons = await consistency_stale_reasons(
+        project_id, report, selected_generations, db
+    )
     stale = bool(stale_reasons)
     conflicts = [
         conflict

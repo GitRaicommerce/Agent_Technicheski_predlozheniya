@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   api,
   type ContentPlan,
@@ -50,6 +50,16 @@ const SCOPE_LABELS: Record<UnderstandingRequirementScope, string> = {
 };
 const WBS_KINDS = ["etap", "activity", "subactivity", "task"] as const;
 
+type DraftClears = { requirement?: string; wbs?: string; facts?: boolean };
+type Act = (action: () => Promise<unknown>, clears?: DraftClears) => Promise<void>;
+
+function withoutKey<T>(record: Record<string, T>, key: string | undefined): Record<string, T> {
+  if (!key || !(key in record)) return record;
+  const next = { ...record };
+  delete next[key];
+  return next;
+}
+
 function sourceIssueLabel(issue: string): string {
   if (issue.startsWith("pages_missing:")) {
     return `липсващи страници ${issue.slice("pages_missing:".length)}`;
@@ -78,6 +88,12 @@ export default function UnderstandingPanel({ projectId }: { projectId: string })
   const [error, setError] = useState<string | null>(null);
   const [factsText, setFactsText] = useState("{}");
   const [v2Enabled, setV2Enabled] = useState(true);
+  // Unsaved edits live apart from server state, so a reload after saving one
+  // item (or a background refresh) never overwrites another item's draft.
+  const [requirementDrafts, setRequirementDrafts] = useState<Record<string, Partial<UnderstandingRequirement>>>({});
+  const [wbsDrafts, setWbsDrafts] = useState<Record<string, Partial<UnderstandingWbsItem>>>({});
+  const [factsDirty, setFactsDirty] = useState(false);
+  const factsDirtyRef = useRef(false);
 
   const load = useCallback(async () => {
     try {
@@ -99,7 +115,9 @@ export default function UnderstandingPanel({ projectId }: { projectId: string })
       ]);
       setWorkspace(result);
       setContentPlan(plan);
-      setFactsText(JSON.stringify(result.fact_sheet?.facts_json ?? {}, null, 2));
+      if (!factsDirtyRef.current) {
+        setFactsText(JSON.stringify(result.fact_sheet?.facts_json ?? {}, null, 2));
+      }
       setError(null);
     } catch (caught: unknown) {
       setError(
@@ -127,11 +145,21 @@ export default function UnderstandingPanel({ projectId }: { projectId: string })
     return () => window.clearInterval(timer);
   }, [load, projectId, workspace?.latest_job]);
 
-  async function act(action: () => Promise<unknown>) {
+  function markFactsDirty(value: boolean) {
+    factsDirtyRef.current = value;
+    setFactsDirty(value);
+  }
+
+  async function act(action: () => Promise<unknown>, clears?: DraftClears) {
     setBusy(true);
     setError(null);
     try {
       await action();
+      // Only the item that was actually saved loses its draft; a failed
+      // save keeps it (and keeps confirmation blocked).
+      setRequirementDrafts((current) => withoutKey(current, clears?.requirement));
+      setWbsDrafts((current) => withoutKey(current, clears?.wbs));
+      if (clears?.facts) markFactsDirty(false);
       await load();
     } catch (caught: unknown) {
       setError(caught instanceof Error ? caught.message : "Действието е неуспешно.");
@@ -160,6 +188,21 @@ export default function UnderstandingPanel({ projectId }: { projectId: string })
   const jobResumable = job && ["error", "cancelled", "timed_out"].includes(job.status);
 
   const manifest = workspace?.source_manifest;
+  const view: UnderstandingWorkspace | null = workspace
+    ? {
+        ...workspace,
+        requirements: workspace.requirements.map((item) =>
+          requirementDrafts[item.id] ? { ...item, ...requirementDrafts[item.id] } : item,
+        ),
+        wbs_items: workspace.wbs_items.map((item) =>
+          wbsDrafts[item.id] ? { ...item, ...wbsDrafts[item.id] } : item,
+        ),
+      }
+    : null;
+  const liveRequirementIds = new Set(workspace?.requirements.map((item) => item.id) ?? []);
+  const liveWbsIds = new Set(workspace?.wbs_items.map((item) => item.id) ?? []);
+  const dirtyRequirements = Object.keys(requirementDrafts).filter((id) => liveRequirementIds.has(id)).length;
+  const dirtyWbs = Object.keys(wbsDrafts).filter((id) => liveWbsIds.has(id)).length;
 
   return (
     <div data-testid="understanding-panel" className="space-y-3 text-xs">
@@ -252,44 +295,28 @@ export default function UnderstandingPanel({ projectId }: { projectId: string })
         ))}
       </div>
 
-      {tab === "requirements" && workspace && (
+      {tab === "requirements" && view && (
         <RequirementsEditor
           projectId={projectId}
-          workspace={workspace}
+          workspace={view}
           contentPlan={contentPlan}
           busy={busy}
           act={act}
+          dirtyCount={dirtyRequirements}
           updateLocal={(id, values) =>
-            setWorkspace((current) =>
-              current
-                ? {
-                    ...current,
-                    requirements: current.requirements.map((item) =>
-                      item.id === id ? { ...item, ...values } : item,
-                    ),
-                  }
-                : current,
-            )
+            setRequirementDrafts((current) => ({ ...current, [id]: { ...current[id], ...values } }))
           }
         />
       )}
-      {tab === "wbs" && workspace && (
+      {tab === "wbs" && view && (
         <WbsEditor
           projectId={projectId}
-          workspace={workspace}
+          workspace={view}
           busy={busy}
           act={act}
+          dirtyCount={dirtyWbs}
           updateLocal={(id, values) =>
-            setWorkspace((current) =>
-              current
-                ? {
-                    ...current,
-                    wbs_items: current.wbs_items.map((item) =>
-                      item.id === id ? { ...item, ...values } : item,
-                    ),
-                  }
-                : current,
-            )
+            setWbsDrafts((current) => ({ ...current, [id]: { ...current[id], ...values } }))
           }
         />
       )}
@@ -298,7 +325,10 @@ export default function UnderstandingPanel({ projectId }: { projectId: string })
           <textarea
             aria-label="Fact sheet JSON"
             value={factsText}
-            onChange={(event) => setFactsText(event.target.value)}
+            onChange={(event) => {
+              setFactsText(event.target.value);
+              markFactsDirty(true);
+            }}
             rows={14}
             className="w-full rounded border p-2 font-mono text-[11px]"
           />
@@ -307,7 +337,7 @@ export default function UnderstandingPanel({ projectId }: { projectId: string })
               type="button"
               disabled={busy}
               onClick={() =>
-                act(() => api.understanding.saveFactSheet(projectId, JSON.parse(factsText)))
+                act(() => api.understanding.saveFactSheet(projectId, JSON.parse(factsText)), { facts: true })
               }
               className="flex-1 rounded border px-2 py-1.5"
             >
@@ -315,7 +345,8 @@ export default function UnderstandingPanel({ projectId }: { projectId: string })
             </button>
             <button
               type="button"
-              disabled={busy || !workspace.fact_sheet}
+              disabled={busy || !workspace.fact_sheet || factsDirty}
+              title={factsDirty ? "Първо запази промените" : undefined}
               onClick={() => act(() => api.understanding.confirmFactSheet(projectId))}
               className="flex-1 rounded bg-green-600 px-2 py-1.5 text-white disabled:opacity-50"
             >
@@ -335,13 +366,15 @@ function RequirementsEditor({
   busy,
   act,
   updateLocal,
+  dirtyCount = 0,
 }: {
   projectId: string;
   workspace: UnderstandingWorkspace;
   contentPlan: ContentPlan | null;
   busy: boolean;
-  act: (action: () => Promise<unknown>) => Promise<void>;
+  act: Act;
   updateLocal: (id: string, values: Partial<UnderstandingRequirement>) => void;
+  dirtyCount?: number;
 }) {
   const [draft, setDraft] = useState<Partial<UnderstandingRequirement>>({
     kind: "content",
@@ -419,12 +452,13 @@ function RequirementsEditor({
           <button type="button" disabled={busy || !draft.source_file_id || !draft.source_quote || !draft.normalized_text} onClick={() => act(() => api.understanding.createRequirement(projectId, draft as Omit<UnderstandingRequirement, "id" | "project_id" | "created_at">))} className="w-full rounded border px-2 py-1">Добави</button>
         </div>
       </details>
-      <button type="button" disabled={busy || workspace.acceptance.proposal_requirement_count === 0} onClick={() => act(() => api.understanding.confirmRequirements(projectId))} className="w-full rounded bg-green-600 px-2 py-1.5 text-white disabled:opacity-50">Потвърди изискванията към ТП</button>
+      {dirtyCount > 0 && <p data-testid="requirements-unsaved" className="rounded bg-amber-50 p-1.5 text-[10px] text-amber-900">Незапазени промени в {dirtyCount} изисквания. Запази ги, преди да потвърдиш.</p>}
+      <button type="button" data-testid="confirm-requirements" disabled={busy || dirtyCount > 0 || workspace.acceptance.proposal_requirement_count === 0} onClick={() => act(() => api.understanding.confirmRequirements(projectId))} className="w-full rounded bg-green-600 px-2 py-1.5 text-white disabled:opacity-50">Потвърди изискванията към ТП</button>
     </div>
   );
 }
 
-function RequirementCard({ item, workspace, projectId, busy, act, updateLocal }: { item: UnderstandingRequirement; workspace: UnderstandingWorkspace; projectId: string; busy: boolean; act: (action: () => Promise<unknown>) => Promise<void>; updateLocal: (id: string, values: Partial<UnderstandingRequirement>) => void }) {
+function RequirementCard({ item, workspace, projectId, busy, act, updateLocal }: { item: UnderstandingRequirement; workspace: UnderstandingWorkspace; projectId: string; busy: boolean; act: Act; updateLocal: (id: string, values: Partial<UnderstandingRequirement>) => void }) {
   return (
     <details className="rounded border bg-white p-2">
       <summary className="cursor-pointer text-[11px] font-medium">{item.normalized_text}</summary>
@@ -443,15 +477,15 @@ function RequirementCard({ item, workspace, projectId, busy, act, updateLocal }:
         <div className="flex gap-1">
           <select value={item.kind} onChange={(event) => updateLocal(item.id, { kind: event.target.value as UnderstandingRequirement["kind"] })} className="min-w-0 flex-1 rounded border p-1">{REQUIREMENT_KINDS.map((kind) => <option key={kind} value={kind}>{KIND_LABELS[kind]}</option>)}</select>
           <select aria-label="Обхват" value={item.scope} onChange={(event) => updateLocal(item.id, { scope: event.target.value as UnderstandingRequirementScope })} className="min-w-0 flex-1 rounded border p-1">{Object.entries(SCOPE_LABELS).map(([scope, label]) => <option key={scope} value={scope}>{label}</option>)}</select>
-          <button type="button" disabled={busy} onClick={() => act(() => api.understanding.updateRequirement(projectId, item.id, item))} className="rounded border px-2">Запази</button>
-          <button type="button" disabled={busy} aria-label="Изтрий изискване" onClick={() => act(() => api.understanding.deleteRequirement(projectId, item.id))} className="rounded border px-2 text-red-600">×</button>
+          <button type="button" disabled={busy} onClick={() => act(() => api.understanding.updateRequirement(projectId, item.id, item), { requirement: item.id })} className="rounded border px-2">Запази</button>
+          <button type="button" disabled={busy} aria-label="Изтрий изискване" onClick={() => act(() => api.understanding.deleteRequirement(projectId, item.id), { requirement: item.id })} className="rounded border px-2 text-red-600">×</button>
         </div>
       </div>
     </details>
   );
 }
 
-function RequirementGroup({ title, items, workspace, projectId, busy, act, updateLocal, testId, tone = "plain" }: { title: React.ReactNode; items: UnderstandingRequirement[]; workspace: UnderstandingWorkspace; projectId: string; busy: boolean; act: (action: () => Promise<unknown>) => Promise<void>; updateLocal: (id: string, values: Partial<UnderstandingRequirement>) => void; testId?: string; tone?: "plain" | "amber" }) {
+function RequirementGroup({ title, items, workspace, projectId, busy, act, updateLocal, testId, tone = "plain" }: { title: React.ReactNode; items: UnderstandingRequirement[]; workspace: UnderstandingWorkspace; projectId: string; busy: boolean; act: Act; updateLocal: (id: string, values: Partial<UnderstandingRequirement>) => void; testId?: string; tone?: "plain" | "amber" }) {
   const [open, setOpen] = useState(false);
   return (
     <details open={open} onToggle={(event) => setOpen(event.currentTarget.open)} data-testid={testId} className={`rounded border p-2 ${tone === "amber" ? "border-amber-200 bg-amber-50" : "bg-white"}`}>
@@ -595,7 +629,7 @@ function AcceptanceSummary({ workspace }: { workspace: UnderstandingWorkspace })
   );
 }
 
-function WbsEditor({ projectId, workspace, busy, act, updateLocal }: { projectId: string; workspace: UnderstandingWorkspace; busy: boolean; act: (action: () => Promise<unknown>) => Promise<void>; updateLocal: (id: string, values: Partial<UnderstandingWbsItem>) => void }) {
+function WbsEditor({ projectId, workspace, busy, act, updateLocal, dirtyCount = 0 }: { projectId: string; workspace: UnderstandingWorkspace; busy: boolean; act: Act; updateLocal: (id: string, values: Partial<UnderstandingWbsItem>) => void; dirtyCount?: number }) {
   const [newTitle, setNewTitle] = useState("");
   return (
     <div className="space-y-2">
@@ -606,8 +640,8 @@ function WbsEditor({ projectId, workspace, busy, act, updateLocal }: { projectId
             <select value={item.kind} onChange={(e) => updateLocal(item.id, { kind: e.target.value as UnderstandingWbsItem["kind"] })} className="min-w-0 flex-1 rounded border p-1">
               {WBS_KINDS.map((kind) => <option key={kind} value={kind}>{KIND_LABELS[kind]}</option>)}
             </select>
-            <button type="button" disabled={busy} onClick={() => act(() => api.understanding.updateWbsItem(projectId, item.id, item))} className="rounded border px-2">Запази</button>
-            <button type="button" disabled={busy} aria-label="Изтрий дейност" onClick={() => act(() => api.understanding.deleteWbsItem(projectId, item.id))} className="rounded border px-2 text-red-600">×</button>
+            <button type="button" disabled={busy} onClick={() => act(() => api.understanding.updateWbsItem(projectId, item.id, item), { wbs: item.id })} className="rounded border px-2">Запази</button>
+            <button type="button" disabled={busy} aria-label="Изтрий дейност" onClick={() => act(() => api.understanding.deleteWbsItem(projectId, item.id), { wbs: item.id })} className="rounded border px-2 text-red-600">×</button>
           </div>
           {item.schedule_task_uid && <p className="mt-1 text-[10px] text-blue-600">График: задача {item.schedule_task_uid}</p>}
         </div>
@@ -616,7 +650,8 @@ function WbsEditor({ projectId, workspace, busy, act, updateLocal }: { projectId
         <input placeholder="Нова дейност" value={newTitle} onChange={(e) => setNewTitle(e.target.value)} className="min-w-0 flex-1 rounded border p-1" />
         <button type="button" disabled={busy || !newTitle.trim()} onClick={() => act(() => api.understanding.createWbsItem(projectId, { parent_id: null, level: 0, kind: "activity", title: newTitle, description: null, source_refs_json: [], schedule_task_uid: null, order_index: workspace.wbs_items.length, status: "extracted" }))} className="rounded border px-2">Добави</button>
       </div>
-      <button type="button" disabled={busy || workspace.wbs_items.length === 0} onClick={() => act(() => api.understanding.confirmWbs(projectId))} className="w-full rounded bg-green-600 px-2 py-1.5 text-white disabled:opacity-50">Потвърди WBS</button>
+      {dirtyCount > 0 && <p data-testid="wbs-unsaved" className="rounded bg-amber-50 p-1.5 text-[10px] text-amber-900">Незапазени промени в {dirtyCount} дейности. Запази ги, преди да потвърдиш.</p>}
+      <button type="button" data-testid="confirm-wbs" disabled={busy || dirtyCount > 0 || workspace.wbs_items.length === 0} onClick={() => act(() => api.understanding.confirmWbs(projectId))} className="w-full rounded bg-green-600 px-2 py-1.5 text-white disabled:opacity-50">Потвърди WBS</button>
     </div>
   );
 }

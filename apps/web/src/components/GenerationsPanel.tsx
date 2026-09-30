@@ -30,7 +30,10 @@ export default function GenerationsPanel({
 }: Props) {
   const [sections, setSections] = useState<SectionGenerations[]>([]);
   const [loading, setLoading] = useState(true);
+  // Action failures (regenerate, select, pause, ...) stay visible until the
+  // next user action; a failed refresh keeps the last known content (K-15).
   const [error, setError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [regenerating, setRegenerating] = useState<string | null>(null);
   const [selectingGeneration, setSelectingGeneration] = useState<string | null>(
@@ -58,7 +61,6 @@ export default function GenerationsPanel({
     if (!hasLoadedRef.current) {
       setLoading(true);
     }
-    setError(null);
     // The content plan is a v2-only feature. Load it only when the backend
     // reports it as available, and never let its failure hide existing texts:
     // generations and the job are loaded independently of the plan.
@@ -80,6 +82,7 @@ export default function GenerationsPanel({
       ),
     ])
       .then(([nextSections, nextJob, planResult]) => {
+        setLoadError(null);
         const nextContentPlan = planResult.plan;
         const jobOutlineId = nextJob?.result_json?.outline_id;
         const relevantJob =
@@ -99,7 +102,7 @@ export default function GenerationsPanel({
         );
       })
       .catch((e: unknown) =>
-        setError(
+        setLoadError(
           e instanceof Error ? e.message : "Грешка при зареждане на генерациите.",
         ),
       )
@@ -148,11 +151,17 @@ export default function GenerationsPanel({
 
   const handleRegenerate = async (sectionUid: string) => {
     setRegenerating(sectionUid);
+    setError(null);
     try {
       await api.agents.regenerateSection(projectId, sectionUid);
       await load();
-    } catch {
-      // Allow a manual retry without blocking the rest of the panel.
+    } catch (e: unknown) {
+      // Visible, never retried automatically: regeneration is paid work.
+      setError(
+        e instanceof Error
+          ? `Регенерирането не беше изпълнено: ${e.message}`
+          : "Регенерирането не беше изпълнено.",
+      );
     } finally {
       setRegenerating(null);
     }
@@ -165,7 +174,11 @@ export default function GenerationsPanel({
       await api.agents.selectGeneration(projectId, generationId);
       await load();
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Generation selection failed.");
+      setError(
+        e instanceof Error
+          ? `Изборът на вариант не беше записан: ${e.message}`
+          : "Изборът на вариант не беше записан.",
+      );
     } finally {
       setSelectingGeneration(null);
     }
@@ -336,10 +349,10 @@ export default function GenerationsPanel({
     );
   }
 
-  if (error) {
+  if (loadError && !hasLoadedRef.current) {
     return (
       <div className="space-y-1">
-        <p className="text-xs text-red-400">{error}</p>
+        <p className="text-xs text-red-400">{loadError}</p>
         <button
           onClick={load}
           className="text-xs text-blue-500 hover:underline"
@@ -350,6 +363,31 @@ export default function GenerationsPanel({
     );
   }
 
+  const statusBanners = (
+    <>
+      {error && (
+        <p
+          data-testid="generation-action-error"
+          role="alert"
+          className="rounded border border-red-300 bg-red-50 px-2 py-1 text-xs text-red-700"
+        >
+          {error}
+        </p>
+      )}
+      {loadError && (
+        <p
+          data-testid="generation-refresh-error"
+          className="rounded border border-amber-300 bg-amber-50 px-2 py-1 text-xs text-amber-900"
+        >
+          {`Обновяването е неуспешно (${loadError}). Показано е последното известно състояние.`}{" "}
+          <button type="button" onClick={load} className="underline">
+            Опитай отново
+          </button>
+        </p>
+      )}
+    </>
+  );
+
   const generationNodes = flattenGenerationSections(sections);
   const generatedNodeCount = generationNodes.filter(
     (section) => section.variants.length > 0,
@@ -358,6 +396,7 @@ export default function GenerationsPanel({
   if (planNeedsApproval) {
     return (
       <div className="space-y-2" data-testid="generation-plan-not-approved">
+        {statusBanners}
         <p className="text-xs leading-relaxed text-amber-300">
           Текущият подробен план v{contentPlan.version} е чернова. Одобрението на плана е достатъчно, за да започне генерирането; WBS и данните за проекта са помощни и не го блокират.
         </p>
@@ -377,6 +416,7 @@ export default function GenerationsPanel({
   if (sections.length === 0) {
     return (
       <div className="space-y-1">
+        {statusBanners}
         {generationJob && (
           <GenerationJobProgress
             job={generationJob}
@@ -430,6 +470,7 @@ export default function GenerationsPanel({
 
   return (
     <div className="space-y-1">
+      {statusBanners}
       {planError && (
         <p
           data-testid="generation-plan-load-error"

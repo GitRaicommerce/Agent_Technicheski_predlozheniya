@@ -145,8 +145,10 @@ export default function OutlinePanel({ projectId, refreshKey = 0 }: Props) {
                   ...current,
                   items: current.items.map((entry) => entry.id === itemId ? updated : entry),
                 } : current);
+                return true;
               } catch (err: unknown) {
                 setError(err instanceof Error ? err.message : "Промяната не бе записана.");
+                return false;
               } finally {
                 setBusy(false);
               }
@@ -219,6 +221,14 @@ export default function OutlinePanel({ projectId, refreshKey = 0 }: Props) {
   );
 }
 
+function newCriterionId(itemId: string): string {
+  const random =
+    typeof globalThis.crypto?.randomUUID === "function"
+      ? globalThis.crypto.randomUUID()
+      : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+  return `manual-${itemId}-${random}`;
+}
+
 function PlanItemEditor({
   item,
   allItems,
@@ -230,7 +240,7 @@ function PlanItemEditor({
   allItems: ContentPlanItem[];
   locked: boolean;
   busy: boolean;
-  onSave: (itemId: string, values: Partial<ContentPlanItem>) => Promise<void>;
+  onSave: (itemId: string, values: Partial<ContentPlanItem>) => Promise<boolean>;
 }) {
   const children = useMemo(
     () => allItems.filter((entry) => entry.parent_id === item.id),
@@ -240,28 +250,48 @@ function PlanItemEditor({
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(item.title);
   const [kind, setKind] = useState(item.content_kind);
-  const [criteriaText, setCriteriaText] = useState(
-    item.acceptance_criteria_json.map((criterion) => criterion.text).join("\n"),
-  );
+  // Criteria are edited as whole records keyed by a stable id, so a quote
+  // or requirement link can never slide onto a different criterion (K-13).
+  const [criteria, setCriteria] = useState<ContentPlanCriterion[]>(item.acceptance_criteria_json);
   const mandatory = item.source_quotes_json.some(
     (source) => source.source_kind === "mandatory_heading",
   );
 
+  const toggleEditing = () => {
+    if (!editing) {
+      setTitle(item.title);
+      setKind(item.content_kind);
+      setCriteria(item.acceptance_criteria_json);
+    }
+    setEditing((value) => !value);
+  };
+
+  const updateCriterion = (id: string, text: string) =>
+    setCriteria((current) => current.map((entry) => (entry.id === id ? { ...entry, text } : entry)));
+  const removeCriterion = (id: string) =>
+    setCriteria((current) => current.filter((entry) => entry.id !== id));
+  const moveCriterion = (index: number, delta: number) =>
+    setCriteria((current) => {
+      const target = index + delta;
+      if (target < 0 || target >= current.length) return current;
+      const next = [...current];
+      [next[index], next[target]] = [next[target], next[index]];
+      return next;
+    });
+  const addCriterion = () =>
+    setCriteria((current) => [...current, { id: newCriterionId(item.id), text: "", kind: "content" }]);
+
   const save = async () => {
-    const lines = criteriaText.split("\n").map((line) => line.trim()).filter(Boolean);
-    const criteria: ContentPlanCriterion[] = lines.map((text, index) => ({
-      ...(item.acceptance_criteria_json[index] || {
-        id: `manual-${item.id}-${index + 1}`,
-        kind: "content",
-      }),
-      text,
-    }));
-    await onSave(item.id, {
+    const cleaned = criteria
+      .map((entry) => ({ ...entry, text: entry.text.trim() }))
+      .filter((entry) => entry.text);
+    const saved = await onSave(item.id, {
       title: title.trim(),
       content_kind: kind,
-      acceptance_criteria_json: criteria,
+      acceptance_criteria_json: cleaned,
     });
-    setEditing(false);
+    // A failed save keeps the editor open with everything the user typed.
+    if (saved) setEditing(false);
   };
 
   return (
@@ -284,7 +314,7 @@ function PlanItemEditor({
           <span className="rounded bg-amber-50 px-1 text-[10px] text-amber-700">задължително</span>
         )}
         {!locked && (
-          <button type="button" onClick={() => setEditing((value) => !value)} className="text-[10px] text-blue-600">редакция</button>
+          <button type="button" onClick={toggleEditing} className="text-[10px] text-blue-600">редакция</button>
         )}
       </div>
 
@@ -298,7 +328,19 @@ function PlanItemEditor({
                 <option value="specific">Специфично за поръчката</option>
                 <option value="mixed">Смесено</option>
               </select>
-              <textarea aria-label="Критерии за приемане" value={criteriaText} onChange={(event) => setCriteriaText(event.target.value)} rows={5} className="w-full rounded border p-1 text-xs" placeholder="Един проверим критерий на ред" />
+              <ol aria-label="Критерии за приемане" className="space-y-1">
+                {criteria.map((criterion, index) => (
+                  <li key={criterion.id} data-testid={`criterion-row-${criterion.id}`} className="flex items-start gap-1">
+                    <textarea aria-label={`Критерий ${index + 1}`} value={criterion.text} onChange={(event) => updateCriterion(criterion.id, event.target.value)} rows={2} className="min-w-0 flex-1 rounded border p-1 text-xs" placeholder="Проверим критерий" />
+                    <div className="flex flex-col text-[10px]">
+                      <button type="button" aria-label={`Премести критерий ${index + 1} нагоре`} disabled={index === 0} onClick={() => moveCriterion(index, -1)} className="px-1 disabled:opacity-30">↑</button>
+                      <button type="button" aria-label={`Премести критерий ${index + 1} надолу`} disabled={index === criteria.length - 1} onClick={() => moveCriterion(index, 1)} className="px-1 disabled:opacity-30">↓</button>
+                      <button type="button" aria-label={`Изтрий критерий ${index + 1}`} onClick={() => removeCriterion(criterion.id)} className="px-1 text-red-600">×</button>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+              <button type="button" onClick={addCriterion} className="rounded border px-2 py-0.5 text-[11px]">+ критерий</button>
               <button type="button" disabled={busy || !title.trim()} onClick={() => void save()} className="rounded bg-blue-600 px-2 py-1 text-[11px] text-white disabled:opacity-50">Запази</button>
             </div>
           ) : (

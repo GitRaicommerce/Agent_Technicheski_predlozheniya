@@ -102,9 +102,11 @@ export default function CriteriaPanel({ projectId, refreshKey = 0 }: Props) {
   const job = workspace?.latest_job ?? null;
   const totals = workspace?.totals ?? {};
   const blockingCount = (totals.missing ?? 0) + (totals.violated ?? 0);
+  // K-15: only verdicts for the currently selected versions are shown.
   const issueChecks = (workspace?.checks ?? []).filter(
-    (check) => check.verdict !== "covered",
+    (check) => check.is_current !== false && check.verdict !== "covered",
   );
+  const staleCount = totals.stale ?? 0;
 
   return (
     <div className="space-y-2 text-sm" data-testid="criteria-panel">
@@ -149,6 +151,12 @@ export default function CriteriaPanel({ projectId, refreshKey = 0 }: Props) {
         </div>
       )}
 
+      {staleCount > 0 && (
+        <p className="rounded bg-amber-50 px-2 py-1 text-xs text-amber-900" data-testid="criteria-stale">
+          {`${staleCount} по-стари проверки са за версии, които вече не са избрани, и не се показват. Пусни проверката отново за текущите текстове.`}
+        </p>
+      )}
+
       {blockingCount > 0 && (
         <p className="text-xs font-medium text-red-700">
           {`${blockingCount} критерия са неизпълнени или нарушени — прегледайте и регенерирайте засегнатите подточки.`}
@@ -173,6 +181,9 @@ export default function CriteriaPanel({ projectId, refreshKey = 0 }: Props) {
                 </span>
                 <span className="text-[11px] text-gray-500">
                   {check.criterion_kind}
+                </span>
+                <span className="ml-auto text-[10px] text-gray-400">
+                  {`раздел ${check.section_uid.slice(0, 8)}${check.generation_revision != null ? ` · версия ${check.generation_revision}` : ""}`}
                 </span>
               </div>
               <p className="mt-1 text-xs text-gray-700">{check.criterion_text}</p>

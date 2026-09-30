@@ -238,11 +238,60 @@ describe("OutlinePanel Phase 2", () => {
     await userEvent.clear(screen.getByLabelText("Заглавие на точката"));
     await userEvent.type(screen.getByLabelText("Заглавие на точката"), "Рискове и мерки");
     await userEvent.selectOptions(screen.getByLabelText("Вид съдържание"), "mixed");
-    await userEvent.clear(screen.getByLabelText("Критерии за приемане"));
-    await userEvent.type(screen.getByLabelText("Критерии за приемане"), "Има собственик на риска.");
+    await userEvent.clear(screen.getByLabelText("Критерий 1"));
+    await userEvent.type(screen.getByLabelText("Критерий 1"), "Има собственик на риска.");
     await userEvent.click(screen.getByRole("button", { name: "Запази" }));
 
     await waitFor(() => expect(api.contentPlan.updateItem).toHaveBeenCalled());
     expect(await screen.findByText("Рискове и мерки")).toBeInTheDocument();
+  });
+
+  it("edits criteria as stable records: delete, reorder, and add without inherited quotes (K-13)", async () => {
+    const twoCriteria: ContentPlan = {
+      ...plan,
+      items: [{
+        ...plan.items[0],
+        acceptance_criteria_json: [
+          { id: "criterion-1", text: "Първи", kind: "content", requirement_id: "req-1", source_quote: "цитат 1" },
+          { id: "criterion-2", text: "Втори", kind: "content", requirement_id: "req-2", source_quote: "цитат 2" },
+          { id: "criterion-3", text: "Трети", kind: "content", requirement_id: "req-3", source_quote: "цитат 3" },
+        ],
+      }],
+    };
+    vi.mocked(api.contentPlan.get).mockResolvedValue(twoCriteria);
+    vi.mocked(api.contentPlan.updateItem).mockResolvedValue(twoCriteria.items[0]);
+    render(<OutlinePanel projectId="project-1" />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "редакция" }));
+    await userEvent.click(screen.getByRole("button", { name: "Изтрий критерий 1" }));
+    await userEvent.click(screen.getByRole("button", { name: "Премести критерий 2 нагоре" }));
+    await userEvent.click(screen.getByRole("button", { name: "+ критерий" }));
+    await userEvent.type(screen.getByLabelText("Критерий 3"), "Нов критерий");
+    await userEvent.click(screen.getByRole("button", { name: "Запази" }));
+
+    await waitFor(() => expect(api.contentPlan.updateItem).toHaveBeenCalled());
+    const sent = vi.mocked(api.contentPlan.updateItem).mock.calls[0][2].acceptance_criteria_json!;
+    expect(sent.slice(0, 2)).toEqual([
+      { id: "criterion-3", text: "Трети", kind: "content", requirement_id: "req-3", source_quote: "цитат 3" },
+      { id: "criterion-2", text: "Втори", kind: "content", requirement_id: "req-2", source_quote: "цитат 2" },
+    ]);
+    expect(sent[2].text).toBe("Нов критерий");
+    expect(sent[2].id).toMatch(/^manual-/);
+    expect(sent[2].source_quote).toBeUndefined();
+    expect(sent[2].requirement_id).toBeUndefined();
+  });
+
+  it("keeps the editor open with the input when saving fails (K-13)", async () => {
+    vi.mocked(api.contentPlan.get).mockResolvedValue(plan);
+    vi.mocked(api.contentPlan.updateItem).mockRejectedValue(new Error("Повторен идентификатор на критерий"));
+    render(<OutlinePanel projectId="project-1" />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "редакция" }));
+    await userEvent.clear(screen.getByLabelText("Критерий 1"));
+    await userEvent.type(screen.getByLabelText("Критерий 1"), "Моят текст");
+    await userEvent.click(screen.getByRole("button", { name: "Запази" }));
+
+    expect(await screen.findByText("Повторен идентификатор на критерий")).toBeInTheDocument();
+    expect(screen.getByLabelText("Критерий 1")).toHaveValue("Моят текст");
   });
 });

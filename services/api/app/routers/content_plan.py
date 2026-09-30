@@ -162,6 +162,62 @@ async def create_content_plan(project_id: str, db: AsyncSession = Depends(get_db
     return await _response(outline, db)
 
 
+_CRITERION_ORIGIN_FIELDS = ("source_quote", "requirement_id", "requirement_text")
+
+
+def validate_item_criteria(
+    submitted: list[dict[str, Any]],
+    existing: list[dict[str, Any]],
+    ids_used_elsewhere: set[str],
+) -> list[dict[str, Any]]:
+    """Validate edited criteria as records with stable ids (K-13).
+
+    Existing ids keep their server-side origin (quote, requirement); a new id
+    never inherits a quote and may not collide with any other criterion.
+    """
+    known = {
+        str(criterion.get("id")): criterion
+        for criterion in existing
+        if isinstance(criterion, dict) and criterion.get("id")
+    }
+    seen: set[str] = set()
+    result: list[dict[str, Any]] = []
+    for index, criterion in enumerate(submitted):
+        criterion_id = str(criterion.get("id") or "").strip()
+        text = str(criterion.get("text") or "").strip()
+        if not criterion_id:
+            raise HTTPException(status_code=422, detail=f"Критерий {index + 1} няма идентификатор.")
+        if not text:
+            raise HTTPException(status_code=422, detail=f"Критерий {index + 1} е празен.")
+        if criterion_id in seen:
+            raise HTTPException(status_code=422, detail=f"Повторен идентификатор на критерий: {criterion_id}.")
+        seen.add(criterion_id)
+        record = {**criterion, "id": criterion_id, "text": text}
+        record["kind"] = str(record.get("kind") or "content")
+        if criterion_id in known:
+            original = known[criterion_id]
+            for field in _CRITERION_ORIGIN_FIELDS:
+                if field in original:
+                    record[field] = original[field]
+                else:
+                    record.pop(field, None)
+        else:
+            if criterion_id in ids_used_elsewhere:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Идентификаторът {criterion_id} вече се използва в друга точка.",
+                )
+            if record.get("source_quote"):
+                raise HTTPException(
+                    status_code=422,
+                    detail="Нов критерий не може да наследи цитат-източник.",
+                )
+            for field in _CRITERION_ORIGIN_FIELDS:
+                record.pop(field, None)
+        result.append(record)
+    return result
+
+
 @router.put(
     "/{project_id}/items/{item_id}", response_model=ContentPlanItemResponse
 )
@@ -187,6 +243,24 @@ async def update_content_plan_item(
         raise HTTPException(
             status_code=409,
             detail="Заглавието е задължително и е извлечено дословно от документацията.",
+        )
+    if changes.get("acceptance_criteria_json") is not None:
+        siblings = await db.execute(
+            select(ContentPlanItem).where(
+                ContentPlanItem.outline_id == item.outline_id,
+                ContentPlanItem.id != item.id,
+            )
+        )
+        elsewhere = {
+            str(criterion.get("id"))
+            for other in siblings.scalars().all()
+            for criterion in (other.acceptance_criteria_json or [])
+            if isinstance(criterion, dict) and criterion.get("id")
+        }
+        changes["acceptance_criteria_json"] = validate_item_criteria(
+            changes["acceptance_criteria_json"],
+            list(item.acceptance_criteria_json or []),
+            elsewhere,
         )
     for field, value in changes.items():
         setattr(item, field, value)

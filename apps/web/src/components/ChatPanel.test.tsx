@@ -16,6 +16,7 @@ vi.mock("@/lib/api", async () => {
         ...actual.api.agents,
         chat: vi.fn(),
         selectGeneration: vi.fn(),
+        listGenerations: vi.fn(),
       },
     },
   };
@@ -23,10 +24,28 @@ vi.mock("@/lib/api", async () => {
 
 const chatMock = vi.mocked(api.agents.chat);
 const selectGenerationMock = vi.mocked(api.agents.selectGeneration);
+const listGenerationsMock = vi.mocked(api.agents.listGenerations);
+
+const serverSelection = (selectedId: string | null) => [
+  {
+    section_uid: "s-1",
+    variants: ["gen-1", "gen-2"].map((id, index) => ({
+      id,
+      project_id: "project-1",
+      section_uid: "s-1",
+      variant: index + 1,
+      text: "",
+      evidence_status: "ok",
+      selected: id === selectedId,
+      created_at: "2026-09-30T10:00:00Z",
+    })),
+  },
+];
 
 describe("ChatPanel", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    listGenerationsMock.mockResolvedValue([]);
   });
 
   it("sends a chat message and renders the assistant response", async () => {
@@ -180,5 +199,35 @@ describe("ChatPanel", () => {
     render(<ChatPanel projectId="project-1" />);
 
     expect(screen.getByText("Persisted response")).toBeInTheDocument();
+  });
+
+  it("shows the server-confirmed selection and a visible pin failure (K-15)", async () => {
+    chatMock.mockResolvedValue({
+      schema_version: "v1.3",
+      status: "ok",
+      trace_id: "trace-1",
+      assistant_message: "Generated",
+      ui_actions: [],
+      questions_to_user: [],
+      agent_result: {
+        variant_1: { text: "A" },
+        variant_2: { text: "B" },
+        generation_ids: { variant_1: "gen-1", variant_2: "gen-2" },
+      },
+    });
+    listGenerationsMock.mockResolvedValue(serverSelection("gen-2") as never);
+    selectGenerationMock.mockRejectedValue(new Error("409 конфликт"));
+
+    render(<ChatPanel projectId="project-1" />);
+    await userEvent.type(screen.getByPlaceholderText(/Въведете съобщение/), "Generate");
+    await userEvent.click(screen.getByRole("button", { name: "Изпрати" }));
+
+    // The server says variant 2 is selected, so that is what the chat shows.
+    expect(await screen.findByText("✓ Вариант 2 закрепен")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "📌 Вариант 1" }));
+
+    expect(await screen.findByTestId("chat-pin-error")).toHaveTextContent("409 конфликт");
+    expect(screen.getByText("📌 Вариант 1")).toBeInTheDocument();
+    expect(screen.getByText("✓ Вариант 2 закрепен")).toBeInTheDocument();
   });
 });

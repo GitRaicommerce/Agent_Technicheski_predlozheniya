@@ -110,6 +110,7 @@ const confirmRequirementsMock = vi.mocked(api.understanding.confirmRequirements)
 const createWbsItemMock = vi.mocked(api.understanding.createWbsItem);
 const confirmWbsMock = vi.mocked(api.understanding.confirmWbs);
 const saveFactSheetMock = vi.mocked(api.understanding.saveFactSheet);
+const updateWbsItemMock = vi.mocked(api.understanding.updateWbsItem);
 
 describe("UnderstandingPanel", () => {
   beforeEach(() => {
@@ -427,5 +428,55 @@ describe("UnderstandingPanel", () => {
         { subject: "Нов предмет" },
       );
     });
+  });
+
+  it("keeps an unsaved draft of B after saving A and blocks confirmation (K-12)", async () => {
+    const two = {
+      ...workspace,
+      wbs_items: [
+        workspace.wbs_items[0],
+        { ...workspace.wbs_items[0], id: "wbs-2", title: "Контрол на качеството", order_index: 1 },
+      ],
+    };
+    getMock.mockResolvedValue(two);
+    updateWbsItemMock.mockImplementation(async (_project, _id, item) => item as never);
+    render(<UnderstandingPanel projectId="project-1" />);
+
+    await userEvent.click(await screen.findByRole("tab", { name: "Дейности за ТП" }));
+    const [first, second] = screen.getAllByLabelText("Наименование на дейност");
+    fireEvent.change(first, { target: { value: "График A" } });
+    fireEvent.change(second, { target: { value: "Контрол B" } });
+    expect(screen.getByTestId("confirm-wbs")).toBeDisabled();
+
+    await userEvent.click(screen.getAllByRole("button", { name: "Запази" })[0]);
+    await waitFor(() => expect(getMock).toHaveBeenCalledTimes(2));
+
+    const titles = screen.getAllByLabelText("Наименование на дейност") as HTMLInputElement[];
+    expect(titles[1].value).toBe("Контрол B");
+    expect(screen.getByTestId("wbs-unsaved")).toHaveTextContent("1 дейности");
+    expect(screen.getByTestId("confirm-wbs")).toBeDisabled();
+    expect(confirmWbsMock).not.toHaveBeenCalled();
+  });
+
+  it("keeps the draft and confirmation blocked after a failed save (K-12)", async () => {
+    updateWbsItemMock.mockRejectedValue(new Error("Сървърна грешка 500"));
+    render(<UnderstandingPanel projectId="project-1" />);
+
+    await userEvent.click(await screen.findByRole("tab", { name: "Дейности за ТП" }));
+    fireEvent.change(screen.getByLabelText("Наименование на дейност"), { target: { value: "Нов график" } });
+    await userEvent.click(screen.getByRole("button", { name: "Запази" }));
+
+    expect(await screen.findByText("Сървърна грешка 500")).toBeInTheDocument();
+    expect((screen.getByLabelText("Наименование на дейност") as HTMLInputElement).value).toBe("Нов график");
+    expect(screen.getByTestId("confirm-wbs")).toBeDisabled();
+    expect(confirmWbsMock).not.toHaveBeenCalled();
+  });
+
+  it("does not overwrite unsaved fact sheet edits on reload and blocks confirm (K-12)", async () => {
+    render(<UnderstandingPanel projectId="project-1" />);
+
+    await userEvent.click(await screen.findByRole("tab", { name: "Данни за проекта" }));
+    fireEvent.change(screen.getByLabelText("Fact sheet JSON"), { target: { value: '{"subject":"Чернова"}' } });
+    expect(screen.getByRole("button", { name: "Потвърди" })).toBeDisabled();
   });
 });

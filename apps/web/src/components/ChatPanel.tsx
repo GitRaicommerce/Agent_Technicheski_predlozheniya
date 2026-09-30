@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   api,
   ChatMessage,
   GenerationVariant,
   OrchestratorResponse,
   RateLimitError,
+  SectionGenerations,
 } from "@/lib/api";
 import { repairLikelyMojibake } from "@/lib/text";
 
@@ -24,6 +25,20 @@ interface ExtendedMessage extends ChatMessage {
 
 const STORAGE_KEY = (id: string) => `tp_chat_history_${id}`;
 
+function selectedGenerationIds(sections: SectionGenerations[]): Set<string> {
+  const ids = new Set<string>();
+  const visit = (items: SectionGenerations[]) => {
+    for (const section of items) {
+      for (const variant of section.variants ?? []) {
+        if (variant.selected) ids.add(String(variant.id));
+      }
+      if (section.children?.length) visit(section.children);
+    }
+  };
+  visit(sections);
+  return ids;
+}
+
 export default function ChatPanel({
   projectId,
   onOpenOutline,
@@ -37,9 +52,11 @@ export default function ChatPanel({
   const [activeVariant, setActiveVariant] = useState<
     Record<number, "v1" | "v2">
   >({});
+  // K-15: "pinned" mirrors the server's selected flag, never a local guess.
   const [pinnedGenerations, setPinnedGenerations] = useState<Set<string>>(
     new Set(),
   );
+  const [pinError, setPinError] = useState<string | null>(null);
   const [rateLimitCountdown, setRateLimitCountdown] = useState<number | null>(
     null,
   );
@@ -82,6 +99,22 @@ export default function ChatPanel({
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [history]);
+
+  const refreshSelection = useCallback(async () => {
+    try {
+      const sections = await api.agents.listGenerations(projectId);
+      setPinnedGenerations(selectedGenerationIds(sections));
+    } catch {
+      // Keep the last server-confirmed state when the refresh fails.
+    }
+  }, [projectId]);
+
+  const hasGenerationButtons = history.some(
+    (msg) => msg.generationIds?.variant_1 || msg.generationIds?.variant_2,
+  );
+  useEffect(() => {
+    if (hasGenerationButtons) void refreshSelection();
+  }, [hasGenerationButtons, refreshSelection]);
 
   const send = async (overrideMessage?: string) => {
     const message = (overrideMessage ?? input).trim();
@@ -187,12 +220,18 @@ export default function ChatPanel({
   };
 
   const handlePin = async (genId: string) => {
+    setPinError(null);
     try {
       await api.agents.selectGeneration(projectId, genId);
-      setPinnedGenerations((items) => new Set([...items, genId]));
-    } catch {
-      // Pinning is convenience-only, so a failure should not block the chat.
+    } catch (err: unknown) {
+      setPinError(
+        err instanceof Error
+          ? `Вариантът не беше закрепен: ${err.message}`
+          : "Вариантът не беше закрепен.",
+      );
     }
+    // Whatever happened, show what the server actually has selected.
+    await refreshSelection();
   };
 
   return (
@@ -351,6 +390,14 @@ export default function ChatPanel({
         <div ref={bottomRef} />
       </div>
 
+      {pinError && (
+        <p
+          data-testid="chat-pin-error"
+          className="mx-3 mb-1 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700"
+        >
+          {pinError}
+        </p>
+      )}
       {uiNotice && (
         <div className="mx-3 mb-1 flex items-start justify-between rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
           <span>{repairLikelyMojibake(uiNotice)}</span>
