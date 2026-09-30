@@ -15,7 +15,15 @@ function Stop-WithMessage($text) {
 Write-Host "=== Стъпка 1 от 3: резервно копие на базата ===" -ForegroundColor Cyan
 $containers = @(docker ps --format "{{.Names}}" | Where-Object { $_ -match "postgres" })
 if ($LASTEXITCODE -ne 0) { Stop-WithMessage "Docker не отговаря. Стартирай Docker Desktop и опитай пак." }
-if ($containers.Count -eq 0) { Stop-WithMessage "Не намерих работеща база (postgres контейнер). Стартирай приложението и опитай пак." }
+if ($containers.Count -eq 0) {
+    # The app is not running: start only the database, so the backup is
+    # taken before the new code touches it.
+    Write-Host "Приложението не е пуснато - пускам само базата за копието..."
+    docker compose -f (Join-Path $repo "docker-compose.dev.yml") up -d --wait postgres
+    if ($LASTEXITCODE -ne 0) { Stop-WithMessage "Не успях да пусна базата." }
+    $containers = @(docker ps --format "{{.Names}}" | Where-Object { $_ -match "postgres" })
+    if ($containers.Count -eq 0) { Stop-WithMessage "Базата не тръгна." }
+}
 New-Item -ItemType Directory -Force -Path $backupDir | Out-Null
 $stamp = Get-Date -Format "yyyy-MM-dd_HH-mm"
 foreach ($c in $containers) {
@@ -37,27 +45,18 @@ if ($LASTEXITCODE -ne 0) { Stop-WithMessage "Push не успя (виж съоб
 Write-Host "Push е готов." -ForegroundColor Green
 
 Write-Host ""
-Write-Host "=== Стъпка 3 от 3: проверка на приложението ===" -ForegroundColor Cyan
-Write-Host "Автоматичният deploy обновява приложението и базата. Изчаквам до 10 минути..."
-$last = "няма отговор"
-for ($i = 1; $i -le 60; $i++) {
-    Start-Sleep -Seconds 10
-    try {
-        $r = Invoke-WebRequest -Uri $healthUrl -UseBasicParsing -TimeoutSec 5
-        $b = $r.Content | ConvertFrom-Json
-        if ($b.status -eq "ok" -and $b.migrations -eq "ok") {
-            Write-Host ""
-            Write-Host "ГОТОВО: приложението работи, базата е обновена (миграции ok)." -ForegroundColor Green
-            Write-Host "Резервните копия са в $backupDir"
-            exit 0
-        }
-        $last = $r.Content
-    } catch {
-        if ($_.ErrorDetails -and $_.ErrorDetails.Message) { $last = $_.ErrorDetails.Message } else { $last = $_.Exception.Message }
-    }
+Write-Host "=== Стъпка 3 от 3: стартиране на приложението и обновяване на базата ===" -ForegroundColor Cyan
+Write-Host "Това може да отнеме няколко минути при първо стартиране..."
+try {
+    & (Join-Path $repo "scripts\start-dev.ps1")
+} catch {
+    Write-Host ""
+    Write-Host "ВНИМАНИЕ: приложението не стартира докрай." -ForegroundColor Yellow
+    Write-Host "Причина: $($_.Exception.Message)" -ForegroundColor Yellow
+    Write-Host "Копирай този текст и ми го изпрати. Резервните копия са в $backupDir"
+    exit 1
 }
 Write-Host ""
-Write-Host "ВНИМАНИЕ: за 10 минути приложението не потвърди, че е готово." -ForegroundColor Yellow
-Write-Host "Последен отговор: $last" -ForegroundColor Yellow
-Write-Host "Копирай този текст и ми го изпрати. Резервните копия са в $backupDir"
-exit 1
+Write-Host "ГОТОВО: изпратено към GitHub, базата е обновена и приложението работи." -ForegroundColor Green
+Write-Host "Резервните копия са в $backupDir"
+exit 0
