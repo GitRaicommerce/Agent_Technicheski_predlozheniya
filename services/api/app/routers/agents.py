@@ -1143,15 +1143,19 @@ async def regenerate_section(
     from sqlalchemy import select
     from app.core.models import TpOutline
 
+    # Draft against the approved plan (the one the audit and jobs use), not a
+    # newer draft that may have different ids and criteria.
     outline_res = await db.execute(
         select(TpOutline)
         .where(TpOutline.project_id == project_id)
-        .order_by(TpOutline.version.desc())
+        .order_by(TpOutline.status_locked.desc(), TpOutline.version.desc())
         .limit(1)
     )
     outline = outline_res.scalar_one_or_none()
 
     section_title = section_uid
+    section_acceptance_criteria: list[dict] = []
+    section_content_kind: str | None = None
     section_requirements: list[str] = []
     section_requirement_items: list[dict] = []
     section_drafting_guidance: dict | None = None
@@ -1175,6 +1179,9 @@ async def regenerate_section(
                     nonlocal linked_wbs_ids, linked_fact_keys, parent_assembly_uid
                     nonlocal assembly_subpoints
                     nonlocal assembly_section_title
+                    nonlocal section_acceptance_criteria, section_content_kind
+                    section_acceptance_criteria = s.get("acceptance_criteria", [])
+                    section_content_kind = s.get("content_kind")
                     section_title = s.get("title", section_uid)
                     section_requirements = s.get("requirements", [])
                     section_requirement_items = s.get("requirement_checklist_items", [])
@@ -1223,6 +1230,11 @@ async def regenerate_section(
             "parent_assembly_uid": parent_assembly_uid,
             "assembly_subpoints": assembly_subpoints,
             "assembly_section_title": assembly_section_title,
+            "acceptance_criteria": section_acceptance_criteria,
+            "content_kind": section_content_kind,
+            "global_controls": (
+                (outline.outline_json or {}).get("global_controls") if outline else None
+            ),
         },
         db=db,
         trace_id=trace_id,

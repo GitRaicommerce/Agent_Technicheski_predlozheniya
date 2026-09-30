@@ -28,6 +28,10 @@ from app.agents.requirement_coverage import (
     format_requirement_items_for_prompt,
     normalize_requirement_items,
 )
+from app.agents.writer_task import (
+    format_criteria_for_prompt,
+    format_global_controls_for_prompt,
+)
 from app.core.llm_gateway import collect_llm_calls, llm_gateway
 from app.core.models import Generation
 
@@ -812,6 +816,9 @@ async def _run_drafting(
     writer_role: str | None = None,
     llm_calls: list[dict[str, Any]] | None = None,
     project_brief: str | None = None,
+    acceptance_criteria: list[dict[str, Any]] | None = None,
+    global_controls: list[dict[str, Any]] | None = None,
+    writer_profile: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     trace_id = trace_id or str(uuid.uuid4())
     section_uid = _safe_section_uuid(section_uid)
@@ -931,6 +938,8 @@ async def _run_drafting(
                 )
             ),
             requirement_checklist_text,
+            format_criteria_for_prompt(acceptance_criteria or []) or None,
+            format_global_controls_for_prompt(global_controls or []) or None,
             (
                 "SOURCE QUOTES:\n[UNTRUSTED DATA START]\n"
                 f"{source_quotes_text}\n[UNTRUSTED DATA END]"
@@ -1138,6 +1147,13 @@ async def _run_drafting(
                 used_sources["section_source_quotes"] = section_source_quotes
             if project_brief and project_brief.strip():
                 used_sources["project_brief"] = project_brief.strip()
+            # K-04: record exactly what the writer received.
+            if acceptance_criteria:
+                used_sources["acceptance_criteria"] = acceptance_criteria
+            if global_controls:
+                used_sources["global_controls"] = global_controls
+            if writer_profile:
+                used_sources["writer_profile"] = writer_profile
             if (
                 drafting_blueprint.get("groups")
                 or drafting_blueprint.get("additional_groups")

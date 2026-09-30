@@ -21,6 +21,12 @@ from app.agents.job_inputs import (
     load_job_outline,
     validate_target_units,
 )
+from app.agents.writer_task import (
+    approved_criteria,
+    compact_global_controls,
+    evidence_quotes,
+    select_writer_profile,
+)
 from app.agents.plan_audit import (
     drafting_eligibility,
     ensure_drafting_eligible,
@@ -938,6 +944,7 @@ async def _run_drafting_all_job(job: GenerationJob, db) -> None:
                 section_requirement_items=requirement_items,
                 section_drafting_guidance=drafting_guidance,
                 project_brief=frozen_brief(job),
+                acceptance_criteria=approved_criteria(section) or None,
             )
             generation_ids = drafting_result.get("generation_ids")
             if not isinstance(generation_ids, dict) or not any(
@@ -1042,6 +1049,9 @@ async def _run_drafting_v2_job(job: GenerationJob, db) -> None:
     job_fact_meta = frozen_fact_sheet_meta(job)
     job_schedule_id = frozen_schedule_id(job)
     job_brief = frozen_brief(job)
+    plan_global_controls = compact_global_controls(
+        (outline.outline_json or {}).get("global_controls")
+    )
     groups = build_generation_groups(outline.outline_json.get("sections", []))
     outline_snapshot = SimpleNamespace(id=str(outline.id), version=outline.version)
     all_units = [unit for group in groups for unit in group["units"]]
@@ -1200,11 +1210,16 @@ async def _run_drafting_v2_job(job: GenerationJob, db) -> None:
                     if not job:
                         raise
                     lex_result = {"citations": []}
+                # K-04/WP-06: the exact approved task and the writer profile,
+                # decided before the paid call and recorded with the text.
+                unit_criteria = approved_criteria(unit)
+                writer_profile = select_writer_profile(unit, unit_criteria)
                 grounding = await build_project_grounding_context_v2(
                     project_id=project_id,
                     section_title=title,
                     section_requirements=requirements,
                     db=db,
+                    evidence_quotes=evidence_quotes(unit, unit_criteria),
                     linked_wbs_ids=list(unit.get("linked_wbs_ids") or []),
                     linked_fact_keys=list(unit.get("linked_fact_keys") or []),
                     # K-05: the facts and schedule recorded by the job, even if
@@ -1231,6 +1246,10 @@ async def _run_drafting_v2_job(job: GenerationJob, db) -> None:
                     use_drafting_blueprint=False,
                     section_source_quotes=list(unit.get("source_quotes") or []),
                     project_brief=job_brief,
+                    acceptance_criteria=unit_criteria,
+                    global_controls=plan_global_controls,
+                    writer_profile=writer_profile,
+                    writer_role=writer_profile["role"],
                 )
                 generation_id = str(drafting_result["generation_ids"]["variant_1"])
                 text = str((drafting_result.get("variant_1") or {}).get("text") or "")

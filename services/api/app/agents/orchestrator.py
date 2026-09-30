@@ -611,7 +611,33 @@ async def _run_drafting_pipeline(
 
     # 4. Run drafting agent with gathered evidence
     from app.agents.drafting import run_drafting
+    from app.agents.job_inputs import latest_brief
+    from app.agents.writer_task import (
+        approved_criteria,
+        compact_global_controls,
+        evidence_quotes,
+        select_writer_profile,
+    )
     from app.core.config import settings
+
+    # K-04/WP-06: the single-section path gets the same accepted task as bulk
+    # jobs — approved criteria, global controls, brief and a chosen profile.
+    unit_view = {
+        "title": section_title,
+        "acceptance_criteria": params.get("acceptance_criteria") or [],
+        "source_quotes": section_source_quotes,
+        "content_kind": params.get("content_kind"),
+        "drafting_guidance": section_drafting_guidance,
+    }
+    unit_criteria = approved_criteria(unit_view)
+    writer_profile = select_writer_profile(unit_view, unit_criteria)
+    unit_global_controls = compact_global_controls(params.get("global_controls"))
+    brief = await latest_brief(project_id, db)
+    brief_text = (
+        brief.content
+        if brief is not None and isinstance(getattr(brief, "content", None), str)
+        else None
+    )
     if settings.generation_pipeline == "v2":
         from app.agents.context import build_project_grounding_context_v2
 
@@ -622,6 +648,7 @@ async def _run_drafting_pipeline(
             db=db,
             linked_wbs_ids=linked_wbs_ids,
             linked_fact_keys=linked_fact_keys,
+            evidence_quotes=evidence_quotes(unit_view, unit_criteria),
         )
     else:
         from app.agents.context import build_project_grounding_context
@@ -650,6 +677,11 @@ async def _run_drafting_pipeline(
         parent_section_uid=parent_assembly_uid,
         use_drafting_blueprint=settings.generation_pipeline != "v2",
         section_source_quotes=section_source_quotes,
+        project_brief=brief_text,
+        acceptance_criteria=unit_criteria or None,
+        global_controls=unit_global_controls or None,
+        writer_profile=writer_profile,
+        writer_role=writer_profile["role"],
     )
     pipeline_trace["drafting"] = {
         "status": "ok" if "error" not in drafting_result else "error"

@@ -79,6 +79,34 @@ def _score_text(text: str, keywords: set[str]) -> int:
     return score
 
 
+def _normalize_quote(value: Any) -> str:
+    return re.sub(r"\s+", " ", str(value or "")).strip().casefold()
+
+
+def excerpt_around(text: str, terms: list[str], limit: int) -> tuple[str, int]:
+    """Return a bounded excerpt centred on the first matching term (K-16).
+
+    Chunks are no longer always cut from their first character: a key clause
+    after position ``limit`` would otherwise never reach the writer. Returns
+    the excerpt and its start offset (0 when the chunk fits or nothing matched).
+    """
+    text = text or ""
+    if len(text) <= limit:
+        return text, 0
+    lowered = text.casefold()
+    positions = [
+        lowered.find(term.casefold())
+        for term in terms
+        if term and len(term) >= 3
+    ]
+    positions = [position for position in positions if position >= 0]
+    if not positions:
+        return text[:limit], 0
+    start = max(0, min(positions) - limit // 3)
+    start = min(start, max(0, len(text) - limit))
+    return ("… " if start else "") + text[start : start + limit], start
+
+
 def _compact_task(task: dict[str, Any]) -> dict[str, Any]:
     compact = {
         key: task.get(key)
@@ -107,6 +135,7 @@ async def build_project_grounding_context(
     max_tender_chunks: int = 14,
     max_schedule_tasks: int = 24,
     schedule_id: str | None = None,
+    evidence_quotes: list[str] | None = None,
 ) -> dict[str, Any]:
     """Build a compact evidence pack for drafting and verification.
 
@@ -166,9 +195,38 @@ async def build_project_grounding_context(
             .order_by(ExtractedChunk.page, ExtractedChunk.id)
         )
         chunks = chunks_result.scalars().all()
+        # K-16: chunks that literally contain an approved criterion's source
+        # quote are direct evidence and are always included first.
+        quote_keys = [
+            _normalize_quote(quote)[:120]
+            for quote in evidence_quotes or []
+            if len(_normalize_quote(quote)) >= 12
+        ]
+        direct_chunks = []
+        direct_ids: set[str] = set()
+        if quote_keys:
+            for chunk in chunks:
+                normalized_text = _normalize_quote(chunk.text)
+                matched = [key for key in quote_keys if key and key in normalized_text]
+                if matched:
+                    direct_chunks.append((chunk, matched))
+                    direct_ids.add(str(chunk.id))
+        for chunk, matched in direct_chunks[:max_tender_chunks]:
+            text, offset = excerpt_around(chunk.text or "", matched, 1800)
+            tender_chunks.append(
+                {
+                    "chunk_id": chunk.id,
+                    "page": chunk.page,
+                    "section_path": chunk.section_path,
+                    "text": text,
+                    "excerpt_offset": offset,
+                    "retrieval": "direct",
+                }
+            )
         scored_chunks = [
             (chunk, _score_text(" ".join([chunk.section_path or "", chunk.text or ""]), keywords))
             for chunk in chunks
+            if str(chunk.id) not in direct_ids
         ]
         selected_chunks = [
             chunk
@@ -177,16 +235,20 @@ async def build_project_grounding_context(
                 key=lambda item: (-(item[1]), item[0].page or 0, item[0].id),
             )
             if score > 0
-        ][:max_tender_chunks]
-        tender_chunks = [
-            {
+        ][: max(0, max_tender_chunks - len(tender_chunks))]
+        keyword_terms = sorted(keywords, key=len, reverse=True)
+        for chunk in selected_chunks:
+            text, offset = excerpt_around(chunk.text or "", keyword_terms, 1800)
+            entry = {
                 "chunk_id": chunk.id,
                 "page": chunk.page,
                 "section_path": chunk.section_path,
-                "text": (chunk.text or "")[:1800],
+                "text": text,
             }
-            for chunk in selected_chunks
-        ]
+            if offset:
+                # Only shifted excerpts carry the offset (keeps v1 shape stable).
+                entry["excerpt_offset"] = offset
+            tender_chunks.append(entry)
 
     return {
         "section": {
@@ -224,6 +286,7 @@ async def build_project_grounding_context_v2(
     frozen_facts: dict[str, Any] | None = None,
     frozen_fact_meta: dict[str, Any] | None = None,
     schedule_id: str | None = None,
+    evidence_quotes: list[str] | None = None,
 ) -> dict[str, Any]:
     """Build Phase 4 context with semantic tender retrieval and linked artifacts.
 
@@ -238,6 +301,7 @@ async def build_project_grounding_context_v2(
         max_tender_chunks=max_tender_chunks,
         max_schedule_tasks=max_schedule_tasks,
         schedule_id=schedule_id,
+        evidence_quotes=evidence_quotes,
     )
     query = "\n".join([section_title, *section_requirements]).strip()
 
@@ -264,30 +328,54 @@ async def build_project_grounding_context_v2(
         semantic_chunks = []
         semantic_warning = str(exc)
 
-    merged_chunks: list[dict[str, Any]] = []
-    seen_chunk_ids: set[str] = set()
+    # K-16: direct evidence first; then semantic and keyword results share the
+    # remaining slots with a reserved keyword quota, so a precise keyword hit
+    # is never pushed out merely because it was merged last.
+    base_chunks = list(base.get("tender_chunks") or [])
+    direct = [dict(chunk) for chunk in base_chunks if chunk.get("retrieval") == "direct"]
+    keyword = [
+        {**chunk, "retrieval": "keyword"}
+        for chunk in base_chunks
+        if chunk.get("retrieval") != "direct"
+    ]
+    seen_chunk_ids: set[str] = {str(chunk.get("chunk_id")) for chunk in direct}
+    query_terms = sorted(_keyword_set(section_title, section_requirements), key=len, reverse=True)
+    semantic: list[dict[str, Any]] = []
     for chunk in semantic_chunks:
         chunk_id = str(chunk.id)
         if chunk_id in seen_chunk_ids:
             continue
-        seen_chunk_ids.add(chunk_id)
-        merged_chunks.append(
+        text, offset = excerpt_around(chunk.text or "", query_terms, 3000)
+        semantic.append(
             {
                 "chunk_id": chunk_id,
                 "page": chunk.page,
                 "section_path": chunk.section_path,
-                "text": (chunk.text or "")[:3000],
+                "text": text,
+                "excerpt_offset": offset,
                 "retrieval": "semantic",
             }
         )
-    for chunk in base.get("tender_chunks") or []:
-        chunk_id = str(chunk.get("chunk_id") or "")
-        if not chunk_id or chunk_id in seen_chunk_ids:
-            continue
         seen_chunk_ids.add(chunk_id)
-        merged_chunks.append({**chunk, "retrieval": "keyword"})
+    keyword = [chunk for chunk in keyword if str(chunk.get("chunk_id")) not in seen_chunk_ids]
+    remaining = max(0, max_tender_chunks - len(direct))
+    keyword_quota = min(len(keyword), max(3, max_tender_chunks // 3), remaining)
+    semantic_take = min(len(semantic), remaining - keyword_quota)
+    keyword_take = min(len(keyword), remaining - semantic_take)
+    merged_chunks = direct[:max_tender_chunks] + semantic[:semantic_take] + keyword[:keyword_take]
     base["tender_chunks"] = merged_chunks[:max_tender_chunks]
-    base["retrieval_mode"] = "semantic_plus_keyword" if semantic_chunks else "keyword_fallback"
+    counts = {
+        name: sum(1 for chunk in base["tender_chunks"] if chunk.get("retrieval") == name)
+        for name in ("direct", "semantic", "keyword")
+    }
+    base["retrieval_counts"] = counts
+    # Report what was actually included, not what was attempted.
+    if counts["semantic"] and counts["keyword"]:
+        base["retrieval_mode"] = "semantic_plus_keyword"
+    elif counts["semantic"]:
+        base["retrieval_mode"] = "semantic_only"
+    else:
+        base["retrieval_mode"] = "keyword_fallback"
     if semantic_warning:
         base["retrieval_warning"] = semantic_warning
 

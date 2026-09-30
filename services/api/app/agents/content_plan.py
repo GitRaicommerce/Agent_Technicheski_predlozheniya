@@ -533,18 +533,29 @@ def _item_outline_payload(item: ContentPlanItem, children: list[dict[str, Any]])
             requirement_map.setdefault(requirement_id, requirement_text)
     requirement_ids = list(requirement_map)
     requirements = list(requirement_map.values())
+    # K-04: the checklist is built from the approved (possibly human-edited)
+    # criterion text with the criterion id the verifier uses — not from the
+    # original requirement text.
     checklist = []
-    for requirement_id, requirement_text in requirement_map.items():
-        category = _category(item.title, requirement_text)
+    seen_criteria: set[str] = set()
+    for entry in criteria:
+        criterion_id = str(entry.get("id") or "").strip()
+        criterion_text = _clean(entry.get("text"))
+        if not criterion_id or not criterion_text or criterion_id in seen_criteria:
+            continue
+        seen_criteria.add(criterion_id)
+        category = _category(item.title, criterion_text)
         checklist.append({
-            "id": requirement_id,
-            "text": requirement_text,
+            "id": criterion_id,
+            "text": criterion_text,
             "importance": "mandatory",
             "category": category,
             "category_label": CATEGORY_LABELS[category],
             "topic": item.title,
-            "coverage_question": f"Описано ли е изпълнението на: {requirement_text}",
+            "coverage_question": f"Изпълнено ли е: {criterion_text}",
             "source_chunk_id": "",
+            "requirement_id": str(entry.get("requirement_id") or ""),
+            "kind": entry.get("kind"),
         })
     payload: dict[str, Any] = {
         "content_plan_item_id": getattr(item, "id", None),
