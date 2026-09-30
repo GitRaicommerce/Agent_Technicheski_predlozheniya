@@ -44,7 +44,7 @@ log = structlog.get_logger()
 
 CONSISTENCY_JOB_TIMEOUT_SECONDS = 2 * 60 * 60
 MAX_TEXT_CHARS_PER_CALL = 60_000
-MAX_SCHEDULE_TASKS = 120
+MAX_SCHEDULE_TASKS = 400
 CLAIM_KINDS = {
     "deadline",
     "duration",
@@ -233,22 +233,62 @@ def _sanitize_claims(raw_result: dict[str, Any], text: str) -> list[dict[str, An
     return claims
 
 
+def checkable_generation_ids(generations: list[Any]) -> set[str]:
+    """Exact set of selected texts that a consistency report must cover (K-10).
+
+    Same rule as load_checkable_sections: non-empty selected texts, skipping a
+    subpoint whose assembled parent is selected (the assembly carries its text).
+    """
+    usable = [g for g in generations if str(getattr(g, "text", "") or "").strip()]
+    assembly_uids = {
+        str(g.section_uid)
+        for g in usable
+        if str(getattr(g, "generation_kind", "") or "") == "section_assembly"
+    }
+    return {
+        str(g.id)
+        for g in usable
+        if not (
+            str(getattr(g, "generation_kind", "") or "section") != "section_assembly"
+            and str(getattr(g, "parent_section_uid", "") or "") in assembly_uids
+            and getattr(g, "parent_section_uid", None)
+        )
+    }
+
+
+def facts_hash(facts: dict[str, Any]) -> str:
+    import hashlib
+
+    return hashlib.sha256(
+        json.dumps(facts, ensure_ascii=False, sort_keys=True, default=str).encode("utf-8")
+    ).hexdigest()
+
+
 async def extract_section_claims(
     section: dict[str, Any], trace_id: str
 ) -> list[dict[str, Any]]:
-    user_message = (
-        f"РАЗДЕЛ: {section['title'] or section['section_uid']}\n\n"
-        "ТЕКСТ:\n[UNTRUSTED CONTENT START]\n"
-        + section["text"][:MAX_TEXT_CHARS_PER_CALL]
-        + "\n[UNTRUSTED CONTENT END]"
-    )
-    raw_result = await llm_gateway.call(
-        system_prompt=CLAIM_SYSTEM_PROMPT,
-        user_message=user_message,
-        agent="consistency_claims",
-        trace_id=trace_id,
-    )
-    return _sanitize_claims(raw_result, section["text"])
+    """Extract claims from the whole text in bounded batches (K-23)."""
+    from app.agents.criteria_verifier import split_text_batches
+
+    batches = split_text_batches(section["text"], MAX_TEXT_CHARS_PER_CALL)
+    claims: list[dict[str, Any]] = []
+    for index, batch in enumerate(batches, start=1):
+        part = f" (част {index}/{len(batches)})" if len(batches) > 1 else ""
+        user_message = (
+            f"РАЗДЕЛ: {section['title'] or section['section_uid']}{part}\n\n"
+            "ТЕКСТ:\n[UNTRUSTED CONTENT START]\n"
+            + batch
+            + "\n[UNTRUSTED CONTENT END]"
+        )
+        raw_result = await llm_gateway.call(
+            system_prompt=CLAIM_SYSTEM_PROMPT,
+            user_message=user_message,
+            agent="consistency_claims",
+            trace_id=trace_id,
+        )
+        claims.extend(_sanitize_claims(raw_result, section["text"]))
+    section["claim_batches"] = len(batches)
+    return claims
 
 
 def _compact_schedule_tasks(schedule: ScheduleNormalized | None) -> list[dict[str, Any]]:
@@ -384,7 +424,13 @@ async def run_consistency_check(
         .order_by(ScheduleNormalized.version.desc())
         .limit(1)
     )
-    schedule_tasks = _compact_schedule_tasks(schedule_result.scalar_one_or_none())
+    schedule = schedule_result.scalar_one_or_none()
+    schedule_tasks = _compact_schedule_tasks(schedule)
+    schedule_task_total = (
+        len([t for t in (schedule.schedule_json or {}).get("tasks") or [] if isinstance(t, dict)])
+        if schedule is not None and isinstance(schedule.schedule_json, dict)
+        else 0
+    )
 
     titles = {section["section_uid"]: section["title"] for section in sections}
     claims_payload = [
@@ -432,7 +478,16 @@ async def run_consistency_check(
         "checked_section_count": len(sections),
         "claim_count": sum(len(claims) for claims in claims_by_section.values()),
         "schedule_task_count": len(schedule_tasks),
+        # K-23: an explicit statement of what was and was not inspected.
+        "schedule_task_total": schedule_task_total,
+        "schedule_partial": schedule_task_total > len(schedule_tasks),
         "fact_sheet_available": bool(facts),
+        # K-10: the exact inputs this report judged.
+        "input_fingerprint": {
+            "schedule_id": str(schedule.id) if schedule is not None else None,
+            "schedule_version": schedule.version if schedule is not None else None,
+            "facts_hash": facts_hash(facts),
+        },
         "conflicts": conflicts,
         "critical_count": len(critical),
         "warning_count": len(warnings),

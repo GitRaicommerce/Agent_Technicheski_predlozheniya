@@ -1182,6 +1182,20 @@ async def _run_drafting(
             )
             db.add(gen)
             saved_ids[variant_key] = gen.id
+            if generation_kind == "subpoint" and parent_section_uid:
+                # K-08: a changed child makes the assembled parent stale; the
+                # job re-assembles it and readiness never exports old text as
+                # if it contained the new subpoint.
+                await db.execute(
+                    update(Generation)
+                    .where(
+                        Generation.project_id == project_id,
+                        Generation.section_uid == _safe_section_uuid(parent_section_uid),
+                        Generation.generation_kind == "section_assembly",
+                        Generation.selected.is_(True),
+                    )
+                    .values(evidence_status="stale")
+                )
 
     if saved_ids:
         await db.flush()

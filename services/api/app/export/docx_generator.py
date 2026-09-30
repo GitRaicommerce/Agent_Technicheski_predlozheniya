@@ -132,6 +132,9 @@ async def generate_docx(project_id: str, db: AsyncSession) -> bytes:
         p.add_run(str(project.tender_date))
 
     doc.add_page_break()
+    # Cover metadata (tender date) is the procurement's own date, not a
+    # schedule commitment; the calendar scan starts after the cover.
+    cover_paragraphs = len(doc.paragraphs)
 
     if outline:
         sections = outline.outline_json.get(
@@ -156,6 +159,10 @@ async def generate_docx(project_id: str, db: AsyncSession) -> bytes:
         sched_heading.add_run("ЛИНЕЕН ГРАФИК").bold = True
         _write_schedule_section(doc, schedule_norm.schedule_json)
 
+    findings = scan_document_for_calendar_dates(doc, skip_paragraphs=cover_paragraphs)
+    if findings:
+        raise CalendarDatesInExportError(findings)
+
     buffer = io.BytesIO()
     doc.save(buffer)
     return buffer.getvalue()
@@ -175,16 +182,19 @@ def _write_schedule_section(doc, schedule_json: dict) -> None:
 
     doc.add_paragraph(f"Общо задачи: {len(tasks)}   |   Ресурси: {len(resources)}")
 
-    table = doc.add_table(rows=1, cols=4)
+    # K-14: no calendar start/finish columns. The accepted policy forbids
+    # concrete calendar dates in the proposal; activities, durations and
+    # dependencies are kept.
+    table = doc.add_table(rows=1, cols=3)
     table.style = "Table Grid"
 
     # Column widths
-    widths = [Cm(9), Cm(3.5), Cm(3), Cm(3)]
+    widths = [Cm(10), Cm(4), Cm(4.5)]
     for i, cell in enumerate(table.rows[0].cells):
         cell.width = widths[i]
 
     # Bold header row with shading
-    headers = ["Задача", "Продължителност (дни)", "Начало", "Край"]
+    headers = ["Задача", "Продължителност", "Зависимости"]
     hdr_cells = table.rows[0].cells
     for i, text in enumerate(headers):
         cell = hdr_cells[i]
@@ -204,16 +214,66 @@ def _write_schedule_section(doc, schedule_json: dict) -> None:
         shd.set(qn("w:color"), "auto")
         shd.set(qn("w:fill"), "D6E4F0")
 
-    for task in tasks:
+    from app.agents.proposal_timing import schedule_for_proposal
+
+    for raw_task in tasks:
+        task = schedule_for_proposal(raw_task) if isinstance(raw_task, dict) else {}
         row = table.add_row().cells
-        row[0].text = str(task.get("name", "") or "")
-        row[1].text = str(task.get("duration_days", task.get("duration", "")) or "")
-        row[2].text = str(task.get("start", "") or "")
-        row[3].text = str(task.get("finish", task.get("end", "")) or "")
+        row[0].text = str(task.get("name", "") or task.get("task_name", "") or "")
+        row[1].text = _duration_label(task)
+        row[2].text = str(task.get("predecessors", "") or "")
         for cell in row:
             for para in cell.paragraphs:
                 for run in para.runs:
                     run.font.size = Pt(10)
+
+
+_UNIT_LABELS = {"days": "дни", "weeks": "седмици", "months": "месеци", "hours": "часа"}
+
+
+def _duration_label(task: dict) -> str:
+    if task.get("duration_days") is not None:
+        value = task["duration_days"]
+        return f"{int(value) if float(value).is_integer() else value} дни"
+    if task.get("duration_value") is not None and task.get("duration_unit"):
+        value = task["duration_value"]
+        value = int(value) if float(value).is_integer() else value
+        return f"{value} {_UNIT_LABELS.get(task['duration_unit'], task['duration_unit'])}"
+    return ""
+
+
+class CalendarDatesInExportError(ValueError):
+    """The finished document still contains forbidden concrete calendar dates."""
+
+    def __init__(self, findings: list[dict]):
+        super().__init__("Документът съдържа забранени конкретни календарни дати.")
+        self.findings = findings
+
+
+def scan_document_for_calendar_dates(doc, *, skip_paragraphs: int = 0) -> list[dict]:
+    """Check the *whole* output — paragraphs and every table cell (K-14)."""
+    from app.agents.proposal_timing import find_concrete_calendar_dates
+
+    findings: list[dict] = []
+    for index, paragraph in enumerate(doc.paragraphs):
+        if index < skip_paragraphs:
+            continue
+        dates = find_concrete_calendar_dates(paragraph.text)
+        if dates:
+            findings.append({"location": f"paragraph:{index}", "dates": dates, "text": paragraph.text[:200]})
+    for table_index, table in enumerate(doc.tables):
+        for row_index, row in enumerate(table.rows):
+            for cell_index, cell in enumerate(row.cells):
+                dates = find_concrete_calendar_dates(cell.text)
+                if dates:
+                    findings.append(
+                        {
+                            "location": f"table:{table_index}:row:{row_index}:cell:{cell_index}",
+                            "dates": dates,
+                            "text": cell.text[:200],
+                        }
+                    )
+    return findings
 
 
 async def _write_sections(

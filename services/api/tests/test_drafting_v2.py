@@ -131,6 +131,7 @@ async def test_large_section_assembly_preserves_text_without_an_llm_echo(mock_db
         new=AsyncMock(),
     ) as llm_call:
         result = await run_section_assembly(
+            editorial=True,
             project_id=str(uuid.uuid4()),
             section_uid=section_uid,
             section_title="Голям раздел",
@@ -175,6 +176,7 @@ async def test_truncated_section_assembly_falls_back_without_a_second_llm_call(m
         new=AsyncMock(side_effect=truncated),
     ) as llm_call:
         result = await run_section_assembly(
+            editorial=True,
             project_id=str(uuid.uuid4()),
             section_uid=section_uid,
             section_title="Раздел",
@@ -213,6 +215,7 @@ async def test_section_assembly_rejects_calendar_date_introduced_by_editor(mock_
         }),
     ):
         result = await run_section_assembly(
+            editorial=True,
             project_id=str(uuid.uuid4()),
             section_uid=section_uid,
             section_title="Проектиране",
@@ -224,3 +227,30 @@ async def test_section_assembly_rejects_calendar_date_introduced_by_editor(mock_
     assert "06.10.2026" not in saved.text
     assert "20 дни" in saved.text
     assert result["assembly_mode"] == "deterministic_calendar_guard"
+
+
+@pytest.mark.asyncio
+async def test_standard_assembly_is_lossless_and_makes_no_model_call(mock_db):
+    """T-09: each subpoint's unique obligation survives into the section."""
+    subpoints = [
+        {"section_uid": "s1", "generation_id": "g1", "title": "Екип", "text": "УНИКАЛНО-А: експертите са посочени с квалификация и брой."},
+        {"section_uid": "s2", "generation_id": "g2", "title": "Разпределение", "text": "УНИКАЛНО-Б: всяка част има отговорен проектант."},
+    ]
+    previous_result = MagicMock()
+    previous_result.scalar_one_or_none.return_value = None
+    mock_db.execute = AsyncMock(side_effect=[previous_result, MagicMock()])
+    call = AsyncMock()
+
+    with patch("app.agents.drafting_v2.llm_gateway.call", new=call):
+        result = await run_section_assembly(
+            project_id="p1",
+            section_uid="root",
+            section_title="Организация",
+            subpoints=subpoints,
+            db=mock_db,
+        )
+
+    call.assert_not_awaited()
+    assert result["assembly_mode"] == "deterministic"
+    assert "УНИКАЛНО-А" in result["text"] and "УНИКАЛНО-Б" in result["text"]
+    assert result["text"].index("УНИКАЛНО-А") < result["text"].index("УНИКАЛНО-Б")

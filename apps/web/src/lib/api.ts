@@ -667,6 +667,17 @@ export interface ExportReadiness {
   criteria_issue_sections?: CriteriaIssueSection[];
   criteria_issue_section_count?: number;
   criteria_unmet_count?: number;
+  criteria_unverified_count?: number;
+  criteria_verification_gaps?: Array<{
+    section_uid: string;
+    section_title?: string;
+    generation_id: string;
+    expected_count: number;
+    checked_count: number;
+    never_checked_ids: string[];
+    not_verified_ids: string[];
+  }>;
+  unverified_assemblies?: Array<{ section_uid: string; generation_id: string }>;
   consistency?: {
     job_id?: string;
     stale?: boolean;

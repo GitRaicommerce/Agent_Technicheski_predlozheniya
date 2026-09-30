@@ -108,6 +108,74 @@ describe("ExportButton", () => {
     expect(openGenerationsMock).toHaveBeenCalled();
   });
 
+  it("shows the calendar-date hard block with affected sections when it is the only issue", async () => {
+    readinessMock.mockResolvedValue({
+      project_id: "project-1",
+      ready: false,
+      status: "blocked",
+      blockers: [{ code: "concrete_calendar_dates", count: 1, message: "dates" }],
+      calendar_date_sections: [
+        { section_uid: "s1", section_title: "2.1 Организация", calendar_dates: ["06.10.2026"], calendar_date_count: 1 },
+      ],
+      calendar_date_section_count: 1,
+      can_export_current_draft: false,
+    });
+
+    render(<ExportButton projectId="project-1" projectName="Project Alpha" />);
+    await userEvent.click(screen.getByRole("button", { name: "Експорт .docx" }));
+
+    const warning = await screen.findByTestId("export-calendar-dates-warning");
+    expect(warning).toHaveTextContent("Твърд блок");
+    expect(warning).toHaveTextContent("2.1 Организация: 06.10.2026");
+    expect(exportMock).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("export-current-draft-button")).not.toBeInTheDocument();
+  });
+
+  it("keeps the calendar-date reason visible next to other warnings", async () => {
+    readinessMock.mockResolvedValue({
+      project_id: "project-1",
+      ready: false,
+      status: "blocked",
+      blockers: [
+        { code: "stale_evidence", count: 1, message: "stale" },
+        { code: "concrete_calendar_dates", count: 1, message: "dates" },
+      ],
+      stale_sections: ["s2"],
+      stale_section_count: 1,
+      calendar_date_sections: [
+        { section_uid: "s1", section_title: "3 График", calendar_dates: ["2026-10-25"], calendar_date_count: 1 },
+      ],
+      calendar_date_section_count: 1,
+      can_export_current_draft: false,
+    });
+
+    render(<ExportButton projectId="project-1" projectName="Project Alpha" />);
+    await userEvent.click(screen.getByRole("button", { name: "Експорт .docx" }));
+
+    expect(await screen.findByTestId("export-stale-warning")).toBeInTheDocument();
+    expect(screen.getByTestId("export-calendar-dates-warning")).toHaveTextContent("3 График: 2026-10-25");
+    expect(exportMock).not.toHaveBeenCalled();
+  });
+
+  it("does not present unverified criteria as fulfilled", async () => {
+    readinessMock.mockResolvedValue({
+      project_id: "project-1",
+      ready: false,
+      status: "blocked",
+      blockers: [{ code: "criteria_unverified", count: 3, message: "unverified" }],
+      criteria_unverified_count: 3,
+      can_export_current_draft: true,
+    });
+    exportMock.mockResolvedValue(new Blob(["docx"]));
+
+    render(<ExportButton projectId="project-1" projectName="Project Alpha" />);
+    await userEvent.click(screen.getByRole("button", { name: "Експорт .docx" }));
+
+    expect(await screen.findByTestId("export-criteria-warning")).toHaveTextContent(
+      "3 критерия от одобрения план не са проверени",
+    );
+  });
+
   it("shows duplicate selected warning for ambiguous export sections", async () => {
     const openGenerationsMock = vi.fn();
     readinessMock.mockResolvedValue({

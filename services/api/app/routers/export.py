@@ -252,6 +252,8 @@ async def _criteria_issue_sections(
     project_id: str,
     selected_generations: list[Generation],
     db: AsyncSession,
+    outline_section_metadata: dict[str, dict] | None = None,
+    verification_gaps: list[dict] | None = None,
 ) -> list[dict]:
     """Sections whose LLM criterion checks report unmet acceptance criteria.
 
@@ -268,7 +270,13 @@ async def _criteria_issue_sections(
         select(CriterionCheck).where(CriterionCheck.project_id == project_id)
     )
     sections: dict[str, dict] = {}
-    for check in checks_result.scalars().all():
+    checks = [
+        check
+        for check in checks_result.scalars().all()
+        if isinstance(getattr(check, "verdict", None), str)
+        and check.verdict in CRITERION_VERDICTS
+    ]
+    for check in checks:
         verdict = getattr(check, "verdict", None)
         if not isinstance(verdict, str) or verdict not in CRITERION_VERDICTS:
             continue
@@ -305,6 +313,40 @@ async def _criteria_issue_sections(
                     "note": check.note,
                 }
             )
+    if verification_gaps is not None and outline_section_metadata:
+        # K-09: compare the criteria the approved plan expects with the checks
+        # that actually exist for the exact selected version. A missing check,
+        # "unchecked" or "partial" is never reported as verified.
+        checked_by_section: dict[str, dict[str, str]] = {}
+        for check in checks:
+            if str(getattr(check, "generation_id", "")) not in selected_ids:
+                continue
+            checked_by_section.setdefault(str(check.section_uid), {})[
+                str(check.criterion_id)
+            ] = str(check.verdict)
+        for generation in selected_generations:
+            if str(getattr(generation, "generation_kind", "") or "") == "section_assembly":
+                continue
+            section_uid = str(generation.section_uid)
+            expected = (outline_section_metadata.get(section_uid) or {}).get("criterion_ids") or []
+            if not expected:
+                continue
+            verdicts = checked_by_section.get(section_uid, {})
+            never_checked = [cid for cid in expected if cid not in verdicts]
+            not_verified = [
+                cid for cid in expected if verdicts.get(cid) in {"unchecked", "partial"}
+            ]
+            if never_checked or not_verified:
+                verification_gaps.append(
+                    {
+                        "section_uid": section_uid,
+                        "generation_id": str(generation.id),
+                        "expected_count": len(expected),
+                        "checked_count": len(expected) - len(never_checked),
+                        "never_checked_ids": never_checked,
+                        "not_verified_ids": not_verified,
+                    }
+                )
     return [
         section
         for section in sections.values()
@@ -343,11 +385,46 @@ async def _consistency_state(
     )
     if not report:
         return None
+    from app.agents.consistency import checkable_generation_ids, facts_hash
+    from app.core.models import ProjectFactSheet, ScheduleNormalized
+
     checked_ids = {
         str(item) for item in report.get("checked_generation_ids") or [] if item
     }
-    selected_ids = {str(generation.id) for generation in selected_generations}
-    stale = not checked_ids or not checked_ids.issubset(selected_ids)
+    # K-10: the report must cover exactly the texts that would be exported —
+    # a new or regenerated section (not only a removed one) makes it stale.
+    expected_ids = checkable_generation_ids(selected_generations)
+    stale_reasons: list[str] = []
+    if not checked_ids or checked_ids != expected_ids:
+        stale_reasons.append("generation_set_changed")
+    fingerprint = report.get("input_fingerprint")
+    if not isinstance(fingerprint, dict):
+        stale_reasons.append("no_input_fingerprint")
+    else:
+        schedule_result = await db.execute(
+            select(ScheduleNormalized)
+            .where(ScheduleNormalized.project_id == project_id)
+            .order_by(ScheduleNormalized.version.desc())
+            .limit(1)
+        )
+        schedule = schedule_result.scalar_one_or_none()
+        if (str(schedule.id) if schedule is not None else None) != fingerprint.get("schedule_id"):
+            stale_reasons.append("schedule_changed")
+        fact_result = await db.execute(
+            select(ProjectFactSheet)
+            .where(ProjectFactSheet.project_id == project_id)
+            .order_by(ProjectFactSheet.version.desc())
+            .limit(1)
+        )
+        fact_sheet = fact_result.scalar_one_or_none()
+        current_facts = (
+            fact_sheet.facts_json
+            if fact_sheet is not None and isinstance(fact_sheet.facts_json, dict)
+            else {}
+        )
+        if facts_hash(current_facts) != fingerprint.get("facts_hash"):
+            stale_reasons.append("facts_changed")
+    stale = bool(stale_reasons)
     conflicts = [
         conflict
         for conflict in report.get("conflicts") or []
@@ -366,6 +443,8 @@ async def _consistency_state(
     return {
         "job_id": str(getattr(job, "id", "")),
         "stale": stale,
+        "stale_reasons": stale_reasons,
+        "schedule_partial": bool(report.get("schedule_partial")),
         "critical_count": critical_count,
         "warning_count": warning_count,
         "conflicts": conflicts,
@@ -470,6 +549,12 @@ async def _load_outline_section_metadata(
         metadata[section_uid] = {
             "section_title": section.get("title"),
             "requirement_count": _outline_requirement_count(section),
+            # K-09: the criteria the approved plan expects to be verified.
+            "criterion_ids": [
+                str(entry.get("id"))
+                for entry in section.get("acceptance_criteria") or []
+                if isinstance(entry, dict) and entry.get("id")
+            ],
         }
     return metadata
 
@@ -649,6 +734,11 @@ def _readiness_message(readiness: dict) -> str:
             "Pre-export check failed: some selected sections contain concrete "
             "calendar dates copied from conditional schedule anchors."
         )
+    if code == "criteria_unverified":
+        return (
+            "Pre-export check failed: some approved criteria are not verified "
+            "for the selected versions."
+        )
     if code == "criteria_unmet":
         return (
             "Pre-export check failed: some sections do not pass "
@@ -709,10 +799,13 @@ async def _build_export_readiness(
         for generation in selected_generations
         if (issue := _calendar_date_section(generation))
     ]
+    criteria_verification_gaps: list[dict] = []
     criteria_issue_sections = await _criteria_issue_sections(
         project_id,
         selected_generations,
         db,
+        outline_section_metadata,
+        criteria_verification_gaps,
     )
     consistency_state = await _consistency_state(
         project_id,
@@ -832,6 +925,38 @@ async def _build_export_readiness(
                 ),
             }
         )
+    criteria_unverified_count = sum(
+        len(gap["never_checked_ids"]) + len(gap["not_verified_ids"])
+        for gap in criteria_verification_gaps
+    )
+    if criteria_verification_gaps:
+        blockers.append(
+            {
+                "code": "criteria_unverified",
+                "count": criteria_unverified_count,
+                "message": (
+                    "Some approved acceptance criteria of the selected versions "
+                    "have no check, or only an unchecked/partial verdict."
+                ),
+            }
+        )
+    # An editorial (model-rewritten) assembly is new text that its children's
+    # checks do not cover; it stays unverified until checked itself.
+    unverified_assemblies = [
+        {"section_uid": str(generation.section_uid), "generation_id": str(generation.id)}
+        for generation in selected_generations
+        if str(getattr(generation, "generation_kind", "") or "") == "section_assembly"
+        and isinstance(getattr(generation, "flags_json", None), dict)
+        and str(generation.flags_json.get("assembly_mode") or "").startswith("llm_edit")
+    ]
+    if unverified_assemblies:
+        blockers.append(
+            {
+                "code": "assembly_unverified",
+                "count": len(unverified_assemblies),
+                "message": "Some sections were editorially rewritten at assembly and are not verified.",
+            }
+        )
     consistency_critical_count = (
         consistency_state["critical_count"]
         if consistency_state and not consistency_state["stale"]
@@ -877,6 +1002,11 @@ async def _build_export_readiness(
         "criteria_issue_sections": criteria_issue_sections,
         "criteria_issue_section_count": len(criteria_issue_sections),
         "criteria_unmet_count": criteria_unmet_count,
+        "criteria_verification_gaps": _attach_section_titles(
+            criteria_verification_gaps, outline_section_metadata
+        ),
+        "criteria_unverified_count": criteria_unverified_count,
+        "unverified_assemblies": unverified_assemblies,
         "consistency": consistency_state,
         "consistency_critical_count": consistency_critical_count,
     }
@@ -970,7 +1100,23 @@ async def export_docx(
     from urllib.parse import quote
     from app.export.docx_generator import generate_docx
 
-    docx_bytes = await generate_docx(project_id=project_id, db=db)
+    from app.export.docx_generator import CalendarDatesInExportError
+
+    try:
+        docx_bytes = await generate_docx(project_id=project_id, db=db)
+    except CalendarDatesInExportError as exc:
+        # K-14: the finished document is checked as a whole; a forbidden date
+        # anywhere (text or table) is a hard block, also for working drafts.
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": str(exc),
+                "code": "concrete_calendar_dates",
+                "blockers": [{"code": "concrete_calendar_dates", "count": len(exc.findings), "message": str(exc)}],
+                "calendar_date_locations": exc.findings[:50],
+                "can_export_current_draft": False,
+            },
+        ) from exc
 
     safe_name = project.name[:50].replace(" ", "_")
     ascii_name = safe_name.encode("ascii", "replace").decode("ascii")

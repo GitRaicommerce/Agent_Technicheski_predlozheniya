@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable
@@ -74,6 +75,11 @@ SYSTEM_PROMPT = """Ти си независим проверяващ на тех
   доказващ присъдата; за "missing" остави evidence празен.
 - note е кратко обяснение на български (до 2 изречения).
 
+Допълнително: посочи всяко конкретно обещание или ангажимент в текста
+(гаранции, срокове, количества, безплатни услуги, допълнителни дейности), което
+не следва от критериите или цитатите-източници и би обвързало участника без
+основание. Цитирай го дословно.
+
 Върни само валиден JSON:
 {
   "checks": [
@@ -83,6 +89,9 @@ SYSTEM_PROMPT = """Ти си независим проверяващ на тех
       "evidence": "<кратък откъс или празно>",
       "note": "<кратко обяснение>"
     }
+  ],
+  "unsupported_commitments": [
+    {"quote": "<дословен откъс>", "reason": "<защо няма основание>"}
   ]
 }"""
 
@@ -189,8 +198,21 @@ async def load_verifiable_units(
     return units
 
 
+def _normalize_text(value: Any) -> str:
+    return re.sub(r"\s+", " ", str(value or "")).strip().casefold()
+
+
+def _evidence_present(evidence: str | None, text: str) -> bool:
+    if not evidence:
+        return False
+    fragment = _normalize_text(evidence).strip("…. \"'„“")
+    return len(fragment) >= 8 and fragment in _normalize_text(text)
+
+
 def _sanitize_checks(
-    raw_result: dict[str, Any], criteria: list[dict[str, Any]]
+    raw_result: dict[str, Any],
+    criteria: list[dict[str, Any]],
+    text: str | None = None,
 ) -> list[dict[str, Any]]:
     known = {criterion["id"]: criterion for criterion in criteria}
     verdicts_by_id: dict[str, dict[str, Any]] = {}
@@ -211,11 +233,25 @@ def _sanitize_checks(
         ):
             # A content criterion cannot be "violated"; treat as missing.
             verdict = "missing"
+        evidence = str(raw.get("evidence") or "").strip()[:1000] or None
+        note = str(raw.get("note") or "").strip()[:2000] or None
+        if (
+            text is not None
+            and verdict in {"covered", "partial"}
+            and not _evidence_present(evidence, text)
+        ):
+            # K-09: a "covered"/"partial" verdict must quote the checked text.
+            # A missing or invented quote is not verification.
+            verdict = "unchecked"
+            note = (
+                "Посоченото доказателство не е намерено в проверявания текст; "
+                "присъдата не се приема. " + (note or "")
+            ).strip()
         verdicts_by_id[criterion_id] = {
             "criterion": criterion,
             "verdict": verdict,
-            "evidence": str(raw.get("evidence") or "").strip()[:1000] or None,
-            "note": str(raw.get("note") or "").strip()[:2000] or None,
+            "evidence": evidence,
+            "note": note,
         }
 
     checks: list[dict[str, Any]] = []
@@ -238,6 +274,98 @@ def _sanitize_checks(
     return checks
 
 
+def sanitize_commitments(raw_result: dict[str, Any], text: str) -> list[dict[str, Any]]:
+    """Unsupported commitments flagged by the verifier, verbatim quotes only."""
+    found = []
+    for entry in raw_result.get("unsupported_commitments") or []:
+        if not isinstance(entry, dict):
+            continue
+        quote = str(entry.get("quote") or "").strip()
+        if not _evidence_present(quote, text):
+            continue
+        found.append({"quote": quote[:600], "reason": str(entry.get("reason") or "").strip()[:600]})
+    return found
+
+
+def commitment_checks(commitments: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Represent each unsupported commitment as a violated check (WP-08).
+
+    They flow into the same readiness path as violated prohibitions, so an
+    invented obligation in the final text blocks a "verified" state.
+    """
+    import hashlib
+
+    checks = []
+    seen: set[str] = set()
+    for entry in commitments:
+        key = hashlib.sha256(_normalize_text(entry["quote"]).encode("utf-8")).hexdigest()[:16]
+        if key in seen:
+            continue
+        seen.add(key)
+        checks.append(
+            {
+                "criterion": {
+                    "id": f"commitment:{key}",
+                    "text": f"Необосновано обещание: {entry['quote']}",
+                    "kind": "unsupported_commitment",
+                    "source_quote": None,
+                    "requirement_id": None,
+                },
+                "verdict": "violated",
+                "evidence": entry["quote"],
+                "note": entry["reason"] or "Ангажиментът няма основание в критериите или документацията.",
+            }
+        )
+    return checks
+
+
+def split_text_batches(text: str, max_chars: int = MAX_TEXT_CHARS_PER_CALL) -> list[str]:
+    """Cover the whole text in bounded batches, cutting at paragraph ends (K-23)."""
+    if len(text) <= max_chars:
+        return [text]
+    batches: list[str] = []
+    current = ""
+    for paragraph in re.split(r"(\n\s*\n)", text):
+        if len(current) + len(paragraph) <= max_chars:
+            current += paragraph
+            continue
+        if current:
+            batches.append(current)
+        while len(paragraph) > max_chars:
+            batches.append(paragraph[:max_chars])
+            paragraph = paragraph[max_chars:]
+        current = paragraph
+    if current.strip():
+        batches.append(current)
+    return batches
+
+
+_VERDICT_RANK_CONTENT = {"covered": 4, "partial": 3, "missing": 2, "unchecked": 1}
+
+
+def aggregate_batch_checks(
+    batches: list[list[dict[str, Any]]], criteria: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Combine per-batch verdicts into one verdict per criterion.
+
+    A prohibition is violated if any batch violates it. A content criterion
+    is satisfied by its best batch; if any batch could not be judged and no
+    batch covers it, the result stays unchecked rather than missing.
+    """
+    combined: list[dict[str, Any]] = []
+    for index, criterion in enumerate(criteria):
+        per_batch = [batch[index] for batch in batches]
+        violated = [check for check in per_batch if check["verdict"] == "violated"]
+        if violated:
+            combined.append(violated[0])
+            continue
+        best = max(per_batch, key=lambda check: _VERDICT_RANK_CONTENT.get(check["verdict"], 0))
+        if best["verdict"] == "missing" and any(c["verdict"] == "unchecked" for c in per_batch):
+            best = next(c for c in per_batch if c["verdict"] == "unchecked")
+        combined.append(best)
+    return combined
+
+
 async def verify_unit(
     unit: dict[str, Any], trace_id: str
 ) -> list[dict[str, Any]]:
@@ -250,21 +378,33 @@ async def verify_unit(
         }
         for criterion in unit["criteria"]
     ]
-    user_message = (
-        f"ПОДТОЧКА: {unit['number']} {unit['title']}\n\n"
-        "КРИТЕРИИ ЗА ПРИЕМАНЕ:\n"
-        + json.dumps(criteria_payload, ensure_ascii=False, indent=1)
-        + "\n\nГЕНЕРИРАН ТЕКСТ:\n[UNTRUSTED CONTENT START]\n"
-        + unit["text"][:MAX_TEXT_CHARS_PER_CALL]
-        + "\n[UNTRUSTED CONTENT END]"
-    )
-    raw_result = await llm_gateway.call(
-        system_prompt=SYSTEM_PROMPT,
-        user_message=user_message,
-        agent="criteria_verifier",
-        trace_id=trace_id,
-    )
-    return _sanitize_checks(raw_result, unit["criteria"])
+    batches = split_text_batches(unit["text"])
+    results: list[list[dict[str, Any]]] = []
+    commitments: list[dict[str, Any]] = []
+    for index, batch in enumerate(batches, start=1):
+        part = f" (част {index}/{len(batches)} от текста)" if len(batches) > 1 else ""
+        user_message = (
+            f"ПОДТОЧКА: {unit['number']} {unit['title']}{part}\n\n"
+            "КРИТЕРИИ ЗА ПРИЕМАНЕ:\n"
+            + json.dumps(criteria_payload, ensure_ascii=False, indent=1)
+            + "\n\nГЕНЕРИРАН ТЕКСТ:\n[UNTRUSTED CONTENT START]\n"
+            + batch
+            + "\n[UNTRUSTED CONTENT END]"
+        )
+        raw_result = await llm_gateway.call(
+            system_prompt=SYSTEM_PROMPT,
+            user_message=user_message,
+            agent="criteria_verifier",
+            trace_id=trace_id,
+        )
+        results.append(_sanitize_checks(raw_result, unit["criteria"], text=batch))
+        commitments.extend(sanitize_commitments(raw_result, batch))
+    checks = results[0] if len(results) == 1 else aggregate_batch_checks(results, unit["criteria"])
+    checks = checks + commitment_checks(commitments)
+    unit["checked_chars"] = sum(len(batch) for batch in batches)
+    unit["total_chars"] = len(unit["text"])
+    unit["batch_count"] = len(batches)
+    return checks
 
 
 def summarize_checks(checks: list[dict[str, Any]]) -> dict[str, int]:
@@ -358,6 +498,10 @@ async def run_criteria_verification(
                 "number": unit["number"],
                 "title": unit["title"],
                 "summary": summary,
+                # K-23: evidence that the whole text was inspected.
+                "checked_chars": unit.get("checked_chars"),
+                "total_chars": unit.get("total_chars"),
+                "batch_count": unit.get("batch_count"),
                 "issues": [
                     {
                         "criterion_id": check["criterion"]["id"],

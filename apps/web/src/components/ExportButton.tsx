@@ -62,6 +62,10 @@ export default function ExportButton({
   const [consistencyCriticalCount, setConsistencyCriticalCount] = useState<
     number | null
   >(null);
+  const [calendarDateSections, setCalendarDateSections] = useState<
+    CalendarDateSection[] | null
+  >(null);
+  const [criteriaUnverifiedCount, setCriteriaUnverifiedCount] = useState(0);
   const [canExportCurrentDraft, setCanExportCurrentDraft] = useState(false);
   const { toast } = useToast();
   const qualityWarningDetail = formatQualityWarningSummary(qualityWarningSummary);
@@ -73,11 +77,26 @@ export default function ExportButton({
     qualityWarning ||
     autoAssuranceWarning ||
     criteriaWarning ||
-    consistencyWarning;
+    consistencyWarning ||
+    calendarDateSections !== null;
 
   const applyReadinessWarnings = (source: unknown, message = "") => {
     let handled = false;
     setCanExportCurrentDraft(canExportCurrentDraftFromReadiness(source));
+
+    // K-14: forbidden calendar dates are a hard block of their own; they are
+    // shown even when other warnings exist, with the affected sections.
+    const calendarSections = getCalendarDateSections(source);
+    if (calendarSections !== null) {
+      setCalendarDateSections(calendarSections);
+      handled = true;
+    }
+    const unverified = getCriteriaUnverifiedCount(source);
+    if (unverified > 0) {
+      setCriteriaUnverifiedCount(unverified);
+      setCriteriaWarning(true);
+      handled = true;
+    }
 
     if (isDuplicateSelectedExportError(source)) {
       setDuplicateSelectedWarning(true);
@@ -167,6 +186,8 @@ export default function ExportButton({
     setCriteriaUnmetCount(null);
     setConsistencyWarning(false);
     setConsistencyCriticalCount(null);
+    setCalendarDateSections(null);
+    setCriteriaUnverifiedCount(0);
     setCanExportCurrentDraft(false);
     onQualitySectionsBlocked?.([], []);
 
@@ -415,17 +436,40 @@ export default function ExportButton({
         </div>
       )}
 
+      {calendarDateSections !== null && (
+        <div
+          data-testid="export-calendar-dates-warning"
+          className="mt-1 max-w-xs rounded-lg border border-red-400 bg-red-50 px-3 py-2 text-xs text-red-900"
+        >
+          <p className="font-medium">
+            Твърд блок: документът съдържа забранени конкретни календарни дати.
+            И работната чернова не може да бъде изтеглена.
+          </p>
+          {calendarDateSections.length > 0 && (
+            <ul className="mt-1 list-disc space-y-0.5 pl-4">
+              {calendarDateSections.map((section) => (
+                <li key={section.key}>
+                  {section.label}: {section.dates.join(", ")}
+                </li>
+              ))}
+            </ul>
+          )}
+          <p className="mt-1">Регенерирайте засегнатите раздели без условните дати от графика.</p>
+        </div>
+      )}
+
       {criteriaWarning && (
         <div
           data-testid="export-criteria-warning"
           className="mt-1 max-w-xs rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-900"
         >
           <p>
-            {`Проверката по критерии откри неизпълнени или нарушени критерии за приемане${
-              criteriaUnmetCount
-                ? ` (${formatCriteriaCount(criteriaUnmetCount)})`
-                : ""
-            }. `}
+            {criteriaUnmetCount
+              ? `Проверката по критерии откри неизпълнени или нарушени критерии за приемане (${formatCriteriaCount(criteriaUnmetCount)}). `
+              : ""}
+            {criteriaUnverifiedCount > 0
+              ? `${formatCriteriaCount(criteriaUnverifiedCount)} от одобрения план не са проверени за текущите версии — това не е изпълнение. `
+              : ""}
             Прегледайте бележките в readiness отчета и регенерирайте засегнатите
             секции преди финалния export.
           </p>
@@ -944,6 +988,64 @@ function getConsistencyCriticalCount(err: unknown): number | null {
     payload as { consistency_critical_count?: unknown }
   ).consistency_critical_count;
   return typeof explicitCount === "number" ? explicitCount : null;
+}
+
+interface CalendarDateSection {
+  key: string;
+  label: string;
+  dates: string[];
+}
+
+function getCalendarDateSections(err: unknown): CalendarDateSection[] | null {
+  const payload = getReadinessPayload(err);
+  if (!payload || typeof payload !== "object") return null;
+  const record = payload as {
+    code?: unknown;
+    calendar_date_sections?: unknown;
+    calendar_date_locations?: unknown;
+    blockers?: unknown;
+  };
+  const sections: CalendarDateSection[] = [];
+  if (Array.isArray(record.calendar_date_sections)) {
+    for (const raw of record.calendar_date_sections) {
+      if (!raw || typeof raw !== "object") continue;
+      const entry = raw as { section_uid?: string; section_title?: string; calendar_dates?: unknown };
+      sections.push({
+        key: String(entry.section_uid ?? sections.length),
+        label: entry.section_title || entry.section_uid || "раздел",
+        dates: Array.isArray(entry.calendar_dates) ? entry.calendar_dates.map(String) : [],
+      });
+    }
+  }
+  if (Array.isArray(record.calendar_date_locations)) {
+    for (const raw of record.calendar_date_locations) {
+      if (!raw || typeof raw !== "object") continue;
+      const entry = raw as { location?: string; dates?: unknown };
+      sections.push({
+        key: String(entry.location ?? sections.length),
+        label: `в документа (${entry.location ?? "?"})`,
+        dates: Array.isArray(entry.dates) ? entry.dates.map(String) : [],
+      });
+    }
+  }
+  const flagged =
+    record.code === "concrete_calendar_dates" ||
+    (Array.isArray(record.blockers) &&
+      record.blockers.some(
+        (blocker) =>
+          !!blocker &&
+          typeof blocker === "object" &&
+          (blocker as { code?: unknown }).code === "concrete_calendar_dates",
+      ));
+  if (sections.length === 0 && !flagged) return null;
+  return sections;
+}
+
+function getCriteriaUnverifiedCount(err: unknown): number {
+  const payload = getReadinessPayload(err);
+  if (!payload || typeof payload !== "object") return 0;
+  const value = (payload as { criteria_unverified_count?: unknown }).criteria_unverified_count;
+  return typeof value === "number" ? value : 0;
 }
 
 function formatConsistencyCount(count: number): string {

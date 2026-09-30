@@ -100,8 +100,17 @@ async def run_section_assembly(
     subpoints: list[dict[str, Any]],
     db,
     trace_id: str | None = None,
+    editorial: bool = False,
 ) -> dict[str, Any]:
-    """Assemble persisted subpoint drafts without silently dropping content."""
+    """Assemble persisted subpoint drafts without silently dropping content.
+
+    K-08: the standard path is a lossless deterministic join of the full
+    selected subpoint bodies — no model call, so no obligation can disappear
+    in an editorial rewrite that still keeps the headings and 75% of the words.
+    ``editorial=True`` keeps the optional model edit; its output is new,
+    unverified text (``assembly_mode=llm_edit``) and never inherits the
+    children's verification.
+    """
     usable = [item for item in subpoints if str(item.get("text") or "").strip()]
     if len(usable) != len(subpoints) or not usable:
         raise ValueError("Section assembly requires non-empty text for every subpoint.")
@@ -126,7 +135,16 @@ async def run_section_assembly(
 
     source_chars = sum(len(str(item.get("text") or "")) for item in usable)
     assembly_mode = "llm_edit"
-    if source_chars > MAX_LLM_ASSEMBLY_SOURCE_CHARS:
+    if not editorial:
+        result = {
+            "text": _deterministic_assembly(usable),
+            "change_summary": (
+                "Подточките са обединени без пренаписване; пълните им текстове "
+                "са запазени дословно."
+            ),
+        }
+        assembly_mode = "deterministic"
+    elif source_chars > MAX_LLM_ASSEMBLY_SOURCE_CHARS:
         result = {
             "text": _deterministic_assembly(usable),
             "change_summary": (

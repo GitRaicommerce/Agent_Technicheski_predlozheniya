@@ -5,11 +5,24 @@
 from __future__ import annotations
 
 import uuid
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from tests.conftest import _make_project
+
+
+def _scalar_result(value) -> MagicMock:
+    result = MagicMock()
+    result.scalar_one_or_none.return_value = value
+    return result
+
+
+def _facts_hash(facts):
+    from app.agents.consistency import facts_hash
+
+    return facts_hash(facts)
 
 
 def _empty_scalars_result() -> MagicMock:
@@ -323,6 +336,11 @@ async def test_export_readiness_flags_critical_consistency_conflicts(
     consistency_job.id = "job-1"
     consistency_job.result_json = {
         "checked_generation_ids": ["gen-1"],
+        "input_fingerprint": {
+            "schedule_id": "schedule-1",
+            "schedule_version": 1,
+            "facts_hash": _facts_hash({}),
+        },
         "critical_count": 2,
         "warning_count": 1,
         "conflicts": [
@@ -342,6 +360,8 @@ async def test_export_readiness_flags_critical_consistency_conflicts(
             outline_result,
             checks_result,
             consistency_result,
+            _scalar_result(SimpleNamespace(id="schedule-1")),
+            _scalar_result(None),
         ]
     )
 
@@ -1197,3 +1217,60 @@ async def test_export_docx_ok(client, mock_db):
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     )
     assert resp.content == fake_docx
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "selected_ids,schedule_id,facts,reason",
+    [
+        (["gen-1", "gen-2"], "schedule-1", {}, "generation_set_changed"),
+        (["gen-1"], "schedule-2", {}, "schedule_changed"),
+        (["gen-1"], "schedule-1", {"team": ["нов"]}, "facts_changed"),
+    ],
+)
+async def test_consistency_report_goes_stale_on_any_input_change(
+    client, mock_db, selected_ids, schedule_id, facts, reason
+):
+    """T-11: a report for g1 alone does not verify g1+g2, nor a new schedule/facts."""
+    project = _make_project()
+    mock_db.get = AsyncMock(return_value=project)
+    generations = []
+    for generation_id in selected_ids:
+        generation = MagicMock()
+        generation.id = generation_id
+        generation.section_uid = f"sec-{generation_id}"
+        generation.evidence_status = "ok"
+        generation.text = "Текст."
+        generation.flags_json = {}
+        generation.generation_kind = "section"
+        generation.parent_section_uid = None
+        generations.append(generation)
+    selected_result = MagicMock()
+    selected_result.scalars.return_value.all.return_value = generations
+    job = MagicMock()
+    job.id = "job-1"
+    job.result_json = {
+        "checked_generation_ids": ["gen-1"],
+        "input_fingerprint": {"schedule_id": "schedule-1", "facts_hash": _facts_hash({})},
+        "critical_count": 1,
+        "warning_count": 0,
+        "conflicts": [{"severity": "critical"}],
+    }
+    mock_db.execute = AsyncMock(
+        side_effect=[
+            selected_result,
+            _scalar_result(None),
+            _empty_scalars_result(),
+            _scalar_result(job),
+            _scalar_result(SimpleNamespace(id=schedule_id)),
+            _scalar_result(SimpleNamespace(facts_json=facts)),
+        ]
+    )
+
+    resp = await client.get(f"/api/v1/export/{project.id}/readiness")
+
+    consistency = resp.json()["consistency"]
+    assert consistency["stale"] is True
+    assert reason in consistency["stale_reasons"]
+    # A stale report never blocks as if its old verdict were current.
+    assert resp.json()["consistency_critical_count"] == 0
