@@ -63,6 +63,53 @@ jobs:
           EMBEDDING_DIMS: "1536"
         run: python -m pytest tests/ -v --tb=short
 
+  integration:
+    # K-18/K-19: real PostgreSQL + pgvector. Migrations on an empty database
+    # and from an old schema with data, health readiness, and one
+    # deterministic v2 API journey to DOCX. Model/embedding calls are mocked;
+    # MinIO ingestion and the browser are not part of this job.
+    name: Integration (PostgreSQL, migrations, v2 journey)
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: tpai
+          POSTGRES_PASSWORD: tpai_test
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U tpai"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+
+    defaults:
+      run:
+        working-directory: services/api
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: services/api/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run integration tests
+        env:
+          INTEGRATION_PG_ADMIN_URL: postgresql://tpai:tpai_test@localhost:5432/postgres
+          OPENAI_API_KEY: sk-test-placeholder
+          APP_SECRET_KEY: test-secret-key
+        run: python -m pytest tests_integration -v --tb=short
+
   script-tests:
     name: Calibration script tests (Python 3.11)
     runs-on: ubuntu-latest

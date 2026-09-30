@@ -32,12 +32,15 @@ On Windows, prefer:
 powershell -ExecutionPolicy Bypass -File .\scripts\start-dev.ps1
 ```
 
-Manual startup:
+Manual startup (migrations must run before the API can report healthy):
 
 ```powershell
+docker compose -f docker-compose.dev.yml up -d --wait postgres redis minio
+docker compose -f docker-compose.dev.yml run --rm api alembic upgrade head
 docker compose -f docker-compose.dev.yml up -d --wait
-docker compose -f docker-compose.dev.yml exec -T api alembic upgrade head
 ```
+
+`/health` answers 200 only when the database, Redis and the schema revision are all OK; otherwise it answers 503 and names the failing part (for example `"migrations": "pending: ..."`). The startup and deploy scripts check the exit code of every git/docker command and stop on the first failure.
 
 Local URLs:
 
@@ -64,6 +67,16 @@ Backend broader check:
 ```powershell
 docker compose -f docker-compose.dev.yml exec -T api pytest tests/ -q
 ```
+
+Integration checks (real disposable PostgreSQL with pgvector; model and embedding calls mocked; creates and drops its own databases):
+
+```powershell
+cd services/api
+$env:INTEGRATION_PG_ADMIN_URL = "postgresql://tpai:tpai_test@localhost:5432/postgres"
+python -m pytest tests_integration -q
+```
+
+They cover migrations on an empty database and from an old schema with data, health readiness, and one deterministic v2 API journey from a confirmed requirement to the DOCX. CI runs them in the `integration` job. Never point `INTEGRATION_PG_ADMIN_URL` at a database with real data.
 
 Frontend checks:
 

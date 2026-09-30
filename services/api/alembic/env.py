@@ -19,7 +19,9 @@ target_metadata = Base.metadata
 db_url = settings.database_url.replace(
     "postgresql+asyncpg://", "postgresql+psycopg2://"
 )
-config.set_main_option("sqlalchemy.url", db_url)
+# ConfigParser treats "%" as interpolation; URL-encoded passwords or socket
+# paths (e.g. %40, %2F) must be escaped or every migration command fails.
+config.set_main_option("sqlalchemy.url", db_url.replace("%", "%%"))
 
 # other values from the config, defined by the needs of env.py,
 # can be acquired:

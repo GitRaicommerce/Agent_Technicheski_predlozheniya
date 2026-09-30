@@ -1,4 +1,8 @@
+from functools import lru_cache
+from pathlib import Path
+
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
@@ -118,16 +122,49 @@ async def capabilities():
     }
 
 
+@lru_cache(maxsize=1)
+def expected_migration_heads() -> frozenset[str]:
+    """Alembic head revision(s) this code expects the database to be at."""
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
+
+    ini_path = Path(__file__).resolve().parents[1] / "alembic.ini"
+    return frozenset(ScriptDirectory.from_config(Config(str(ini_path))).get_heads())
+
+
 @app.get("/health")
 async def health():
-    checks: dict = {"status": "ok", "db": "ok", "redis": "ok"}
+    """Readiness: 200 only when DB, Redis and the schema revision are all OK.
 
-    # Database liveness
+    K-19: a degraded dependency or a missing migration answers 503, so
+    Compose health checks and startup scripts cannot report a ready system.
+    """
+    checks: dict = {"status": "ok", "db": "ok", "redis": "ok", "migrations": "ok"}
+
+    # Database liveness + applied schema revision
     try:
         async with AsyncSessionLocal() as session:
             await session.execute(text("SELECT 1"))
+            try:
+                rows = await session.execute(
+                    text("SELECT version_num FROM alembic_version")
+                )
+                applied = {str(value) for value in rows.scalars().all()}
+            except Exception as e:  # table missing = migrations never applied
+                applied = set()
+                checks["migrations"] = f"error: {e}"
+            if checks["migrations"] == "ok":
+                expected = set(expected_migration_heads())
+                if applied != expected:
+                    checks["migrations"] = (
+                        f"pending: database at {sorted(applied) or 'no revision'}, "
+                        f"code expects {sorted(expected)}"
+                    )
+            if checks["migrations"] != "ok":
+                checks["status"] = "degraded"
     except Exception as e:
         checks["db"] = f"error: {e}"
+        checks["migrations"] = "unknown"
         checks["status"] = "degraded"
 
     # Redis liveness
@@ -140,4 +177,4 @@ async def health():
         checks["redis"] = f"error: {e}"
         checks["status"] = "degraded"
 
-    return checks
+    return JSONResponse(checks, status_code=200 if checks["status"] == "ok" else 503)
